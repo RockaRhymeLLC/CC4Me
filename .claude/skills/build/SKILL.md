@@ -44,12 +44,29 @@ Continues from the active plan's in-progress story.
    - Load all tests from `plans/tests/`
 
 3. **For each story (by priority):**
+
+   **Step 1: Initial test (should fail)**
+   - Run the story's test(s)
+   - Confirm they fail (expected - not implemented yet)
+
+   **Step 2: Implement**
    - Update story status to `in-progress`
    - Read acceptance criteria
    - Implement the required functionality
    - Add notes as you progress
-   - Run associated tests (verify each step)
-   - If all tests pass: Update story status to `completed`
+
+   **Step 3: Verify test passes**
+   - Run the story's test(s) again
+   - All steps must pass
+
+   **Step 4: Regression check**
+   - Pick 2 tests from OTHER completed stories (at random)
+   - Run both regression tests
+   - Both must pass (ensures new code didn't break existing work)
+   - If regression fails: Fix before continuing
+
+   **Step 5: Complete**
+   - If all tests pass (story + regression): Mark story `completed`
    - If blocked: Update status to `blocked`, add note explaining why
 
 4. **Post-build**
@@ -124,24 +141,63 @@ You CANNOT modify:
 ## Building: auth-system
 
 ### Story s-a1b: Implement login form (Priority 1)
-Status: pending → in-progress
 
-Implementing...
+Step 1: Initial test (expect failure)
+Running test t-001: Login with valid credentials
+- Step 1: Open login page ✗ (page doesn't exist yet)
+Test failed as expected (not implemented).
+
+Step 2: Implementing...
+Status: pending → in-progress
 - Created src/components/LoginForm.tsx
 - Added email/password fields
 - Connected submit handler
+Added note: "Implemented login form with validation"
 
+Step 3: Verify test passes
 Running test t-001: Login with valid credentials
 - Step 1: Open login page ✓
 - Step 2: Enter valid credentials ✓
 - Step 3: Click login button ✓
 Test passed.
 
+Step 4: Regression check
+(First story - no completed stories yet, skipping regression)
+
+Step 5: Complete
 Story s-a1b: in-progress → completed
-Added note: "Implemented basic login form with validation"
+
+---
 
 ### Story s-c2d: Create session management (Priority 2)
-...
+
+Step 1: Initial test (expect failure)
+Running test t-002: Session persists on refresh
+- Step 1: Log in ✓
+- Step 2: Refresh page ✗ (session lost)
+Test failed as expected.
+
+Step 2: Implementing...
+Status: pending → in-progress
+- Created src/auth/session.ts
+- Added session storage logic
+Added note: "Implemented session persistence"
+
+Step 3: Verify test passes
+Running test t-002: Session persists on refresh
+- Step 1: Log in ✓
+- Step 2: Refresh page ✓
+- Step 3: User still logged in ✓
+Test passed.
+
+Step 4: Regression check
+Running 2 random tests from completed stories...
+- t-001 (from s-a1b): Login with valid credentials ✓
+(Only 1 completed story, running its test)
+Regression passed.
+
+Step 5: Complete
+Story s-c2d: in-progress → completed
 ```
 
 ## Progress Notes
@@ -167,6 +223,39 @@ Notes help with:
 - Context recovery after session break
 - Audit trail of decisions
 - Debugging if something goes wrong
+
+## Regression Testing
+
+After each story's tests pass, run regression tests before marking complete:
+
+### Rules
+- Pick **2 tests at random** from OTHER completed stories
+- If fewer than 2 completed stories exist, run what's available (0 or 1)
+- Both regression tests must pass
+- If regression fails: Stop, fix the regression, re-run
+
+### Why
+- Ensures new code doesn't break existing functionality
+- Catches integration issues early
+- Simple, lightweight approach to continuous validation
+
+### On Regression Failure
+
+```
+Step 4: Regression check
+Running 2 random tests from completed stories...
+- t-001 (from s-a1b): Login with valid credentials ✗
+  Step 3 failed: Expected redirect to dashboard, got error page
+
+REGRESSION FAILURE: t-001 broke after implementing s-c2d
+
+Action:
+1. Identify what in s-c2d broke the login flow
+2. Fix the regression
+3. Re-run t-002 (current story test)
+4. Re-run regression tests
+5. Then mark s-c2d complete
+```
 
 ## Handling Blockers
 
