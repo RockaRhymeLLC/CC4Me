@@ -70,16 +70,14 @@ When users invoke workflow skills, follow these processes exactly:
 
 #### `/plan` - Create Plan
 1. Read and analyze the spec file (required argument)
-2. **Identify user perspective** (Claude Code, Human, External System, or Hybrid)
-3. Design technical approach
-4. Break down into tasks using TaskCreate
-5. Create `plans/YYYYMMDD-feature-name.plan.md` with "User Perspective" section
-6. Generate test files from `templates/test.template.ts`
-7. **Write tests from user's perspective** (how they will actually use the feature)
-8. Ensure tests FAIL initially (red state)
-9. **Tests are now IMMUTABLE** - cannot be changed during build
-10. Run `/validate` automatically
-11. Suggest next steps: `/build plans/...`
+2. Design technical approach
+3. Create `plans/YYYYMMDD-feature-name.plan.md`
+4. Create stories in `plans/stories/` (JSON files)
+5. Create tests in `plans/tests/` (JSON files with step-by-step verification)
+6. Link to parent to-do if applicable
+7. **Tests are IMMUTABLE** - cannot be changed during build
+8. Run `/validate` automatically
+9. Suggest next steps: `/build plans/...`
 
 #### `/validate` - Multi-Layer Validation
 1. Run Layer 1: Spec completeness check
@@ -91,62 +89,59 @@ When users invoke workflow skills, follow these processes exactly:
 7. Report results for all layers
 8. Exit with error if any layer fails
 
-#### `/build` - Test-Driven Implementation
+#### `/build` - Story-Driven Implementation
 1. Pre-build validation runs automatically (via hook)
-2. Read spec, plan, and test files
-3. **Verify user perspective** from plan (understand who the user is)
-4. **Test Integrity Check**: Review tests to ensure they're correct
-5. **CRITICAL RULE**: Tests are IMMUTABLE - you may ONLY modify implementation code (`src/`), NEVER test code (`tests/`)
-6. For each task:
-   - Mark task as in_progress (TaskUpdate)
-   - **Implement code to match test expectations** (fix implementation, not tests)
-   - Run tests
-   - If tests fail: Fix implementation, NOT tests
-   - Fix until green
-   - Mark task as completed (TaskUpdate)
-7. Run `/validate` automatically (includes test integrity check)
-8. Offer to create git commit
-9. Display summary of changes
+2. Read spec, plan, stories, and tests
+3. For each story (by priority):
+   - Update story status to `in-progress`
+   - Read acceptance criteria
+   - Implement the required functionality
+   - Add notes as you progress
+   - Verify test steps (perform action, check expected result)
+   - If all tests pass: Update story to `completed`
+   - If blocked: Update status, add note explaining why
+4. **CRITICAL**: Tests are IMMUTABLE during build
+   - Can only update test `status`, `executedAt`, `result`
+   - Cannot modify test `steps` or definitions
+   - If test is wrong, STOP and request user approval
+5. Run `/validate` automatically
+6. Offer to create git commit
+7. Update parent to-do if applicable
 
 ### Key Principles
 
 1. **Always follow the workflow**: Don't skip phases
 2. **Validation gates**: If validation fails, STOP and fix
-3. **Test-first**: Tests must exist and fail before building
+3. **Stories and tests first**: Create stories/tests during `/plan` before building
 4. **Tests are IMMUTABLE during build**: This is CRITICAL
-   - Tests are written during `/plan` phase from user's perspective
-   - During `/build` phase, you may ONLY modify implementation code (`src/`)
-   - You may NEVER modify test code (`tests/`) during build
-   - If tests are wrong, STOP build and return to planning
-   - Implementation must match tests, NOT vice versa
-5. **User-perspective testing**: Tests simulate how actual users interact
-   - Claude Code as user → invoke skills, check file outputs
-   - Human as user → run CLI commands, check stdout
-   - External system as user → API calls, check responses
-   - Tests reflect real usage, not just internal implementation
+   - Tests are JSON files in `plans/tests/` with step-by-step verification
+   - During `/build`, you can update test status but NOT test steps
+   - If a test is wrong, STOP and request user approval
+   - Implementation must satisfy tests, NOT vice versa
+5. **Stories are UPDATABLE during build**:
+   - Update status: pending → in-progress → completed
+   - Add notes as you work
+   - Track files created/modified
 6. **Spec is truth**: Implementation must match spec intent
-7. **Use TaskList**: Track all tasks properly
+7. **To-dos are your task list**: Track all work in `.claude/state/todos/`
 8. **Be thorough**: Don't skip sections or steps
 
 ### File Operations
 
 #### Reading Files
 - Always read spec before planning
-- Always read plan before building
-- Always read tests before implementing
+- Always read plan, stories, and tests before building
 
 #### Creating Files
-- Use templates from `templates/` directory
-- Follow naming convention: `YYYYMMDD-feature-name.ext`
-- Always validate after creating
+- Specs/plans: `YYYYMMDD-feature-name.ext`
+- Stories: `plans/stories/s-{id}.json`
+- Tests: `plans/tests/t-{id}.json`
 
-#### Modifying Files
-- During `/plan`: Create and modify all files including tests
-- During `/build`: ONLY modify implementation files (`src/`), NEVER test files (`tests/`)
-- Only modify files listed in the plan
-- Keep changes focused on the task
-- Respect constraints from spec
-- **CRITICAL**: Test files are immutable during build phase
+#### Modifying Files During Build
+- **Stories**: Update status, notes, files list
+- **Tests**: Only update status, executedAt, result (NOT steps)
+- **Implementation**: Create/modify as needed in `src/`
+- **CRITICAL**: Test definitions (steps, expected) are immutable
 
 ### Validation
 
@@ -156,20 +151,18 @@ When users invoke workflow skills, follow these processes exactly:
 - Manually when user runs `/validate`
 
 #### Validation Layers
-1. **Tests**: Must pass (green) after build, fail (red) after plan
-2. **Spec coverage**: All requirements must have tasks/tests
-3. **Plan consistency**: Tasks must match spec requirements
-4. **Test integrity**: Tests unchanged since plan (during build only)
+1. **Spec completeness**: Goal, requirements, success criteria present
+2. **Plan completeness**: Tech approach, stories, tests defined
+3. **Spec-plan alignment**: All requirements have stories/tests
+4. **Implementation review**: Acceptance criteria met (build phase)
 5. **AI self-review**: You review implementation against spec
 6. **Manual review**: User must approve
 
-#### Test Integrity Check (Layer 4)
-During build phase:
-- Verify test files haven't been modified
-- Check git history or file timestamps
-- If tests were changed during build → CRITICAL FAILURE
-- Tests define the contract and must remain immutable
-- If tests are wrong, stop build and return to planning
+#### Test Integrity (During Build)
+- Test JSON files define the verification contract
+- You can update: `status`, `executedAt`, `result`
+- You CANNOT modify: `steps`, `action`, `expected`
+- If test definition is wrong → STOP, request user approval
 
 #### Self-Review Process (Layer 5)
 When performing AI self-review:
@@ -185,23 +178,24 @@ When performing AI self-review:
 5. Generate discrepancy report if issues found
 6. Be honest - if something doesn't match, say so
 
-### Task Management
+### Story Management
 
-#### Creating Tasks (during /plan)
-- Use TaskCreate for each task in the plan
-- Set clear subject, description, activeForm
-- Map tasks to spec requirements
-- Identify dependencies
+#### Creating Stories (during /plan)
+- Create JSON file for each story in `plans/stories/`
+- Include: title, description, acceptance criteria, test refs
+- Set priority for execution order
+- Map to spec requirements
 
-#### Updating Tasks (during /build)
-- Mark "in_progress" when starting
-- Mark "completed" when done and tests pass
-- Use TaskUpdate to set dependencies
+#### Updating Stories (during /build)
+- Update `status`: pending → in-progress → completed/blocked
+- Add `notes` with timestamps as you progress
+- Update `files` list with what you created/modified
+- Update `updated` timestamp
 
-#### Task Dependencies
-- Set up using TaskUpdate with addBlockedBy
-- Don't start tasks that are blocked
-- Check TaskList before starting new task
+#### Story Dependencies
+- Use `blockedBy` array to track dependencies
+- Don't start stories that are blocked
+- Check story status before starting next
 
 ### Git Integration
 
@@ -237,10 +231,10 @@ Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
 - Suggest fixes
 
 #### Test Failures
-- Show test output
-- Identify failing tests
-- Debug and fix
-- Re-run until green
+- Show which test step failed
+- Identify what expected vs actual
+- Fix implementation (not test)
+- Re-verify until all steps pass
 
 #### Build Errors
 - Show error messages
@@ -304,11 +298,11 @@ If spec changes after planning:
 - Re-validate
 
 #### Tests Keep Failing
-If tests won't pass during build:
-- Review test expectations
-- Check implementation logic
+If test steps won't pass during build:
+- Review the expected results in test JSON
+- Check implementation against acceptance criteria
 - Debug systematically
-- Don't give up - keep iterating
+- If test is genuinely wrong: STOP, request user approval to modify
 
 #### Validation Fails
 If any validation layer fails:
@@ -425,7 +419,7 @@ Use grep or read the file directly. If the information isn't there, ask the user
 Check `.claude/state/calendar.md` for:
 - Today's events and appointments
 - Upcoming deadlines
-- Task due dates (linked via `[task:id]`)
+- To-do due dates (linked via `[todo:id]`)
 - Reminder notes in parentheses
 
 Proactively mention relevant upcoming events. If an event has a reminder note like "(order flowers by Feb 12)", check if that deadline is approaching.

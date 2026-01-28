@@ -1,18 +1,21 @@
 ---
 name: plan
-description: Create implementation plans or add tasks using the spec-driven workflow. Use after completing a spec, ready for technical planning.
-argument-hint: [spec-file or task description]
+description: Create implementation plans with stories and tests using the spec-driven workflow. Use after completing a spec, ready for technical planning.
+argument-hint: [spec-file or story description]
 ---
 
-# /plan - Planning & Task Management
+# /plan - Planning with Stories & Tests
 
-This skill handles both creating full implementation plans from specs and adding individual tasks to existing plans. The workflow adapts based on the arguments you provide.
+Create implementation plans that break work into stories with testable acceptance criteria.
 
 ## Purpose
 
-Define HOW we'll build features, break work into tasks, and write tests BEFORE implementation. Planning is test-driven: tests are written during this phase and become immutable during build.
+Define HOW to build features by creating:
+1. **Plan document** (plan.md) - Technical approach and overview
+2. **Stories** (JSON) - Work units with acceptance criteria
+3. **Tests** (JSON) - Step-by-step verification criteria
 
-## Usage Patterns
+## Usage
 
 ### Create New Plan
 ```bash
@@ -20,94 +23,167 @@ Define HOW we'll build features, break work into tasks, and write tests BEFORE i
 ```
 Examples:
 - `/plan specs/20260127-telegram-integration.spec.md`
-- `/plan specs/20260127-state-manager.spec.md`
+- `/plan specs/20260127-auth-system.spec.md`
 
-**When to use**: After completing a spec, ready for full technical planning
-
-### Add Task to Plan
+### Add Story to Existing Plan
 ```bash
-/plan <natural language description>
+/plan add <story description>
 ```
 Examples:
-- `/plan add unit tests for breakfast module`
-- `/plan implement coffee brewing logic`
-- `/plan refactor context tracker error handling`
+- `/plan add implement login form validation`
+- `/plan add create session management module`
 
-**When to use**: Quick task additions during planning or build
+## Workflow: Create Plan
 
-## How It Works
+1. **Read spec file** - Understand requirements and constraints
+2. **Design technical approach** - Architecture, patterns, decisions
+3. **Create plan.md** - Document the approach in `plans/YYYYMMDD-feature.plan.md`
+4. **Create stories** - One JSON per work unit in `plans/stories/`
+5. **Create tests** - One JSON per test in `plans/tests/`
+6. **Link to to-do** - If this plan was spawned from a to-do, add references
+7. **Run /validate** - Verify completeness
+8. **Suggest /build** - Ready for implementation
 
-**I infer your intent** based on:
-1. **Argument format**:
-   - File path → Create full plan from spec
-   - Natural sentence → Add task to existing plan
-2. **Conversation context**: What plan are we working on?
-3. **File system**: What plans exist in `plans/`?
+## Output Structure
 
-If ambiguous, I'll ask you to clarify.
+```
+plans/
+├── 20260128-auth-system.plan.md
+├── stories/
+│   ├── s-a1b.json    # "Implement login form"
+│   ├── s-c2d.json    # "Create session management"
+│   └── s-e3f.json    # "Add logout functionality"
+└── tests/
+    ├── t-001.json    # "Login with valid credentials"
+    ├── t-002.json    # "Session persists on refresh"
+    └── t-003.json    # "Logout clears session"
+```
 
-## Workflows
+## Story Creation
 
-### Creation Workflow
-1. Read and analyze spec file
-2. Design technical approach
-3. Break down into tasks (with TaskCreate)
-4. Identify user perspective for testing
-5. Create test files (initially failing/red)
-6. Create `plans/YYYYMMDD-feature-name.plan.md`
-7. Set as active plan (context tracker)
-8. Run validation automatically
-9. Suggest next steps: `/build`
+For each story, create `plans/stories/s-{id}.json`:
 
-### Update Workflow
-1. Parse task description
-2. Determine target plan (from context or ask)
-3. Extract task details (subject, size, dependencies)
-4. Add to plan file (markdown)
-5. Add to TaskList (TaskCreate)
-6. Log change to history
-7. Confirm what was added
+```json
+{
+  "id": "s-a1b",
+  "title": "Implement login form",
+  "description": "Build the login UI with email/password fields",
+  "planRef": "plans/20260128-auth-system.plan.md",
+  "todoRef": "xyz",
+  "status": "pending",
+  "priority": 1,
+  "tests": ["t-001"],
+  "blockedBy": [],
+  "created": "2026-01-28T10:00:00Z",
+  "updated": "2026-01-28T10:00:00Z",
+  "notes": [],
+  "files": ["src/components/LoginForm.tsx"],
+  "acceptanceCriteria": [
+    "Form displays email and password fields",
+    "Submit button triggers authentication",
+    "Error messages display on failure"
+  ]
+}
+```
+
+## Test Creation
+
+For each test, create `plans/tests/t-{id}.json`:
+
+```json
+{
+  "id": "t-001",
+  "title": "Login with valid credentials",
+  "description": "Verify successful login flow",
+  "storyRefs": ["s-a1b"],
+  "planRef": "plans/20260128-auth-system.plan.md",
+  "type": "story",
+  "status": "pending",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Open login page",
+      "expected": "Login form is visible"
+    },
+    {
+      "order": 2,
+      "action": "Enter valid email and password",
+      "expected": "Fields accept input"
+    },
+    {
+      "order": 3,
+      "action": "Click login button",
+      "expected": "User redirected to dashboard"
+    }
+  ],
+  "created": "2026-01-28T10:00:00Z",
+  "executedAt": null,
+  "result": null
+}
+```
+
+## ID Generation
+
+- **Stories**: `s-` prefix + 3 alphanumeric chars (e.g., `s-a1b`)
+- **Tests**: `t-` prefix + 3-digit number (e.g., `t-001`)
+
+Check existing IDs to avoid collisions.
 
 ## Key Principles
 
-**Test-Driven**:
-- Tests written during plan phase
-- Tests must FAIL initially (red state)
-- Tests become IMMUTABLE during build
-- Implementation must match tests
+**Tests are immutable during build:**
+- Write comprehensive tests during /plan
+- Tests define the contract
+- Cannot modify test steps during /build
+- Implementation must satisfy tests, not vice versa
 
-**User Perspective**:
-- Identify who the user is (Human, Claude Code, External System)
-- Write tests from user's viewpoint
-- Tests reflect real usage patterns
+**Stories are updatable:**
+- Status changes as work progresses
+- Notes added during implementation
+- Files list may grow
 
-**Complete Before Build**:
-- All tasks defined
-- All tests written
-- All dependencies mapped
-- Validation passed
+**Every requirement needs coverage:**
+- Each must-have requirement → at least one story
+- Each story → at least one test
+- Feature-level tests for integration
 
-## Best Practices
+## Plan.md Template
 
-**For Creation**:
-- Analyze spec thoroughly
-- Map every requirement to tasks/tests
-- Size tasks realistically (S/M/L)
-- Identify clear dependencies
-- Write comprehensive tests
-- Ensure tests fail initially
+```markdown
+# Plan: [Feature Name]
 
-**For Updates**:
-- Be specific about task scope
-- Size appropriately
-- Note dependencies if obvious
-- Quick iterations encouraged
+**Spec**: specs/YYYYMMDD-feature.spec.md
+**To-Do**: [id] (if applicable)
+**Created**: YYYY-MM-DD
+
+## Technical Approach
+
+[Describe the architecture, patterns, and key decisions]
+
+## Stories
+
+| ID | Title | Priority | Tests |
+|----|-------|----------|-------|
+| s-a1b | Implement login form | 1 | t-001 |
+| s-c2d | Create session management | 2 | t-002 |
+
+## Dependencies
+
+[Story dependency graph if complex]
+
+## Files
+
+[List of files to create/modify]
+
+## Notes
+
+[Any additional context]
+```
 
 ## Integration
 
-**Context Tracker**: Remembers active plan across conversation
-**Task System**: Uses TaskCreate/TaskUpdate for task management
-**History Logger**: Records all plan changes
-**Validation**: Plans validated before moving to build
+- **To-Do system**: Plans can reference parent to-do via `todoRef`
+- **Validation**: /validate checks story-test coverage
+- **Build**: /build works through stories in priority order
 
-See `reference.md` for detailed step-by-step workflows.
+See `reference.md` for detailed schemas.

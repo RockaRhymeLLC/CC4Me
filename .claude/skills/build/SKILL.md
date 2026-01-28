@@ -1,112 +1,200 @@
 ---
 name: build
-description: Implement features test-first or request specific build actions. Use after planning is complete, ready for implementation.
+description: Implement features by working through stories and verifying tests. Use after planning is complete, ready for implementation.
 argument-hint: [plan-file or build request]
 ---
 
-# /build - Implementation & Build Management
+# /build - Story-Driven Implementation
 
-This skill handles both executing full implementation plans and processing specific build requests. The workflow adapts based on the arguments you provide.
+Implement features by working through stories in priority order, verifying each test step.
 
 ## Purpose
 
-Implement features following test-driven development: make failing tests pass without modifying the tests. Build phase is where code comes to life, guided by immutable tests.
+Execute the plan by:
+1. Working through stories in priority order
+2. Implementing to satisfy acceptance criteria
+3. Verifying test steps
+4. Updating story status and notes
 
-## Usage Patterns
+## Usage
 
-### Execute Full Plan
+### Execute Plan
 ```bash
 /build <plan-file-path>
 ```
 Examples:
-- `/build plans/20260127-state-manager.plan.md`
-- `/build plans/20260127-telegram-integration.plan.md`
+- `/build plans/20260128-auth-system.plan.md`
+- `/build plans/20260128-api-integration.plan.md`
 
-**When to use**: After planning is complete, ready for full implementation
-
-### Request Specific Action
+### Resume Build
 ```bash
-/build <natural language description>
+/build
 ```
-Examples:
-- `/build implement coffee brewing first`
-- `/build fix context tracker error handling`
-- `/build add validation for empty descriptions`
-- `/build refactor logger to use streams`
+Continues from the active plan's in-progress story.
 
-**When to use**: Quick implementation requests or prioritization during build
+## Workflow
 
-## How It Works
+1. **Pre-build checks** (via hook)
+   - Verify plan file exists
+   - Verify spec file exists
 
-**I infer your intent** based on:
-1. **Argument format**:
-   - File path → Execute full build plan
-   - Natural sentence → Specific build request
-2. **Conversation context**: What are we building?
-3. **Task state**: What's in progress, what's pending?
+2. **Load plan context**
+   - Read plan.md
+   - Load all stories from `plans/stories/`
+   - Load all tests from `plans/tests/`
 
-If ambiguous, I'll ask you to clarify.
+3. **For each story (by priority):**
+   - Update story status to `in-progress`
+   - Read acceptance criteria
+   - Implement the required functionality
+   - Add notes as you progress
+   - Run associated tests (verify each step)
+   - If all tests pass: Update story status to `completed`
+   - If blocked: Update status to `blocked`, add note explaining why
 
-## Workflows
+4. **Post-build**
+   - Run /validate
+   - Offer to create git commit
+   - Update parent to-do if applicable
 
-### Full Build Workflow
-1. Pre-build validation (via hook)
-2. Read spec, plan, and tests
-3. Verify user perspective from plan
-4. For each task:
-   - Mark in_progress
-   - Implement to match tests
-   - Run tests (fix implementation, not tests!)
-   - Mark completed when green
-5. Run validation automatically
-6. Offer to create git commit
-7. Display summary
+## Working with Stories
 
-### Build Request Workflow
-1. Parse request
-2. Check current context/tasks
-3. Determine action (new implementation, fix, refactor, priority change)
-4. Execute or queue
-5. Update task status
-6. Log action
-7. Confirm
+### Reading a Story
 
-## Critical Rules
+Load from `plans/stories/s-{id}.json`:
+- Check `status` - is it pending or blocked?
+- Check `blockedBy` - are dependencies complete?
+- Read `acceptanceCriteria` - what defines done?
+- Read `tests` - which tests verify this story?
 
-**Tests are IMMUTABLE**:
-- Written during plan phase
-- Cannot be changed during build
-- If tests are wrong, STOP and return to planning
-- Implementation must match tests, not vice versa
+### Updating a Story
 
-**Test-Driven Development**:
-- Tests define the contract
-- Run tests frequently
-- Fix failing tests by changing implementation
-- All tests must pass before completion
+**You CAN update during /build:**
+- `status`: pending → in-progress → completed (or blocked)
+- `updated`: Current timestamp
+- `notes`: Add progress notes
+- `files`: Add files you created/modified
 
-## Best Practices
+**You CANNOT update:**
+- `acceptanceCriteria` (would require user approval)
+- `tests` (test definitions are immutable)
 
-**For Full Build**:
-- Read tests before coding
-- Understand user perspective
-- Implement smallest change to make test pass
-- Run tests after each change
-- Complete tasks in dependency order
-- Keep changes focused
+### Story Status Flow
 
-**For Build Requests**:
-- Be specific about what to build/fix
-- Note priority if urgent
-- Trust the TDD process
-- Don't request test changes
+```
+pending → in-progress → completed
+              ↓
+           blocked (with note explaining why)
+```
+
+## Working with Tests
+
+### Verifying a Test
+
+Load from `plans/tests/t-{id}.json`:
+1. Read each step in order
+2. Perform the `action`
+3. Verify the `expected` result
+4. If all steps pass: Update test `status` to `passed`
+5. If any step fails: Update test `status` to `failed`, record `failedStep`
+
+### Test Immutability
+
+**CRITICAL: Tests are IMMUTABLE during /build**
+
+You can only update:
+- `status`: pending → passed | failed
+- `executedAt`: When you ran the test
+- `result`: Pass/fail details
+
+You CANNOT modify:
+- `steps` (the actions and expected results)
+- `title`, `description`
+- Any test definition
+
+**If a test is wrong:**
+1. STOP the build
+2. Explain what's wrong with the test
+3. Request user approval to modify
+4. Return to /plan phase to fix
+
+## Example Build Session
+
+```
+## Building: auth-system
+
+### Story s-a1b: Implement login form (Priority 1)
+Status: pending → in-progress
+
+Implementing...
+- Created src/components/LoginForm.tsx
+- Added email/password fields
+- Connected submit handler
+
+Running test t-001: Login with valid credentials
+- Step 1: Open login page ✓
+- Step 2: Enter valid credentials ✓
+- Step 3: Click login button ✓
+Test passed.
+
+Story s-a1b: in-progress → completed
+Added note: "Implemented basic login form with validation"
+
+### Story s-c2d: Create session management (Priority 2)
+...
+```
+
+## Progress Notes
+
+Add notes to stories as you work:
+
+```json
+{
+  "notes": [
+    {
+      "timestamp": "2026-01-28T14:30:00Z",
+      "content": "Started implementing login form"
+    },
+    {
+      "timestamp": "2026-01-28T15:00:00Z",
+      "content": "Added validation, form submits correctly"
+    }
+  ]
+}
+```
+
+Notes help with:
+- Context recovery after session break
+- Audit trail of decisions
+- Debugging if something goes wrong
+
+## Handling Blockers
+
+If you encounter a blocker:
+
+1. Update story status to `blocked`
+2. Add a note explaining the blocker
+3. Check if another story can be worked on
+4. If truly stuck, ask the user for help
+
+```json
+{
+  "status": "blocked",
+  "notes": [
+    {
+      "timestamp": "2026-01-28T16:00:00Z",
+      "content": "Blocked: Need API credentials to test authentication"
+    }
+  ]
+}
+```
 
 ## Integration
 
-**Task System**: Tracks progress through tasks
-**Context Tracker**: Maintains build state
-**History Logger**: Records all build actions
-**Validation**: Ensures quality before completion
-**Git**: Commits completed features
+- **Stories**: `plans/stories/s-{id}.json` - work units
+- **Tests**: `plans/tests/t-{id}.json` - verification criteria
+- **To-Dos**: Parent to-do gets updated when plan completes
+- **Validation**: /validate runs automatically post-build
+- **Git**: Commit offered after successful build
 
-See `reference.md` for detailed step-by-step workflows.
+See `reference.md` for detailed schemas.
