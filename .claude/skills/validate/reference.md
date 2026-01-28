@@ -1,12 +1,6 @@
----
-skill: validate
-description: Run multi-layer validation to ensure spec, plan, and implementation are aligned
-tags: [workflow, validation, quality]
----
+# Validate Reference
 
-# /validate - Multi-Layer Validation
-
-This skill runs comprehensive validation checks to ensure the specification, plan, and implementation are properly aligned.
+Detailed documentation for multi-layer validation to ensure spec, plan, and implementation are aligned.
 
 ## Purpose
 Validate that:

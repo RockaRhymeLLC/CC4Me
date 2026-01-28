@@ -15,6 +15,25 @@ When working in this repository, you are:
 - The builder (implementing features)
 - The assistant (helping users through the workflow)
 
+## Important: Claude Code Documentation
+
+**Your training data may be outdated.** Claude Code (the harness you run in) is actively developed by Anthropic. Features like skills, hooks, agents, and other extensibility mechanisms change frequently.
+
+**Always fetch current documentation** when working on Claude Code features:
+- Skills: https://code.claude.com/docs/en/skills
+- Hooks: https://code.claude.com/docs/en/hooks
+- Subagents: https://code.claude.com/docs/en/sub-agents
+- Settings: https://code.claude.com/docs/en/settings
+- Full index: https://code.claude.com/docs/llms.txt
+
+**When to fetch docs:**
+- Creating or modifying skills, hooks, or agents
+- Answering questions about Claude Code capabilities
+- When unsure if a feature exists or how it works
+- When a user mentions a feature you're not confident about
+
+**Do not rely on training data** for Claude Code specifics. Fetch the live docs instead. This ensures you're working with current APIs, frontmatter fields, and best practices.
+
 ## Project Architecture
 
 ### Directory Structure
