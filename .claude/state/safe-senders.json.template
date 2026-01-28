@@ -1,0 +1,11 @@
+{
+  "_comment": "Safe senders for Telegram and email. Copy to safe-senders.json and configure.",
+  "telegram": {
+    "_comment": "Telegram user IDs or usernames",
+    "users": []
+  },
+  "email": {
+    "_comment": "Email addresses of trusted senders",
+    "addresses": []
+  }
+}

@@ -1,343 +1,269 @@
 # CC4Me - Claude Code for Me
 
-**Spec-Driven Development Workflow + Autonomous AI Assistant**
+**Spec-Driven Development Workflow + Autonomous Personal Assistant**
 
-CC4Me configures Claude Code as a powerful spec-driven development workflow AND an autonomous assistant. Build features systematically with built-in validation, test-driven development, and quality gates.
+CC4Me is a configuration template for [Claude Code](https://github.com/anthropics/claude-code) that transforms it into:
+1. A systematic spec-driven development workflow
+2. An autonomous personal assistant that persists across sessions
 
-## What is CC4Me?
+Clone this repo, run setup, and you have a powerful AI assistant that remembers your preferences, manages your tasks, and builds software systematically.
 
-CC4Me is a configuration template for [Claude Code](https://github.com/anthropics/claude-code) that implements a structured workflow for building software:
+## Features
 
-1. **Spec** - Define WHAT to build and WHY
-2. **Plan** - Define HOW to build it with tasks and tests
-3. **Validate** - Ensure everything aligns (multi-layer validation)
-4. **Build** - Implement test-first until tests pass
+### Development Workflow
+- **Spec → Plan → Validate → Build** - Structured software development
+- **Multi-layer validation** - 6 validation layers including test integrity
+- **Test-driven development** - Tests written before code, immutable during build
+- **User-perspective testing** - Tests simulate real user interactions
 
-This workflow ensures:
-- Clear requirements before coding
-- Test-driven development
-- Automatic validation at every step
-- No missed requirements
-- High-quality, maintainable code
-
-## Why Spec-Driven Development?
-
-Traditional development often jumps straight to code, leading to:
-- Misunderstood requirements
-- Missing edge cases
-- Incomplete test coverage
-- Scope creep
-- Validation only at the end
-
-Spec-driven development fixes this by:
-- Documenting intent BEFORE implementation
-- Creating tests BEFORE code (red-green-refactor)
-- Validating alignment at every phase
-- Catching issues early
-- Creating a paper trail for decisions
+### Assistant Capabilities
+- **Persistent memory** - Remembers facts about you across sessions
+- **Task management** - Tracks tasks with priorities, status, and history
+- **Calendar awareness** - Knows your schedule and reminds you
+- **Autonomy modes** - Configure how much freedom the assistant has
+- **Secure storage** - Credentials stored safely in macOS Keychain
+- **Integration ready** - Templates for Telegram, email, and more
 
 ## Quick Start
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org) v18 or higher
+- macOS (for Keychain integration)
+- [Node.js](https://nodejs.org) v18+
 - [Claude Code CLI](https://github.com/anthropics/claude-code)
-- npm or yarn
 
 ### Installation
 
 ```bash
-# Clone this repository
-git clone https://github.com/your-org/CC4Me.git my-project
-cd my-project
+# Clone the template
+git clone https://github.com/your-org/CC4Me.git my-assistant
+cd my-assistant
 
-# Run one-command setup
-./scripts/init.sh
+# Install dependencies
+npm install
 
 # Start Claude Code
 claude
+
+# Run the setup wizard
+> /setup
 ```
 
-### Your First Feature
+The setup wizard will guide you through:
+1. Naming your assistant
+2. Choosing an autonomy mode
+3. Configuring safe senders (for Telegram/email)
+4. Setting up integrations (optional)
 
-```bash
-# In Claude Code terminal:
+## Usage
 
-# Step 1: Create a specification
-> /spec my-first-feature
+### Assistant Skills
 
-# Claude will interview you to gather requirements
+| Skill | Description | Example |
+|-------|-------------|---------|
+| `/task` | Manage persistent tasks | `/task add "Review PR" priority:high` |
+| `/memory` | Store and lookup facts | `/memory add "Prefers dark mode"` |
+| `/calendar` | View and manage schedule | `/calendar show week` |
+| `/mode` | Change autonomy level | `/mode confident` |
+| `/save-state` | Save context before /clear | `/save-state` |
+| `/setup` | Re-run configuration | `/setup integrations` |
 
-# Step 2: Create a plan
-> /plan specs/20260127-my-first-feature.spec.md
+### Development Workflow
 
-# Claude will create tasks, tests, and a detailed plan
+| Skill | Description | Example |
+|-------|-------------|---------|
+| `/spec` | Create feature specification | `/spec login-feature` |
+| `/plan` | Create implementation plan | `/plan specs/20260128-login.spec.md` |
+| `/validate` | Run validation checks | `/validate` |
+| `/build` | Implement test-first | `/build plans/20260128-login.plan.md` |
 
-# Step 3: Build it
-> /build plans/20260127-my-first-feature.plan.md
+### Autonomy Modes
 
-# Claude will implement test-first until all tests pass
-```
+| Mode | Behavior |
+|------|----------|
+| `yolo` | Full autonomy - no confirmations |
+| `confident` | Ask only for destructive actions |
+| `cautious` | Ask for any state changes |
+| `supervised` | Ask for everything |
 
-## The Workflow
-
-### Phase 1: `/spec` - Specification
-
-**Purpose**: Define WHAT we're building and WHY
-
-**Creates**: `specs/YYYYMMDD-feature-name.spec.md`
-
-Claude interviews you to create a complete specification:
-- Goal (one sentence problem statement)
-- Requirements (must-have, should-have, won't-have)
-- Constraints (security, performance, compatibility)
-- Success criteria (how we know it's done)
-- User stories (scenarios and expected behavior)
-- Open questions (what needs clarification)
-
-**Example**:
-```bash
-> /spec telegram-integration
-
-# Claude asks:
-# - What problem does this solve?
-# - What are the must-have requirements?
-# - Any security constraints?
-# - How will we know it works?
-# ... etc
-```
-
-### Phase 2: `/plan` - Planning
-
-**Purpose**: Define HOW we'll build it
-
-**Creates**:
-- `plans/YYYYMMDD-feature-name.plan.md`
-- `tests/feature-name.test.ts` (failing tests)
-- Tasks in TaskList
-
-Claude analyzes the spec and creates:
-- Technical approach (architecture decisions)
-- File-level changes (what to create/modify)
-- Task breakdown with dependencies
-- Test plan with specific test cases
-- Test files with failing tests (red state)
-
-**Example**:
-```bash
-> /plan specs/20260127-telegram-integration.spec.md
-
-# Claude creates:
-# - Detailed plan document
-# - 5 tasks in TaskList
-# - Test file with 12 failing tests
-# - Automatically runs /validate
-```
-
-### Phase 3: `/validate` - Validation
-
-**Purpose**: Ensure spec, plan, and implementation align
-
-**Runs**:
-1. Automated tests (`npm test`)
-2. Spec coverage check (all requirements have tasks/tests)
-3. Plan validation (complete and consistent)
-4. AI self-review (implementation matches spec)
-5. Manual review checklist (human verification)
-
-Called automatically by `/plan` and `/build`, or manually:
-
-```bash
-> /validate
-
-# Runs all validation layers
-# Reports pass/fail for each layer
-# Blocks progress if validation fails
-```
-
-### Phase 4: `/build` - Implementation
-
-**Purpose**: Write code to make tests pass
-
-**Process**:
-1. Pre-build validation (via hook)
-2. Read spec, plan, and tests
-3. Implement test-first (red → green)
-4. Run tests after each task
-5. Auto-validate when complete
-6. Offer git commit
-
-**Example**:
-```bash
-> /build plans/20260127-telegram-integration.plan.md
-
-# Claude:
-# - Verifies pre-build validation passed
-# - Implements each task test-first
-# - Runs tests continuously
-# - Validates completion
-# - Creates commit message
-```
+Change with `/mode <level>`.
 
 ## Project Structure
 
 ```
 CC4Me/
-├── .claude/                    # Claude Code configuration
-│   ├── skills/                 # Custom workflow skills
-│   │   ├── spec.md            # /spec skill
-│   │   ├── plan.md            # /plan skill
-│   │   ├── validate.md        # /validate skill
-│   │   └── build.md           # /build skill
-│   ├── hooks/                  # Automation hooks
-│   │   └── pre-build.sh       # Pre-build validation
-│   └── CLAUDE.md              # Instructions for Claude
-├── templates/                  # Templates for workflow
-│   ├── spec.template.md
-│   ├── plan.template.md
-│   └── test.template.ts
-├── specs/                      # Your specifications
-├── plans/                      # Your plans
-├── tests/                      # Your tests
-├── src/                        # Your implementation
-├── scripts/                    # Utility scripts
-│   ├── init.sh                # One-command setup
-│   ├── validate-spec.ts       # Spec validator
-│   └── validate-plan.ts       # Plan validator
-├── package.json               # Dependencies
-└── README.md                  # This file
+├── .claude/
+│   ├── CLAUDE.md           # Assistant behavior instructions
+│   ├── settings.json       # Claude Code hooks config
+│   ├── skills/             # All assistant skills
+│   │   ├── spec/          # Development workflow
+│   │   ├── plan/
+│   │   ├── validate/
+│   │   ├── build/
+│   │   ├── task/          # Task management
+│   │   ├── memory/        # Fact storage
+│   │   ├── calendar/      # Schedule management
+│   │   ├── mode/          # Autonomy control
+│   │   ├── save-state/    # Context persistence
+│   │   └── setup/         # Setup wizard
+│   ├── hooks/              # Lifecycle automation
+│   │   ├── session-start.sh
+│   │   └── pre-compact.sh
+│   ├── state/              # Persistent state (gitignored)
+│   │   ├── tasks/         # Task files
+│   │   ├── memory.md      # Stored facts
+│   │   ├── calendar.md    # Schedule
+│   │   ├── autonomy.json  # Current mode
+│   │   └── identity.json  # Assistant name/personality
+│   └── knowledge/
+│       └── integrations/   # How-to docs for services
+├── templates/              # Spec/plan/test templates
+├── specs/                  # Your specifications
+├── plans/                  # Your plans
+├── tests/                  # Your tests
+├── src/                    # Your implementation
+├── scripts/                # Validation scripts
+└── launchd/                # Persistent service template
 ```
-
-## Features
-
-### Multi-Layer Validation
-
-CC4Me validates at 6 distinct levels:
-1. **Automated tests**: Code correctness (tests pass)
-2. **Spec coverage**: All requirements addressed
-3. **Plan consistency**: Tasks match requirements
-4. **Test integrity**: Tests unchanged since planning (immutability enforced)
-5. **AI review**: Implementation matches spec intent
-6. **Human review**: Final quality gate
-
-Each layer catches different types of issues. All must pass to proceed.
-
-### Test-Driven Development
-
-- **Tests written BEFORE implementation** (during planning phase)
-- **Tests written from user's perspective** (how they'll actually use the feature)
-- **Tests are IMMUTABLE** during build phase (cannot be modified)
-- Tests start failing (red state)
-- Implementation makes tests pass (green state)
-- Implementation must match tests, NOT vice versa
-- Refactor while keeping tests green
-- Clear definition of "done"
-
-#### User-Perspective Testing
-
-Tests simulate how actual users interact with features:
-- **Claude Code as user**: Tests invoke skills and check file outputs
-- **Human as user**: Tests run CLI commands and verify stdout
-- **External system as user**: Tests send API requests and check responses
-- **Hybrid**: Tests cover multiple user types
-
-This ensures features work as users expect, not just internally.
-
-### Pre-Build Gates
-
-The pre-build hook prevents building with:
-- Incomplete specifications
-- Missing test files
-- Unresolved open questions
-- Invalid plans
-
-### Task Management
-
-Integrated TaskList tracking:
-- Tasks created during planning
-- Dependencies managed automatically
-- Progress visible in real-time
-- Tasks marked complete as you build
-
-### Git Integration
-
-Optional automatic commits:
-- Descriptive commit messages
-- Links to spec and plan
-- Test summary included
-- Co-authored by Claude
 
 ## Configuration
 
-### Environment Variables
+### State Files
 
-Create a `.env` file (or use the one created by `init.sh`):
+After running `/setup`, these files are created in `.claude/state/`:
 
-```bash
-# Anthropic API Key (if using Claude API directly)
-ANTHROPIC_API_KEY=your_api_key_here
+| File | Purpose |
+|------|---------|
+| `identity.json` | Assistant name and personality |
+| `autonomy.json` | Current autonomy mode |
+| `safe-senders.json` | Trusted Telegram/email contacts |
+| `memory.md` | Facts about you |
+| `calendar.md` | Your schedule |
+| `tasks/` | Individual task files |
 
-# Future: Telegram integration
-TELEGRAM_BOT_TOKEN=your_bot_token_here
-TELEGRAM_AUTHORIZED_USERS=123456789,987654321
-```
+All state files are gitignored by default. Edit them directly or use skills.
 
-### Claude Settings
+### Integrations
 
-Edit `.claude/settings.json` to customize Claude Code behavior (not included in template - user-specific).
+#### Telegram Bot
 
-## Best Practices
+1. Create a bot via [@BotFather](https://t.me/botfather)
+2. Run `/setup integrations` or manually:
+   ```bash
+   security add-generic-password -a "assistant" -s "credential-telegram-bot" -w "YOUR_BOT_TOKEN" -U
+   ```
+3. Add your chat ID to `.claude/state/safe-senders.json`
 
-1. **Start with /spec**: Always begin with a clear specification
-2. **Identify the user**: Know who will use the feature (Claude, human, external system)
-3. **Resolve open questions**: Don't proceed with unresolved questions
-4. **Trust the validation**: If validation fails, fix it before continuing
-5. **Test-first always**: Let tests guide implementation
-6. **Tests are sacred**: Never modify tests during build to make them pass
-7. **User-perspective testing**: Write tests from the user's actual interaction pattern
-8. **Keep tasks small**: Smaller tasks are easier to complete and validate
-9. **Review AI work**: Use the manual review step to verify quality
-10. **Implementation matches tests**: Fix code to pass tests, not tests to pass code
+See `.claude/knowledge/integrations/telegram.md` for details.
 
-## Roadmap
+#### Email (Fastmail)
 
-Future enhancements (to be built using this workflow!):
+1. Create an app password in Fastmail settings
+2. Run `/setup integrations` or manually store credentials:
+   ```bash
+   security add-generic-password -a "assistant" -s "credential-fastmail-email" -w "your@email.com" -U
+   security add-generic-password -a "assistant" -s "credential-fastmail-password" -w "APP_PASSWORD" -U
+   ```
+3. Add your email to safe senders
 
-- [ ] Telegram bot integration for async messaging
-- [ ] Autonomous task scheduling
-- [ ] Web research capabilities
-- [ ] File system operations with sandboxing
-- [ ] Self-improvement (assistant proposes enhancements)
+See `.claude/knowledge/integrations/fastmail.md` for details.
 
-See the plan document for details on how we'll systematically add these features using spec → plan → validate → build.
+### Persistent Service
+
+To run the assistant continuously:
+
+1. Copy and edit the launchd template:
+   ```bash
+   cp launchd/com.assistant.harness.plist.template ~/Library/LaunchAgents/com.assistant.harness.plist
+   # Edit the file to set your paths
+   ```
+
+2. Load the service:
+   ```bash
+   launchctl load ~/Library/LaunchAgents/com.assistant.harness.plist
+   ```
+
+See `launchd/README.md` for full instructions.
+
+## Security
+
+### Credential Storage
+
+All credentials are stored in macOS Keychain, never in plain text:
+- `credential-*` - API keys, passwords
+- `pii-*` - Personal identifiable information
+- `financial-*` - Payment/banking data
+
+### Safe Senders
+
+The assistant only processes requests from contacts listed in `safe-senders.json`. Unknown senders are acknowledged but not acted upon.
+
+### Secure Data Gate
+
+**Absolute rule**: The assistant will never share Keychain-stored data with anyone not in the safe senders list. No exceptions.
+
+## Development Workflow Details
+
+### The Process
+
+1. **`/spec feature-name`** - Claude interviews you to create a complete specification
+2. **`/plan specs/...spec.md`** - Claude creates tasks, tests (that fail), and a plan
+3. **`/validate`** - Runs 6-layer validation
+4. **`/build plans/...plan.md`** - Claude implements until tests pass
+
+### Validation Layers
+
+1. **Automated tests** - npm test passes
+2. **Spec coverage** - All requirements have tasks
+3. **Plan consistency** - Tasks match requirements
+4. **Test integrity** - Tests unchanged since planning
+5. **AI self-review** - Implementation matches spec intent
+6. **Manual review** - You approve the work
+
+### Test Immutability
+
+During `/build`, test files cannot be modified. This ensures:
+- Tests define the contract
+- Implementation matches user expectations
+- No cheating by changing tests to pass
+
+## Troubleshooting
+
+### SessionStart hook not running
+- Check `.claude/settings.json` has the hooks configured
+- Verify hook scripts are executable: `chmod +x .claude/hooks/*.sh`
+
+### State not persisting
+- Ensure `.claude/state/` directory exists
+- Check files aren't gitignored incorrectly
+- Verify state templates were copied during setup
+
+### Keychain access issues
+- Keychain may need to be unlocked
+- Check Keychain Access app for permissions
+
+### Validation failing
+- Read the specific layer failure message
+- Check spec and plan alignment
+- Run `/validate` after fixes
 
 ## Contributing
 
-This project is designed to be self-improving:
+This project uses its own workflow for development:
 
-1. Create a spec for the enhancement: `/spec my-enhancement`
-2. Create a plan: `/plan specs/YYYYMMDD-my-enhancement.spec.md`
-3. Build it: `/build plans/YYYYMMDD-my-enhancement.plan.md`
-4. Submit a pull request
+1. `/spec my-enhancement` - Specify what you want to add
+2. `/plan specs/...` - Plan the implementation
+3. `/build plans/...` - Build it test-first
+4. Submit a PR
 
 ## License
 
-MIT License - see LICENSE file for details
-
-## Support
-
-- Issues: [GitHub Issues](https://github.com/anthropics/claude-code/issues)
-- Discussions: [GitHub Discussions](https://github.com/anthropics/claude-code/discussions)
-- Claude Code Docs: [Official Documentation](https://docs.anthropic.com/claude-code)
+MIT License - see LICENSE file for details.
 
 ## Acknowledgments
 
 Built with [Claude Code](https://github.com/anthropics/claude-code) by Anthropic.
 
-Inspired by the need for systematic, validated, high-quality AI-assisted development.
-
 ---
 
-**Happy Building!** 🎉
-
-Start with `/spec` and let the workflow guide you to high-quality implementations.
+**Get started**: Clone, run `/setup`, and meet your new assistant.

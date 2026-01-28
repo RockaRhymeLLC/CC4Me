@@ -26,6 +26,17 @@ Thumbs.db
 # User-specific Claude Code settings
 .claude/settings.local.json
 
+# Assistant state files (runtime, not templates)
+.claude/state/*.json
+.claude/state/*.md
+!.claude/state/*.template
+!.claude/state/.gitkeep
+.claude/state/tasks/*.json
+!.claude/state/tasks/.gitkeep
+
+# Assistant history (if used)
+.claude/history/
+
 # Logs
 logs/
 *.log

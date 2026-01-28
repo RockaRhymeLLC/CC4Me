@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+    CC4Me Assistant Harness - launchd Service Template
+
+    This template creates a persistent service that keeps Claude Code running.
+    Customize the values marked with TODO before installing.
+
+    Installation:
+    1. Copy to ~/Library/LaunchAgents/com.assistant.harness.plist
+    2. Edit TODO values
+    3. launchctl load ~/Library/LaunchAgents/com.assistant.harness.plist
+
+    Management:
+    - Start: launchctl start com.assistant.harness
+    - Stop: launchctl stop com.assistant.harness
+    - Unload: launchctl unload ~/Library/LaunchAgents/com.assistant.harness.plist
+    -->
+
+    <key>Label</key>
+    <string>com.assistant.harness</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <!-- TODO: Update path to claude binary if different -->
+        <string>/usr/local/bin/claude</string>
+        <!-- Add any startup arguments here -->
+        <string>--resume</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <!-- TODO: Update to your CC4Me project directory -->
+    <string>/Users/YOUR_USERNAME/Projects/CC4Me</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <!-- Restart if the process exits -->
+        <key>SuccessfulExit</key>
+        <false/>
+
+        <!-- Only run when network is available -->
+        <key>NetworkState</key>
+        <true/>
+    </dict>
+
+    <key>ThrottleInterval</key>
+    <!-- Wait 30 seconds before restarting after crash -->
+    <integer>30</integer>
+
+    <key>StandardOutPath</key>
+    <!-- TODO: Update log path -->
+    <string>/Users/YOUR_USERNAME/.claude/logs/assistant.log</string>
+
+    <key>StandardErrorPath</key>
+    <!-- TODO: Update log path -->
+    <string>/Users/YOUR_USERNAME/.claude/logs/assistant.error.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <!-- Add any environment variables needed -->
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+
+        <!-- Ensure proper terminal handling -->
+        <key>TERM</key>
+        <string>xterm-256color</string>
+    </dict>
+
+    <!--
+    Optional: Start at specific times
+    Uncomment to run at 9am daily instead of continuously
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>9</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    -->
+
+    <!--
+    Optional: Watch for file changes
+    Uncomment to restart when config changes
+
+    <key>WatchPaths</key>
+    <array>
+        <string>/Users/YOUR_USERNAME/Projects/CC4Me/.claude/CLAUDE.md</string>
+    </array>
+    -->
+
+    <key>ProcessType</key>
+    <string>Interactive</string>
+
+    <key>LowPriorityIO</key>
+    <false/>
+
+    <key>Nice</key>
+    <integer>0</integer>
+</dict>
+</plist>
