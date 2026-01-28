@@ -21,9 +21,10 @@ else
   echo ""
 fi
 
-# Make hook scripts executable
+# Make scripts executable
 echo "Making scripts executable..."
 chmod +x scripts/init.sh
+chmod +x scripts/start.sh
 chmod +x .claude/hooks/*.sh 2>/dev/null || true
 
 echo "Scripts ready"
@@ -35,7 +36,10 @@ echo "========================================================"
 echo ""
 echo "Next steps:"
 echo ""
-echo "1. Start Claude Code in this directory:"
+echo "1. Start Claude Code with custom system prompt:"
+echo "   $ ./scripts/start.sh"
+echo ""
+echo "   Or start without custom prompt:"
 echo "   $ claude"
 echo ""
 echo "2. Run the setup wizard:"

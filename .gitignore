@@ -29,6 +29,7 @@ Thumbs.db
 # Assistant state files (runtime, not templates)
 .claude/state/*.json
 .claude/state/*.md
+.claude/state/*.txt
 !.claude/state/*.template
 !.claude/state/.gitkeep
 .claude/state/todos/*.json

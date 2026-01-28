@@ -24,9 +24,10 @@
 
     <key>ProgramArguments</key>
     <array>
-        <!-- TODO: Update path to claude binary if different -->
-        <string>/usr/local/bin/claude</string>
-        <!-- Add any startup arguments here -->
+        <!-- Uses start.sh to load system prompt and launch claude -->
+        <!-- TODO: Update path to your CC4Me project directory -->
+        <string>/Users/YOUR_USERNAME/Projects/CC4Me/scripts/start.sh</string>
+        <!-- Add any startup arguments here (passed through to claude) -->
         <string>--resume</string>
     </array>
 

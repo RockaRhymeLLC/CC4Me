@@ -18,12 +18,14 @@ Interactive wizard to configure the assistant after cloning the CC4Me template.
 
 ## What Gets Configured
 
-### 1. Identity
+### 1. Identity & System Prompt
 - Assistant name
 - Personality traits (optional)
-- Custom greeting (optional)
+- Core directives
 
-Creates: `.claude/state/identity.json`
+Creates:
+- `.claude/state/identity.json`
+- `.claude/state/system-prompt.txt` (loaded at startup via `--append-system-prompt`)
 
 ### 2. Autonomy Mode
 - Choose default autonomy level
@@ -70,6 +72,7 @@ Creates: `.claude/state/calendar.md`
    - Ask: "What would you like to call me?"
    - Ask: "Any personality traits? (optional)"
    - Create identity.json
+   - Generate system-prompt.txt from template (replaces {{NAME}} and {{PERSONALITY}})
 
 3. **Autonomy Mode**
    - Explain the four modes
@@ -151,6 +154,22 @@ The setup process copies from `.template` files:
 - `safe-senders.json.template` → `safe-senders.json`
 - `memory.md.template` → `memory.md`
 - `calendar.md.template` → `calendar.md`
+- `system-prompt.txt.template` → `system-prompt.txt` (with {{NAME}} and {{PERSONALITY}} replaced)
+
+## System Prompt
+
+The system prompt file (`.claude/state/system-prompt.txt`) is loaded at startup via `--append-system-prompt`. This provides:
+
+- **Identity**: Name and personality at the system level (more foundational than CLAUDE.md)
+- **Core Directives**: Always-on behaviors like checking memory, respecting autonomy
+- **Communication Style**: How to interact with the user
+
+To use the system prompt, start Claude with:
+```bash
+./scripts/start.sh
+```
+
+Or for launchd service, the plist template already references start.sh.
 
 ## Integration Setup Details
 
