@@ -6,11 +6,7 @@ argument-hint: [plan-file]
 
 # /validate - Multi-Layer Validation
 
-This skill runs comprehensive validation checks to ensure specifications, plans, and implementations are properly aligned and ready for the next phase.
-
-## Purpose
-
-Validate quality at every workflow phase through automated tests, coverage checks, test integrity verification, AI self-review, and manual approval gates.
+Run comprehensive validation checks to ensure specifications, plans, and implementations are properly aligned.
 
 ## Usage
 
@@ -20,101 +16,103 @@ Validate quality at every workflow phase through automated tests, coverage check
 
 Examples:
 - `/validate` - Validate current state (finds most recent plan)
-- `/validate plans/20260127-state-manager.plan.md` - Validate specific plan
+- `/validate plans/20260127-feature.plan.md` - Validate specific plan
 
 ## Validation Layers
 
-All layers must pass for true validation success:
+Execute each layer in order. All must pass for validation success.
 
-### Layer 1: Automated Tests
-**Purpose**: Verify code works correctly
-
-- **Planning phase**: Tests should FAIL (red state expected)
-- **Build phase**: Tests should PASS (green state required)
-- Runs: `npm test`
-
-### Layer 2: Spec Coverage
-**Purpose**: Ensure all requirements addressed
-
-- Parse all requirements from spec
-- Check each has corresponding task or test
-- Identify gaps
-- Reports: X/X requirements covered
-
-### Layer 3: Plan Validation
-**Purpose**: Ensure plan is complete and consistent
-
-- All tasks match TaskList
-- Test files exist
+### Layer 1: Spec Completeness
+**Check the spec file has:**
+- Goal statement
+- Must-have requirements (at least one)
+- Success criteria
 - No unresolved open questions
-- Rollback plan documented
-- Dependencies valid (no circular deps)
 
-### Layer 4: Test Integrity
-**Purpose**: Ensure tests unchanged during build
+### Layer 2: Plan Completeness
+**Check the plan file has:**
+- Reference to spec file (and spec exists)
+- Technical approach section
+- Tasks defined
+- Acceptance criteria for each task
 
-- Only runs in build phase
-- Verifies tests haven't been modified
-- Checks git history or timestamps
-- CRITICAL: Tests must remain immutable
-- If tests changed → FAILURE, return to planning
+### Layer 3: Spec-Plan Alignment
+**Verify:**
+- Each must-have requirement has a corresponding task
+- Tasks address the spec's goal
+- No orphan tasks (tasks without spec backing)
+
+### Layer 4: Implementation Review (Build Phase Only)
+**If implementation exists:**
+- Read the implemented files
+- Compare against spec requirements
+- Check acceptance criteria are met
+- Verify constraints respected
 
 ### Layer 5: AI Self-Review
-**Purpose**: Verify implementation matches spec intent
-
-- Read spec, plan, implementation
-- Check: solves problem, meets criteria, respects constraints
-- Generate discrepancy report if issues found
-- Honest assessment of quality
+**Honest assessment:**
+- Does implementation solve the stated problem?
+- Are edge cases handled?
+- Is error handling appropriate?
+- Would you approve this as a code reviewer?
 
 ### Layer 6: Manual Review
-**Purpose**: Human verification
+**Present to user:**
+- Summary of what was validated
+- Any warnings or concerns
+- Request sign-off before proceeding
 
-- Generate checklist for user
-- Request sign-off
-- Final quality gate
+## Output Format
 
-## Validation States
+```
+## Validation Results
 
-### Planning Phase
-Expected results:
-- ✓ Tests exist but FAIL (red state)
-- ✓ Spec coverage complete
-- ✓ Plan complete
-- ○ Test integrity (skipped - no implementation)
-- ○ AI self-review (skipped - no implementation)
-- ○ Manual review (skipped - not ready)
+### Layer 1: Spec Completeness
+- Goal: Found
+- Must-have requirements: 5
+- Success criteria: 3
+- Open questions: 0 (resolved)
+Result: PASS
 
-### Build Phase
-Expected results:
-- ✓ All tests PASS (green state)
-- ✓ Spec coverage 100%
-- ✓ Plan tasks complete
-- ✓ Test integrity verified (unchanged)
-- ✓ AI self-review passes
-- ⚠ Manual review pending
+### Layer 2: Plan Completeness
+- Spec reference: specs/20260127-feature.spec.md (exists)
+- Technical approach: Found
+- Tasks: 4 defined
+Result: PASS
+
+### Layer 3: Spec-Plan Alignment
+- Requirements covered: 5/5
+- Orphan tasks: 0
+Result: PASS
+
+### Layer 4: Implementation Review
+- Files implemented: 3
+- Acceptance criteria met: 4/4
+Result: PASS
+
+### Layer 5: AI Self-Review
+- Solves problem: Yes
+- Edge cases: Handled
+- Error handling: Appropriate
+Result: PASS
+
+### Layer 6: Manual Review
+Awaiting user sign-off...
+
+---
+Overall: 5/5 layers passed, 1 pending approval
+```
 
 ## When Validation Runs
 
-- **After /plan**: Automatically validates planning phase
-- **After /build**: Automatically validates build phase
+- **After /plan**: Validates spec and plan completeness
+- **After /build**: Full validation including implementation
 - **Manual**: Run anytime with `/validate`
 
 ## Error Handling
 
 If any layer fails:
-1. Stop validation process
-2. Report which layer failed and why
-3. Provide actionable guidance
-4. Do NOT proceed to next phase
-5. Re-run after fixing issues
-
-## Integration
-
-**Validation Scripts**: `scripts/validate-spec.ts`, `scripts/validate-plan.ts`
-**Test Runner**: npm test
-**Context Tracker**: Identifies current phase
-**Task System**: Checks task completion
-**Git**: Verifies test integrity
-
-See `reference.md` for detailed layer specifications.
+1. Stop and report which layer failed
+2. Explain what's wrong
+3. Suggest how to fix
+4. Do NOT proceed until fixed

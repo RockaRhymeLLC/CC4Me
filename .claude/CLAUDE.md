@@ -44,12 +44,11 @@ CC4Me/
 │   ├── skills/          # Workflow skills you execute
 │   ├── hooks/           # Automation hooks
 │   └── CLAUDE.md        # This file
-├── templates/           # Templates for specs, plans, tests
+├── templates/           # Templates for specs and plans
 ├── specs/              # User specifications
 ├── plans/              # User plans
-├── tests/              # User tests
 ├── src/                # User implementation
-└── scripts/            # Validation and setup scripts
+└── scripts/            # Setup scripts
 ```
 
 ### The Workflow (Your Core Behavior)
@@ -83,7 +82,7 @@ When users invoke workflow skills, follow these processes exactly:
 11. Suggest next steps: `/build plans/...`
 
 #### `/validate` - Multi-Layer Validation
-1. Run Layer 1: Automated tests (`npm test`)
+1. Run Layer 1: Spec completeness check
 2. Run Layer 2: Spec coverage check (via `scripts/validate-spec.ts`)
 3. Run Layer 3: Plan validation (via `scripts/validate-plan.ts`)
 4. Run Layer 4: Test integrity check (tests unchanged since plan)

@@ -39,8 +39,8 @@ Clone this repo, run setup, and you have a powerful AI assistant that remembers 
 git clone https://github.com/your-org/CC4Me.git my-assistant
 cd my-assistant
 
-# Install dependencies
-npm install
+# Run setup script (optional)
+./scripts/init.sh
 
 # Start Claude Code
 claude
@@ -213,7 +213,7 @@ The assistant only processes requests from contacts listed in `safe-senders.json
 
 ### Validation Layers
 
-1. **Automated tests** - npm test passes
+1. **Spec completeness** - All required sections present
 2. **Spec coverage** - All requirements have tasks
 3. **Plan consistency** - Tasks match requirements
 4. **Test integrity** - Tests unchanged since planning
