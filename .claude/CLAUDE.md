@@ -492,7 +492,7 @@ Monitor token usage with `/usage`. If approaching limits, proactively save state
 ### State Persistence
 
 Your state persists across sessions via:
-- `.claude/state/tasks/` - Task files survive context clears
+- `.claude/state/todos/` - To-do files survive context clears
 - `.claude/state/memory.md` - Facts you've learned
 - `.claude/state/calendar.md` - Scheduled events
 - `.claude/state/assistant-state.md` - Current work context
@@ -522,6 +522,6 @@ See `launchd/` directory for templates.
 ### Session Reminders
 
 <!-- Add reminders that should appear at every session start -->
-- Check `/task list` for pending work
+- Check `/todo list` for pending work
 - Review today's calendar
 - Check for any urgent messages

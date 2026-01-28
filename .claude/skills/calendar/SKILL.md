@@ -29,8 +29,8 @@ Parse $ARGUMENTS to determine the action:
 ### Remove Event
 - `remove "Event description" 2026-02-01` - Remove matching event
 
-### Link to Task
-- `add "Work on login [task:a1b]" 2026-02-01` - Reference a task
+### Link to To-Do
+- `add "Work on login [todo:a1b]" 2026-02-01` - Reference a to-do
 
 ## File Format
 
@@ -64,7 +64,7 @@ Calendar is stored in `.claude/state/calendar.md` organized by year/month:
 Each entry is a markdown list item:
 - `- HH:MM - Event description` (timed event)
 - `- Event description` (all-day event)
-- `- Event description [task:id]` (linked to task)
+- `- Event description [todo:id]` (linked to to-do)
 - `- Event description (note)` (with reminder/note)
 
 ## Workflow
@@ -74,7 +74,7 @@ Each entry is a markdown list item:
 2. Parse entries into date structures
 3. Filter by requested range
 4. Format and display
-5. Resolve task references to show task titles
+5. Resolve to-do references to show to-do titles
 
 ### Adding Events
 1. Read calendar.md
@@ -91,19 +91,19 @@ Each entry is a markdown list item:
 4. Clean up empty date/month sections
 5. Confirm removal
 
-## Task Integration
+## To-Do Integration
 
-Reference tasks in calendar entries using `[task:id]` syntax:
+Reference to-dos in calendar entries using `[todo:id]` syntax:
 
 ```markdown
 ### 2026-02-01
-- Start work on authentication [task:a1b]
+- Start work on authentication [todo:a1b]
 
 ### 2026-02-15
-- Authentication feature due [task:a1b]
+- Authentication feature due [todo:a1b]
 ```
 
-When displaying, resolve to show task title:
+When displaying, resolve to show to-do title:
 ```
 ### 2026-02-01
 - Start work on authentication → [a1b] Implement login flow
@@ -160,7 +160,7 @@ The assistant should:
 - Use ISO dates (YYYY-MM-DD) for consistency
 - Use 24-hour time (HH:MM)
 - Keep descriptions concise
-- Link to tasks when relevant
+- Link to to-dos when relevant
 - Add reminder notes for actions needed
 
 ## Notes

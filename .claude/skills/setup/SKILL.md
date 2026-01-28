@@ -95,7 +95,7 @@ Creates: `.claude/state/calendar.md`
 7. **Summary**
    - Show what was configured
    - Explain next steps
-   - Offer to run `/task list` or other commands
+   - Offer to run `/todo list` or other commands
 
 ## Output Format
 
@@ -135,7 +135,7 @@ Here's what I configured:
 - Integrations: Telegram bot configured
 
 Your assistant is ready to use. Try:
-- `/task add "My first task"` - Add a task
+- `/todo add "My first to-do"` - Add a to-do
 - `/memory add "Important fact"` - Store something
 - `/calendar show` - View your schedule
 

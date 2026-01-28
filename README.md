@@ -18,7 +18,7 @@ Clone this repo, run setup, and you have a powerful AI assistant that remembers 
 
 ### Assistant Capabilities
 - **Persistent memory** - Remembers facts about you across sessions
-- **Task management** - Tracks tasks with priorities, status, and history
+- **To-do management** - Tracks to-dos with priorities, status, and history
 - **Calendar awareness** - Knows your schedule and reminds you
 - **Autonomy modes** - Configure how much freedom the assistant has
 - **Secure storage** - Credentials stored safely in macOS Keychain
@@ -61,7 +61,7 @@ The setup wizard will guide you through:
 
 | Skill | Description | Example |
 |-------|-------------|---------|
-| `/task` | Manage persistent tasks | `/task add "Review PR" priority:high` |
+| `/todo` | Manage persistent to-dos | `/todo add "Review PR" priority:high` |
 | `/memory` | Store and lookup facts | `/memory add "Prefers dark mode"` |
 | `/calendar` | View and manage schedule | `/calendar show week` |
 | `/mode` | Change autonomy level | `/mode confident` |
@@ -100,7 +100,7 @@ CC4Me/
 │   │   ├── plan/
 │   │   ├── validate/
 │   │   ├── build/
-│   │   ├── task/          # Task management
+│   │   ├── todo/          # To-do management
 │   │   ├── memory/        # Fact storage
 │   │   ├── calendar/      # Schedule management
 │   │   ├── mode/          # Autonomy control
@@ -110,7 +110,7 @@ CC4Me/
 │   │   ├── session-start.sh
 │   │   └── pre-compact.sh
 │   ├── state/              # Persistent state (gitignored)
-│   │   ├── tasks/         # Task files
+│   │   ├── todos/         # To-do files
 │   │   ├── memory.md      # Stored facts
 │   │   ├── calendar.md    # Schedule
 │   │   ├── autonomy.json  # Current mode
@@ -139,7 +139,7 @@ After running `/setup`, these files are created in `.claude/state/`:
 | `safe-senders.json` | Trusted Telegram/email contacts |
 | `memory.md` | Facts about you |
 | `calendar.md` | Your schedule |
-| `tasks/` | Individual task files |
+| `todos/` | Individual to-do files |
 
 All state files are gitignored by default. Edit them directly or use skills.
 

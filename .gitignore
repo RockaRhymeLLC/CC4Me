@@ -31,8 +31,8 @@ Thumbs.db
 .claude/state/*.md
 !.claude/state/*.template
 !.claude/state/.gitkeep
-.claude/state/tasks/*.json
-!.claude/state/tasks/.gitkeep
+.claude/state/todos/*.json
+!.claude/state/todos/.gitkeep
 
 # Assistant history (if used)
 .claude/history/

@@ -1,6 +1,6 @@
-# Task File Reference
+# To-Do File Reference
 
-Complete JSON schema and examples for task files.
+Complete JSON schema and examples for to-do files.
 
 ## JSON Schema
 
@@ -42,11 +42,11 @@ Complete JSON schema and examples for task files.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `id` | string | Yes | 3-char alphanumeric identifier |
-| `title` | string | Yes | Short task title (max 80 chars) |
+| `title` | string | Yes | Short to-do title (max 80 chars) |
 | `description` | string | No | Full description, supports markdown |
 | `priority` | enum | Yes | `critical`, `high`, `medium`, `low` |
 | `status` | enum | Yes | `open`, `in-progress`, `blocked`, `completed` |
-| `created` | ISO datetime | Yes | When task was created |
+| `created` | ISO datetime | Yes | When to-do was created |
 | `due` | ISO date | No | Due date (YYYY-MM-DD) |
 | `nextStep` | string | No | Immediate next action |
 | `blockedBy` | string | No | Reason for blocked status |
@@ -58,12 +58,12 @@ Complete JSON schema and examples for task files.
 
 | Type | When Used |
 |------|-----------|
-| `created` | Task first created |
+| `created` | To-do first created |
 | `note` | Progress note added |
 | `status_change` | Status field changed |
 | `priority_change` | Priority field changed |
-| `completed` | Task marked complete |
-| `reopened` | Completed task reopened |
+| `completed` | To-do marked complete |
+| `reopened` | Completed to-do reopened |
 
 ## Priority Mapping
 
@@ -85,7 +85,7 @@ For filename:
 
 Generate a unique 3-character alphanumeric ID:
 1. Use lowercase letters and numbers: `[a-z0-9]`
-2. Check against existing task IDs
+2. Check against existing to-do IDs
 3. If collision, generate new ID
 
 Simple approach:
@@ -124,9 +124,9 @@ const slug = title
 4-low-completed-e3f-clean-up-old-files.json
 ```
 
-## Example: Creating a Task
+## Example: Creating a To-Do
 
-Input: `/task add "Set up CI/CD pipeline" priority:high due:2026-02-15`
+Input: `/todo add "Set up CI/CD pipeline" priority:high due:2026-02-15`
 
 Generated file: `2-high-open-m9k-set-up-ci-cd-pipeline.json`
 
@@ -153,9 +153,9 @@ Generated file: `2-high-open-m9k-set-up-ci-cd-pipeline.json`
 }
 ```
 
-## Example: Completing a Task
+## Example: Completing a To-Do
 
-When completing task `m9k`:
+When completing to-do `m9k`:
 
 1. Load current file
 2. Update status to `completed`
@@ -179,9 +179,9 @@ Updated JSON:
 
 ## Listing Algorithm
 
-To list tasks in priority order:
+To list to-dos in priority order:
 
-1. Glob `.claude/state/tasks/*.json`
+1. Glob `.claude/state/todos/*.json`
 2. Filenames naturally sort by priority (1 before 2, etc.)
 3. Filter by status if requested
 4. Parse JSON for display details

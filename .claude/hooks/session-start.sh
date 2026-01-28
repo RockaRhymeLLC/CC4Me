@@ -54,18 +54,18 @@ if [ -f "$STATE_DIR/autonomy.json" ]; then
   fi
 fi
 
-# Load high-priority tasks
-TASKS_DIR="$STATE_DIR/tasks"
-if [ -d "$TASKS_DIR" ]; then
-  # Count critical and high priority open tasks
-  CRITICAL=$(ls "$TASKS_DIR" 2>/dev/null | grep "^1-.*-open-\|^1-.*-in-progress-" | wc -l | tr -d ' ')
-  HIGH=$(ls "$TASKS_DIR" 2>/dev/null | grep "^2-.*-open-\|^2-.*-in-progress-" | wc -l | tr -d ' ')
+# Load high-priority to-dos
+TODOS_DIR="$STATE_DIR/todos"
+if [ -d "$TODOS_DIR" ]; then
+  # Count critical and high priority open to-dos
+  CRITICAL=$(ls "$TODOS_DIR" 2>/dev/null | grep "^1-.*-open-\|^1-.*-in-progress-" | wc -l | tr -d ' ')
+  HIGH=$(ls "$TODOS_DIR" 2>/dev/null | grep "^2-.*-open-\|^2-.*-in-progress-" | wc -l | tr -d ' ')
 
   if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ]; then
-    echo "### Pending Tasks"
+    echo "### Pending To-Dos"
 
-    # List critical tasks
-    for f in "$TASKS_DIR"/1-*-open-*.json "$TASKS_DIR"/1-*-in-progress-*.json 2>/dev/null; do
+    # List critical to-dos
+    for f in "$TODOS_DIR"/1-*-open-*.json "$TODOS_DIR"/1-*-in-progress-*.json 2>/dev/null; do
       if [ -f "$f" ]; then
         TITLE=$(cat "$f" | grep -o '"title"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*:.*"\([^"]*\)".*/\1/')
         ID=$(cat "$f" | grep -o '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*:.*"\([^"]*\)".*/\1/')
@@ -73,8 +73,8 @@ if [ -d "$TASKS_DIR" ]; then
       fi
     done
 
-    # List high priority tasks
-    for f in "$TASKS_DIR"/2-*-open-*.json "$TASKS_DIR"/2-*-in-progress-*.json 2>/dev/null; do
+    # List high priority to-dos
+    for f in "$TODOS_DIR"/2-*-open-*.json "$TODOS_DIR"/2-*-in-progress-*.json 2>/dev/null; do
       if [ -f "$f" ]; then
         TITLE=$(cat "$f" | grep -o '"title"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*:.*"\([^"]*\)".*/\1/')
         ID=$(cat "$f" | grep -o '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*:.*"\([^"]*\)".*/\1/')
@@ -127,6 +127,6 @@ if [ -f "$PROJECT_DIR/.claude/CLAUDE.md" ]; then
 fi
 
 echo "---"
-echo "Use \`/task list\` to see all tasks, \`/memory lookup\` to check facts, \`/calendar show\` for schedule."
+echo "Use \`/todo list\` to see all to-dos, \`/memory lookup\` to check facts, \`/calendar show\` for schedule."
 
 exit 0
