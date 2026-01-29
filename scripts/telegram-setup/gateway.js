@@ -1,17 +1,87 @@
 #!/usr/bin/env node
 /**
- * BMO Telegram Gateway v5 (wake-on-message)
+ * BMO Telegram Gateway v6 (media support)
  * Receives webhooks and injects messages into the real Claude Code session via tmux.
+ * Supports text, photos, and documents.
  * If no session exists, starts one automatically!
  * The Stop hook handles sending responses back to Telegram.
  */
 
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const { execSync, spawn } = require('child_process');
 
 const TELEGRAM_SEND = '/Users/bmo/CC4Me-BMO/scripts/telegram-send.sh';
+const MEDIA_DIR = '/Users/bmo/CC4Me-BMO/.claude/state/telegram-media';
+
+// Ensure media directory exists
+if (!fs.existsSync(MEDIA_DIR)) {
+  fs.mkdirSync(MEDIA_DIR, { recursive: true });
+}
+
+// Get bot token from Keychain
+function getBotToken() {
+  try {
+    return execSync('security find-generic-password -s "credential-telegram-bot" -w', { encoding: 'utf8' }).trim();
+  } catch (e) {
+    console.error('Failed to get bot token from Keychain');
+    return null;
+  }
+}
+
+// Download file from Telegram
+async function downloadTelegramFile(fileId, filename) {
+  const token = getBotToken();
+  if (!token) return null;
+
+  try {
+    // Get file path from Telegram
+    const fileInfo = await new Promise((resolve, reject) => {
+      https.get(`https://api.telegram.org/bot${token}/getFile?file_id=${fileId}`, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch (e) {
+            reject(e);
+          }
+        });
+      }).on('error', reject);
+    });
+
+    if (!fileInfo.ok || !fileInfo.result?.file_path) {
+      console.error('Failed to get file info:', fileInfo);
+      return null;
+    }
+
+    const filePath = fileInfo.result.file_path;
+    const localPath = path.join(MEDIA_DIR, filename);
+
+    // Download the file
+    await new Promise((resolve, reject) => {
+      const file = fs.createWriteStream(localPath);
+      https.get(`https://api.telegram.org/file/bot${token}/${filePath}`, (res) => {
+        res.pipe(file);
+        file.on('finish', () => {
+          file.close();
+          resolve();
+        });
+      }).on('error', (e) => {
+        fs.unlink(localPath, () => {});
+        reject(e);
+      });
+    });
+
+    console.log(`📥 Downloaded: ${filename}`);
+    return localPath;
+  } catch (e) {
+    console.error(`Failed to download file: ${e.message}`);
+    return null;
+  }
+}
 
 // Configuration
 const PORT = 3847;
@@ -184,13 +254,47 @@ const server = http.createServer((req, res) => {
   if (req.method === 'POST' && req.url === '/telegram') {
     let body = '';
     req.on('data', c => body += c);
-    req.on('end', () => {
+    req.on('end', async () => {
       res.writeHead(200);
       res.end('ok');
       try {
         const update = JSON.parse(body);
-        if (update.message?.text) {
-          processMessage(update.message);
+        const msg = update.message;
+        if (!msg) return;
+
+        // Handle text messages
+        if (msg.text) {
+          processMessage(msg);
+        }
+        // Handle photos
+        else if (msg.photo && msg.photo.length > 0) {
+          // Get the largest photo (last in array)
+          const photo = msg.photo[msg.photo.length - 1];
+          const timestamp = Date.now();
+          const filename = `photo_${timestamp}.jpg`;
+          const localPath = await downloadTelegramFile(photo.file_id, filename);
+
+          if (localPath) {
+            const caption = msg.caption || '';
+            const text = caption
+              ? `[Sent a photo: ${localPath}] ${caption}`
+              : `[Sent a photo: ${localPath}]`;
+            processMessage({ ...msg, text });
+          }
+        }
+        // Handle documents
+        else if (msg.document) {
+          const doc = msg.document;
+          const filename = doc.file_name || `document_${Date.now()}`;
+          const localPath = await downloadTelegramFile(doc.file_id, filename);
+
+          if (localPath) {
+            const caption = msg.caption || '';
+            const text = caption
+              ? `[Sent a document: ${localPath}] ${caption}`
+              : `[Sent a document: ${localPath}]`;
+            processMessage({ ...msg, text });
+          }
         }
       } catch (e) {
         console.error('Parse error:', e.message);
