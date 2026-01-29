@@ -131,16 +131,27 @@ async function sendEmail(to, subject, body) {
   const session = await getSession();
   const apiUrl = session.apiUrl;
   const accountId = session.primaryAccounts['urn:ietf:params:jmap:mail'];
-  const submissionAccountId = session.primaryAccounts['urn:ietf:params:jmap:submission'];
 
-  // Get drafts mailbox ID
-  const mailboxData = await jmapRequest(apiUrl, accountId, [
-    ['Mailbox/query', { accountId, filter: { role: 'drafts' } }, 'mb'],
+  // Get drafts/sent mailbox IDs and identity
+  const setupData = await jmapRequest(apiUrl, accountId, [
+    ['Mailbox/query', { accountId, filter: { role: 'drafts' } }, 'drafts'],
+    ['Mailbox/query', { accountId, filter: { role: 'sent' } }, 'sent'],
+    ['Identity/get', { accountId }, 'id'],
   ]);
-  const draftsMailboxId = mailboxData.methodResponses[0][1].ids[0];
+  const draftsMailboxId = setupData.methodResponses[0][1].ids[0];
+  const sentMailboxId = setupData.methodResponses[1][1].ids[0];
+  const identities = setupData.methodResponses[2][1].list;
+  const identity = identities.find(i => i.email === email) || identities[0];
+  const identityId = identity.id;
 
-  // Create draft
-  const draftData = await jmapRequest(apiUrl, accountId, [
+  // Build the onSuccessUpdateEmail patch object
+  const updatePatch = {};
+  updatePatch['mailboxIds/' + draftsMailboxId] = null;
+  updatePatch['mailboxIds/' + sentMailboxId] = true;
+  updatePatch['keywords/$draft'] = null;
+
+  // Create draft AND submit in single request (chained)
+  const sendData = await jmapRequest(apiUrl, accountId, [
     ['Email/set', {
       accountId,
       create: {
@@ -149,37 +160,40 @@ async function sendEmail(to, subject, body) {
           from: [{ email }],
           to: [{ email: to }],
           subject,
-          textBody: [{ partId: '1', type: 'text/plain' }],
-          bodyValues: { '1': { value: body } },
+          keywords: { '$draft': true },
+          textBody: [{ partId: 'body', type: 'text/plain' }],
+          bodyValues: { 'body': { value: body } },
         },
       },
-    }, 'a'],
-  ]);
-
-  const createResponse = draftData.methodResponses[0][1];
-  if (!createResponse.created?.draft) {
-    console.error('Failed to create draft:', JSON.stringify(createResponse, null, 2));
-    throw new Error('Draft creation failed');
-  }
-  const emailId = createResponse.created.draft.id;
-
-  // Submit
-  const submitData = await jmapRequest(apiUrl, accountId, [
+    }, '0'],
     ['EmailSubmission/set', {
-      accountId: submissionAccountId,
+      accountId,
       create: {
-        submission: {
-          emailId,
-          envelope: {
-            mailFrom: { email },
-            rcptTo: [{ email: to }],
-          },
+        sendIt: {
+          emailId: '#draft',
+          identityId,
         },
       },
-    }, 'a'],
+      onSuccessUpdateEmail: {
+        '#sendIt': updatePatch,
+      },
+    }, '1'],
   ]);
 
-  return submitData;
+  // Check for errors
+  const emailResponse = sendData.methodResponses[0][1];
+  if (!emailResponse.created?.draft) {
+    console.error('Failed to create email:', JSON.stringify(emailResponse, null, 2));
+    throw new Error('Email creation failed');
+  }
+
+  const submitResponse = sendData.methodResponses[1][1];
+  if (!submitResponse.created?.sendIt) {
+    console.error('Failed to submit:', JSON.stringify(submitResponse, null, 2));
+    throw new Error('Email submission failed');
+  }
+
+  return sendData;
 }
 
 // Format email for display
