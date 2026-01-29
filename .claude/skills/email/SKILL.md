@@ -202,6 +202,13 @@ Unknown senders: Acknowledge receipt but **do not act** until verified.
 - Batch operations when possible
 - Don't poll more frequently than every few minutes
 
+### Sending Emails (JMAP)
+- **Chain calls**: Email/set and EmailSubmission/set MUST be in same request
+- **Use references**: `emailId: '#draft'` references the email created in same request
+- **Move to Sent**: Use `onSuccessUpdateEmail` to move from Drafts to Sent folder
+- **Remove draft keyword**: Set `keywords/$draft: null` after sending
+- **Identity required**: Must include `identityId` in EmailSubmission/set
+
 ## Troubleshooting
 
 ### "Authentication failed"
