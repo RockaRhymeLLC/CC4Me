@@ -11,6 +11,9 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
+# Claude binary - use absolute path for launchd compatibility
+CLAUDE="/Users/bmo/.local/bin/claude"
+
 # Change to project directory
 cd "$PROJECT_DIR"
 
@@ -29,4 +32,4 @@ fi
 ARGS+=("$@")
 
 # Execute claude with proper argument handling
-exec claude "${ARGS[@]}"
+exec "$CLAUDE" "${ARGS[@]}"
