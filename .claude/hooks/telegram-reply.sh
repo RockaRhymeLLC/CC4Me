@@ -49,16 +49,14 @@ if [ -z "$TRANSCRIPT_PATH" ] || [ ! -f "$TRANSCRIPT_PATH" ]; then
   exit 0
 fi
 
-# Extract the last assistant message from transcript
+# Extract the last assistant message that has text content
 # The transcript is JSONL - each line is a JSON object
-# We want the last message with role "assistant"
+# We want the last assistant message that contains a text block (not just tool_use or thinking)
 RESPONSE=$(/usr/bin/jq -s '
-  [.[] | select(.type == "assistant")] | last |
-  if .message.content then
-    [.message.content[] | select(.type == "text") | .text] | join("\n")
-  else
-    ""
-  end
+  [.[] | select(.type == "assistant") |
+   select(.message.content | map(select(.type == "text")) | length > 0)] |
+  last |
+  [.message.content[] | select(.type == "text") | .text] | join("\n")
 ' "$TRANSCRIPT_PATH" 2>/dev/null)
 
 # Remove surrounding quotes from jq output
