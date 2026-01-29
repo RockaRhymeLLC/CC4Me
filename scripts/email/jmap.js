@@ -133,12 +133,19 @@ async function sendEmail(to, subject, body) {
   const accountId = session.primaryAccounts['urn:ietf:params:jmap:mail'];
   const submissionAccountId = session.primaryAccounts['urn:ietf:params:jmap:submission'];
 
+  // Get drafts mailbox ID
+  const mailboxData = await jmapRequest(apiUrl, accountId, [
+    ['Mailbox/query', { accountId, filter: { role: 'drafts' } }, 'mb'],
+  ]);
+  const draftsMailboxId = mailboxData.methodResponses[0][1].ids[0];
+
   // Create draft
   const draftData = await jmapRequest(apiUrl, accountId, [
     ['Email/set', {
       accountId,
       create: {
         draft: {
+          mailboxIds: { [draftsMailboxId]: true },
           from: [{ email }],
           to: [{ email: to }],
           subject,
@@ -149,7 +156,12 @@ async function sendEmail(to, subject, body) {
     }, 'a'],
   ]);
 
-  const emailId = draftData.methodResponses[0][1].created.draft.id;
+  const createResponse = draftData.methodResponses[0][1];
+  if (!createResponse.created?.draft) {
+    console.error('Failed to create draft:', JSON.stringify(createResponse, null, 2));
+    throw new Error('Draft creation failed');
+  }
+  const emailId = createResponse.created.draft.id;
 
   // Submit
   const submitData = await jmapRequest(apiUrl, accountId, [
