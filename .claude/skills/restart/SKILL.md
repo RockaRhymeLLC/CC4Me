@@ -1,3 +1,9 @@
+---
+name: restart
+description: Restart Claude Code session gracefully. Use when MCP servers change, settings update, or context is full.
+disable-model-invocation: true
+---
+
 # Restart Session
 
 Restart your Claude Code session. Use this when:

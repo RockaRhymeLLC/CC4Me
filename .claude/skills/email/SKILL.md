@@ -1,3 +1,9 @@
+---
+name: email
+description: Read and send emails via Fastmail. Use for checking inbox, reading messages, searching, or sending email.
+argument-hint: [check|unread|read|search|send]
+---
+
 # Email Management
 
 Read and send emails via Fastmail JMAP API.
