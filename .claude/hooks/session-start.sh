@@ -11,6 +11,22 @@ set -e
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}"
 STATE_DIR="$PROJECT_DIR/.claude/state"
+LOG_FILE="$PROJECT_DIR/logs/watcher.log"
+
+# Read hook input from stdin
+HOOK_INPUT=$(cat)
+TRANSCRIPT_PATH=$(echo "$HOOK_INPUT" | /usr/bin/jq -r '.transcript_path // empty' 2>/dev/null)
+
+# Start transcript watcher if we have a transcript path
+if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then
+  # Kill any existing watchers
+  pkill -f "transcript-watcher.sh" 2>/dev/null || true
+  sleep 0.5
+
+  # Start new watcher
+  nohup "$PROJECT_DIR/scripts/transcript-watcher.sh" "$TRANSCRIPT_PATH" > /dev/null 2>&1 &
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] Started watcher (PID $!) for: $TRANSCRIPT_PATH" >> "$LOG_FILE"
+fi
 
 # Output will be added to Claude's context
 echo "## Session Context"

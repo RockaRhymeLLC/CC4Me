@@ -88,7 +88,7 @@ const PORT = 3847;
 const BASE_DIR = '/Users/bmo/CC4Me-BMO';
 const STATE_DIR = path.join(BASE_DIR, '.claude/state');
 const SAFE_SENDERS_FILE = path.join(STATE_DIR, 'safe-senders.json');
-const PENDING_FILE = path.join(STATE_DIR, 'telegram-pending.json');
+const CHANNEL_FILE = path.join(STATE_DIR, 'channel.txt');
 const START_SCRIPT = path.join(BASE_DIR, 'scripts/start-tmux.sh');
 const TMUX = '/opt/homebrew/bin/tmux';
 const SESSION_NAME = 'bmo';
@@ -169,14 +169,8 @@ async function startSession() {
 
 // Inject message into tmux session
 function injectMessage(text, chatId, firstName) {
-  // Save pending info for the Stop hook
-  const pending = {
-    chatId: chatId,
-    firstName: firstName,
-    timestamp: Date.now(),
-    message: text
-  };
-  fs.writeFileSync(PENDING_FILE, JSON.stringify(pending, null, 2));
+  // Set channel to telegram so the watcher sends responses there
+  fs.writeFileSync(CHANNEL_FILE, 'telegram\n');
 
   // Format and inject the message
   // Escape special characters for tmux

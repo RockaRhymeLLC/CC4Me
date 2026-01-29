@@ -8,33 +8,68 @@ user-invocable: false
 
 Everything BMO knows about working with Telegram.
 
+**See also**: `.claude/knowledge/integrations/telegram.md` for setup instructions and API basics.
+
 ## Architecture Overview
 
 ```
 Telegram Cloud → Webhook → Cloudflare Tunnel → Gateway (port 3847) → tmux injection
                                                      ↓
-                                              telegram-pending.json
+                                              channel.txt = "telegram"
                                                      ↓
-                                              Stop Hook → Reply to Telegram
+                                              Transcript Watcher → sends responses to Telegram
 ```
 
 ### Key Components
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
-| Gateway | `scripts/telegram-setup/gateway.js` | Receives webhooks, downloads media, injects to tmux |
-| Reply Hook | `.claude/hooks/telegram-reply.sh` | Extracts response from transcript, sends to Telegram |
+| Gateway | `scripts/telegram-setup/gateway.js` | Receives webhooks, downloads media, injects to tmux, sets channel |
+| Transcript Watcher | `scripts/transcript-watcher.sh` | Tails transcript, sends assistant text to active channel |
+| Channel Flag | `.claude/state/channel.txt` | Current output channel: `terminal`, `telegram`, or `silent` |
+| Channel Hook | `.claude/hooks/set-channel.sh` | UserPromptSubmit hook - auto-detects channel from message source |
 | Send Utility | `scripts/telegram-send.sh` | Manual message/typing indicator sending |
 | Media Storage | `.claude/state/telegram-media/` | Downloaded photos and documents |
-| Pending File | `.claude/state/telegram-pending.json` | Tracks message awaiting response |
+
+### How It Works
+
+1. **Incoming**: Telegram message → Gateway → sets `channel.txt` to `telegram` → injects message into tmux session
+2. **Outgoing**: BMO writes response → transcript entry added → watcher detects new assistant text → reads `channel.txt` → sends to Telegram
+3. **Channel switching**: UserPromptSubmit hook detects `[Telegram]` prefix → sets channel to `telegram`. Direct terminal input → sets channel to `terminal`.
+
+### Channel Modes
+
+| Channel | Behavior |
+|---------|----------|
+| `terminal` | Responses stay in terminal only (default) |
+| `telegram` | Text responses sent to Dave via Telegram (no thinking blocks) |
+| `telegram-verbose` | Text + thinking blocks sent to Telegram |
+| `silent` | No messages sent anywhere - BMO works quietly |
+
+**To change channel manually**: Write to `.claude/state/channel.txt` or ask Dave (e.g., "switch to verbose", "go silent").
+
+**Auto-detection**: The `set-channel.sh` hook runs on every prompt and sets the channel based on whether the message has a `[Telegram]` prefix. It preserves `-verbose` suffix if already in verbose mode.
+
+## Proactive Communication
+
+**IMPORTANT**: BMO should switch to `telegram` channel proactively when:
+- Something goes wrong and you need Dave's input
+- You're blocked and need a decision to proceed
+- Something important or urgent needs Dave's attention
+- You believe Dave should know about something immediately
+
+Dave is here to help. If you need him, reach out.
+
+To do this:
+```bash
+echo "telegram" > /Users/bmo/CC4Me-BMO/.claude/state/channel.txt
+```
+Then write your message as normal text - the watcher will send it.
 
 ## Sending Messages
 
 ### Via Utility Script
 ```bash
-# With pending file (after receiving Telegram message)
-/Users/bmo/CC4Me-BMO/scripts/telegram-send.sh "Your message"
-
 # With explicit chat ID
 TELEGRAM_CHAT_ID=7629737488 /Users/bmo/CC4Me-BMO/scripts/telegram-send.sh "Your message"
 
@@ -74,10 +109,6 @@ Messages arrive as `[Telegram] Name: content` in the conversation.
 
 ## Gateway Details
 
-### Version History
-- v5: Wake-on-message (start session if none exists)
-- v6: Photo and document support
-
 ### How Wake-on-Message Works
 1. Gateway checks if tmux session exists
 2. If not, runs `start-tmux.sh --detach`
@@ -90,47 +121,45 @@ Messages arrive as `[Telegram] Name: content` in the conversation.
 3. Download from `https://api.telegram.org/file/bot{token}/{file_path}`
 4. Save to `.claude/state/telegram-media/`
 
-## Reply Hook Details
+## Transcript Watcher Details
 
 ### How It Works
-1. Stop hook fires when assistant finishes responding
-2. Checks for `telegram-pending.json`
-3. Reads transcript JSONL file
-4. Finds last assistant message with text content
-5. Sends text to Telegram via API
-6. Deletes pending file
+1. Started by SessionStart hook with current transcript path
+2. Uses `tail -n 0 -f` to watch for new lines (only new, not existing)
+3. Parses each new line as JSON
+4. If `type == "assistant"` and contains text content → send to active channel
+5. Reads `channel.txt` on each message to get current channel
 
-### Critical: Finding Text in Transcript
-The transcript contains various entry types: `thinking`, `tool_use`, `text`.
-Must find the last assistant entry that **contains** text, not just the last entry:
-
+### Starting Manually
 ```bash
-jq -s '
-  [.[] | select(.type == "assistant") |
-   select(.message.content | map(select(.type == "text")) | length > 0)] |
-  last |
-  [.message.content[] | select(.type == "text") | .text] | join("\n")
-' "$TRANSCRIPT_PATH"
+nohup /Users/bmo/CC4Me-BMO/scripts/transcript-watcher.sh /path/to/transcript.jsonl > /dev/null 2>&1 &
+```
+
+### Check Watcher Status
+```bash
+pgrep -f transcript-watcher
+tail -f /Users/bmo/CC4Me-BMO/logs/watcher.log
 ```
 
 ## Gotchas & Learnings
 
-### Transcript Parsing
-- **Problem**: Last assistant message might be `tool_use` with no text
-- **Solution**: Filter to entries that contain text blocks before taking last
+### Transcript Structure
+- Entries are JSONL (one JSON object per line)
+- Types: `assistant`, `user`, `progress`, `system`
+- Assistant text is in `.message.content[]` where `.type == "text"`
+- Each entry has a unique `uuid` and `timestamp`
 
 ### tmux Socket Path
 - Scripts running from launchd need explicit socket path
 - Use: `/opt/homebrew/bin/tmux -S /private/tmp/tmux-502/default`
 
-### Pending File Timing
-- Pending file is created when message injected
-- Cleared after hook sends reply (or times out at 5 min)
-- If responding to terminal input (not Telegram), no pending file exists
-
 ### Message Escaping
 - Single quotes in messages need escaping for tmux: `'\\''`
 - JSON in curl needs proper quoting
+
+### Telegram Message Limits
+- Max message length: 4096 characters
+- Watcher truncates at 4000 chars with "..." suffix
 
 ## Telegram API Reference
 
@@ -169,9 +198,9 @@ curl http://localhost:3847/health
 tail -f /Users/bmo/CC4Me-BMO/logs/gateway.log
 ```
 
-### Check Hook Logs
+### Check Watcher Logs
 ```bash
-tail -f /Users/bmo/CC4Me-BMO/logs/telegram-hook.log
+tail -f /Users/bmo/CC4Me-BMO/logs/watcher.log
 ```
 
 ### Restart Gateway
