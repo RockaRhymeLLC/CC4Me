@@ -1,0 +1,20 @@
+{
+  "id": "z3c",
+  "title": "Update init.sh for new prerequisites",
+  "description": "Add prerequisite checks for tmux, jq, node (v18+), cloudflared, python3. Offer brew install for missing tools. chmod all new script directories (telegram-setup/, email/). Create logs/ directory. Run npm install for gateway dependencies. Update printed skills summary.",
+  "priority": "high",
+  "status": "open",
+  "created": "2026-01-30T14:40:00Z",
+  "due": null,
+  "nextStep": "Read current init.sh and plan additions",
+  "blockedBy": null,
+  "tags": ["upstream", "setup", "phase2"],
+  "specRef": null,
+  "actions": [
+    {
+      "timestamp": "2026-01-30T14:40:00Z",
+      "type": "created",
+      "note": "Phase 2 — setup script updates"
+    }
+  ]
+}

@@ -26,14 +26,19 @@ Thumbs.db
 # User-specific Claude Code settings
 .claude/settings.local.json
 
-# Assistant state files (runtime, not templates)
-.claude/state/*.json
-.claude/state/*.md
-.claude/state/*.txt
+# Assistant state — templates (keep as reference)
 !.claude/state/*.template
-!.claude/state/.gitkeep
-.claude/state/todos/*.json
-!.claude/state/todos/.gitkeep
+
+# Assistant state — runtime (changes constantly, not worth tracking)
+.claude/state/channel.txt
+.claude/state/context-usage.json
+.claude/state/telegram-pending.json
+
+# Telegram media (large binaries, not source-controllable)
+.claude/state/telegram-media/
+
+# Generated docs (can be regenerated from .md sources)
+.claude/state/research/*.docx
 
 # Assistant history (if used)
 .claude/history/

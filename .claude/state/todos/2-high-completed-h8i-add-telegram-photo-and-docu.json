@@ -1,0 +1,15 @@
+{
+  "id": "h8i",
+  "title": "Add Telegram photo and document support",
+  "description": "Download media files (photos, documents) from Telegram messages and pass file paths to BMO for viewing/reading. Photos use getFile API, documents include PDFs and text files.",
+  "priority": "high",
+  "status": "open",
+  "created": "2026-01-29T08:35:00Z",
+  "actions": [
+    {
+      "timestamp": "2026-01-29T08:35:00Z",
+      "type": "created",
+      "note": "Requested by Dave via Telegram - he tried to send a photo"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "id": "q8r",
+  "title": "Explore screen share / browser sharing methods",
+  "description": "Find ways to start a screen share or browser sharing session so BMO can push a link to Dave when needing help with verification checks, CAPTCHAs, etc.\n\nRequirements:\n- BMO initiates the session and sends a link\n- Dave can join from mobile (not just desktop)\n- Works for passing verification checks, visual confirmations\n- Should be lightweight - no heavy installs on Dave's side\n\nExplore options like:\n- Browser-based screen sharing (no install)\n- VNC/remote desktop with web client\n- Headless browser with remote debugging\n- Purpose-built tools for this use case",
+  "priority": "medium",
+  "status": "completed",
+  "created": "2026-01-29T16:15:00Z",
+  "due": null,
+  "nextStep": null,
+  "blockedBy": null,
+  "tags": ["research", "tools", "remote-access"],
+  "specRef": null,
+  "actions": [
+    {
+      "timestamp": "2026-01-29T16:15:00Z",
+      "type": "created",
+      "note": "Requested by Dave via Telegram"
+    },
+    {
+      "timestamp": "2026-01-29T16:55:00Z",
+      "type": "completed",
+      "note": "Researched 8+ options. Top recommendation: Cloudflare Tunnel + VNC browser rendering (already have the tunnel). Browserbase for browser-only sharing. Saved to .claude/state/research/screen-sharing.md"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "id": "t2u",
+  "title": "Add CC and BCC support to email toolbox",
+  "description": "Add CC and BCC support to both email scripts:\n1. scripts/email/jmap.js - CC support added (--cc flag), needs BCC\n2. scripts/email/graph.js - needs both CC and BCC\n3. Update email skill documentation with new flags\n\nJMAP CC is already partially done (--cc flag added). Need to:\n- Add --bcc flag to jmap.js\n- Add --cc and --bcc flags to graph.js\n- Update SKILL.md usage docs",
+  "priority": "medium",
+  "status": "completed",
+  "created": "2026-01-29T17:10:00Z",
+  "completed": "2026-01-29T18:00:00Z",
+  "due": null,
+  "nextStep": null,
+  "blockedBy": null,
+  "tags": ["email", "feature"],
+  "specRef": null,
+  "actions": [
+    {
+      "timestamp": "2026-01-29T17:10:00Z",
+      "type": "created",
+      "note": "Requested by Dave via Telegram"
+    },
+    {
+      "timestamp": "2026-01-29T18:00:00Z",
+      "type": "completed",
+      "note": "Added --bcc to jmap.js, added --cc and --bcc to graph.js, updated SKILL.md docs"
+    }
+  ]
+}

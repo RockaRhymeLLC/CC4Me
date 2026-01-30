@@ -1,0 +1,25 @@
+{
+  "id": "s1t",
+  "title": "Add scheduled job to auto-save state and clear when context is low",
+  "description": "Create a scheduled job that regularly checks available context and auto-saves state + clears if under 35% available, ONLY IF doing so won't risk work in progress.\n\nRequirements:\n1. Check context usage regularly (launchd job or polling)\n2. If under 35% available context, trigger save-state + clear\n3. MUST NOT clear if work is actively in progress (e.g., mid-tool-call, active subagent, pending user response)\n4. Should be safe and conservative - better to not clear than to lose work\n\nImplementation considerations:\n- How to detect 'work in progress' state\n- How to read context usage programmatically\n- Integration with existing save-state skill and /clear\n- Logging for visibility into when auto-saves happen",
+  "priority": "high",
+  "status": "completed",
+  "created": "2026-01-29T16:50:00Z",
+  "due": null,
+  "nextStep": null,
+  "blockedBy": null,
+  "tags": ["automation", "context", "scheduled-job"],
+  "specRef": null,
+  "actions": [
+    {
+      "timestamp": "2026-01-29T16:50:00Z",
+      "type": "created",
+      "note": "Requested by Dave via Telegram"
+    },
+    {
+      "timestamp": "2026-01-29T17:20:00Z",
+      "type": "completed",
+      "note": "Implemented two-part system: (1) statusLine script writes context-usage.json on every conversation update with used/remaining percentage, (2) launchd watchdog checks every 2 min and triggers save-state + clear if <35% remaining AND Claude is idle. Safety checks: stale data timeout, esc-to-interrupt detection, spinner detection, recent transcript modification. statusLine takes effect on next restart."
+    }
+  ]
+}

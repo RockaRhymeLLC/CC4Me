@@ -1,0 +1,26 @@
+{
+  "id": "x6y",
+  "title": "Research options for giving Dave's wife Telegram access",
+  "description": "Dave wants to give his wife access to BMO via Telegram. She's not technical. Dave wants to limit her to Telegram only and prevent her from making changes that could break things.\n\nThink through options with pros/cons:\n- Permission levels (read-only chat vs full access)\n- What she should/shouldn't be able to request\n- How to enforce guardrails (safe-senders tiers? role-based access?)\n- Easy onboarding for non-technical user\n- Temporary vs permanent access\n\nProvide Dave with a clear writeup of options.",
+  "priority": "medium",
+  "status": "completed",
+  "created": "2026-01-29T18:30:00Z",
+  "completed": "2026-01-29T23:25:00Z",
+  "due": null,
+  "nextStep": null,
+  "blockedBy": null,
+  "tags": ["telegram", "security", "feature"],
+  "specRef": null,
+  "actions": [
+    {
+      "timestamp": "2026-01-29T18:30:00Z",
+      "type": "created",
+      "note": "Requested by Dave via Telegram. No rush, just think about it."
+    },
+    {
+      "timestamp": "2026-01-29T23:25:00Z",
+      "type": "completed",
+      "note": "Analyzed Telegram gateway architecture and designed 3 options: (1) Role-Based Safe Senders (recommended) — extend safe-senders.json with roles, tag messages at gateway level, enforce via CLAUDE.md instructions. Member role can ask questions, check calendar/todos, add todos, request emails. Cannot modify code/config/system. (2) Full Access — simple but no guardrails, doesn't meet Dave's requirements. (3) Chat-Only — maximally conservative, conversation only, no state changes. Writeup saved to .claude/state/research/wife-telegram-access-options.md. Ready to share with Dave when he asks."
+    }
+  ]
+}

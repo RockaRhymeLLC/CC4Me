@@ -1,0 +1,26 @@
+{
+  "id": "c3d",
+  "title": "Figure out how to navigate macOS (accessibility, automation)",
+  "description": "Research and document how to effectively control macOS - accessibility permissions, AppleScript, keyboard simulation, browser automation, etc. Create a knowledge base for future reference.",
+  "priority": "medium",
+  "status": "completed",
+  "createdAt": "2026-01-28T00:00:00Z",
+  "completedAt": "2026-01-28T23:15:00Z",
+  "actions": [
+    {
+      "timestamp": "2026-01-28T00:00:00Z",
+      "type": "created",
+      "note": "Dave requested - need better macOS automation skills"
+    },
+    {
+      "timestamp": "2026-01-28T23:10:00Z",
+      "type": "status-change",
+      "note": "Starting research on macOS automation capabilities"
+    },
+    {
+      "timestamp": "2026-01-28T23:15:00Z",
+      "type": "completed",
+      "note": "Tested AppleScript capabilities. Updated .claude/knowledge/macos/automation.md with findings. Key results: notifications, dialogs, clipboard, app listing, Safari/Terminal scripting work. Keystroke/click automation requires accessibility permissions."
+    }
+  ]
+}

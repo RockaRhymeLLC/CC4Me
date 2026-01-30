@@ -1,0 +1,25 @@
+{
+  "id": "m4n",
+  "title": "Research subagent best practices for token savings",
+  "description": "Research using Haiku and Sonnet subagents in Claude Code to save tokens. Investigate:\n- What tasks are appropriate for each model tier (Haiku vs Sonnet vs Opus)\n- Claude Code subagent features and limitations\n- Best practices for delegating tasks\n- Recommend specific changes we could make to our skills/workflows\n\nSave research for discussion.",
+  "priority": "medium",
+  "status": "completed",
+  "created": "2026-01-29T13:35:00Z",
+  "due": null,
+  "nextStep": null,
+  "blockedBy": null,
+  "tags": ["optimization", "tokens", "research"],
+  "specRef": null,
+  "actions": [
+    {
+      "timestamp": "2026-01-29T13:35:00Z",
+      "type": "created",
+      "note": null
+    },
+    {
+      "timestamp": "2026-01-29T13:45:00Z",
+      "type": "completed",
+      "note": "Research saved to .claude/state/research/subagent-best-practices.md. Covers pricing (Haiku 5x cheaper than Opus), subagent mechanics, task delegation map, proposed custom subagent configs, and estimated ~70% cost savings with optimized delegation."
+    }
+  ]
+}

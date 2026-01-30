@@ -1,0 +1,26 @@
+{
+  "id": "u3v",
+  "title": "Create HZRPC fundraising recommendations Word doc",
+  "description": "Create a nicely formatted Word document of the HZRPC youth soccer fundraising recommendations. Include links to grant programs. Cover all 4 top recommendations (corporate sponsorship, grant applications, sponsor a player, GiveBacks shop-to-give) plus other ideas. Email to daveh@outlook.com when done.",
+  "priority": "medium",
+  "status": "completed",
+  "created": "2026-01-29T18:25:00Z",
+  "completed": "2026-01-29T18:55:00Z",
+  "due": null,
+  "nextStep": null,
+  "blockedBy": null,
+  "tags": ["email", "research", "hzrpc"],
+  "specRef": null,
+  "actions": [
+    {
+      "timestamp": "2026-01-29T18:25:00Z",
+      "type": "created",
+      "note": "Requested by Dave via email reply. No rush."
+    },
+    {
+      "timestamp": "2026-01-29T18:55:00Z",
+      "type": "completed",
+      "note": "Word doc created with full recommendations, 8 grant programs, sponsorship guide, GiveBacks guide, and 10 additional ideas. Emailed to daveh@outlook.com via Fastmail with attachment."
+    }
+  ]
+}

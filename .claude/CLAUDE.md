@@ -57,17 +57,58 @@ You are an autonomous personal assistant that:
 
 ## State Files
 
-Your persistent state lives in `.claude/state/`:
+Your persistent state lives in `.claude/state/`. Know this directory well — it's your memory across sessions.
+
+### Core State
+
+| File | Purpose | When to Check |
+|------|---------|---------------|
+| `memory.md` | Facts about the user: names, preferences, accounts, contacts | Before asking the user anything they may have told you before |
+| `calendar.md` | Scheduled events, reminders, to-do due dates (linked via `[todo:id]`) | At session start and when scheduling |
+| `assistant-state.md` | Saved work context from before compaction/restart | At session start to resume work |
+| `autonomy.json` | Current autonomy mode (yolo/confident/cautious/supervised) | Before taking actions that need permission |
+| `identity.json` | Your configured name and identity metadata | Rarely — set during `/setup` |
+| `system-prompt.txt` | Your personality, directives, communication style (loaded at startup via `--append-system-prompt`) | When adjusting personality with the user |
+
+### Communication State
 
 | File | Purpose |
 |------|---------|
-| `autonomy.json` | Your current autonomy mode |
-| `identity.json` | Your configured identity |
-| `memory.md` | Facts you've learned about the user |
-| `calendar.md` | Scheduled events and reminders |
-| `safe-senders.json` | Trusted contacts for Telegram/email |
-| `assistant-state.md` | Current work context (saved before compaction) |
-| `todos/` | Persistent to-do files |
+| `safe-senders.json` | Trusted contacts for Telegram/email — only act on requests from these senders |
+| `channel.txt` | Current communication channel (`telegram` or `silent`). Determines how replies are delivered |
+| `telegram-pending.json` | Pending Telegram message state for delivery tracking |
+| `context-usage.json` | Context window usage tracking for proactive state saving |
+
+### Persistent Storage
+
+| Directory | Purpose |
+|-----------|---------|
+| `todos/` | Individual to-do JSON files. Naming: `{priority}-{status}-{id}-{slug}.json`. Counter in `.counter` file. See `/todo` skill for details |
+| `research/` | Research documents and deliverables (`.md` and `.docx`). Long-form analysis, reports, and generated documents that persist across sessions |
+| `telegram-media/` | Photos and documents received via Telegram. Files named by Telegram's file ID |
+
+### Templates
+
+Files ending in `.template` are defaults from the upstream CC4Me project. Your live state files are the non-template versions.
+
+## Knowledge Base
+
+Reference documentation lives in `.claude/knowledge/`:
+
+### Integrations (`.claude/knowledge/integrations/`)
+
+| File | Covers |
+|------|--------|
+| `telegram.md` | Telegram bot setup, gateway architecture, webhook config, API patterns |
+| `fastmail.md` | Fastmail/JMAP email setup, API token config, sending/receiving |
+| `microsoft-graph.md` | Microsoft Graph API for M365 email, OAuth client credentials flow, Azure app setup |
+| `keychain.md` | macOS Keychain credential storage, naming conventions (`credential-*`, `pii-*`, `financial-*`) |
+
+### macOS (`.claude/knowledge/macos/`)
+
+| File | Covers |
+|------|--------|
+| `automation.md` | launchd jobs, plist templates, scheduled tasks, system automation |
 
 ## Core Behaviors
 
@@ -150,18 +191,26 @@ See `.claude/knowledge/integrations/keychain.md`.
 
 ### Skills Available
 
+Each skill has detailed instructions in `.claude/skills/{name}/SKILL.md`.
+
 | Skill | Purpose |
 |-------|---------|
-| `/todo` | Manage persistent to-dos |
-| `/memory` | Store and lookup facts |
-| `/calendar` | Manage schedule |
+| `/todo` | Manage persistent to-dos (auto-incrementing IDs, JSON files) |
+| `/memory` | Store and lookup facts in `memory.md` |
+| `/calendar` | Manage schedule and reminders |
 | `/mode` | View/change autonomy level |
 | `/save-state` | Save context before compaction |
-| `/setup` | Configure the assistant |
+| `/restart` | Restart Claude Code session gracefully |
+| `/setup` | Configure the assistant (first-time setup wizard) |
+| `/email` | Read and send email via Fastmail (JMAP) or Microsoft 365 (Graph) |
+| `/telegram` | Telegram integration reference and patterns |
+| `/hooks` | Create and manage Claude Code hooks |
+| `/skill-create` | Create new skills following best practices |
 | `/spec` | Create feature specifications |
 | `/plan` | Create implementation plans with stories/tests |
 | `/build` | Implement features (test-driven) |
 | `/validate` | Verify spec-plan-implementation alignment |
+| `/upstream` | Contribute changes back to upstream CC4Me |
 
 ### Software Development
 
@@ -193,10 +242,7 @@ Test changes before committing.
 
 ### Integrations
 
-Reference `.claude/knowledge/integrations/` for:
-- `telegram.md` - Telegram bot setup
-- `fastmail.md` - Email integration
-- `keychain.md` - Secure storage
+Reference `.claude/knowledge/integrations/` for detailed setup and API docs. See the Knowledge Base section above for a full listing.
 
 ## Claude Code Documentation
 

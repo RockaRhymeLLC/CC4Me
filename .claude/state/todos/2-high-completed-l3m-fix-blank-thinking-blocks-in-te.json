@@ -1,0 +1,25 @@
+{
+  "id": "l3m",
+  "title": "Fix blank thinking blocks in Telegram watcher output",
+  "description": "The transcript watcher is detecting thinking blocks and sending them to Telegram even when not in verbose mode, but sending them as blank/empty messages. Need to:\n- Ensure thinking blocks are only sent when channel is telegram-verbose\n- Never send empty/blank messages to Telegram\n- Check the process_line logic for the thinking block handling",
+  "priority": "high",
+  "status": "completed",
+  "created": "2026-01-29T13:35:00Z",
+  "due": null,
+  "nextStep": null,
+  "blockedBy": null,
+  "tags": ["telegram", "watcher", "bug"],
+  "specRef": null,
+  "actions": [
+    {
+      "timestamp": "2026-01-29T13:35:00Z",
+      "type": "created",
+      "note": null
+    },
+    {
+      "timestamp": "2026-01-29T13:38:00Z",
+      "type": "completed",
+      "note": "Added guard to skip empty, whitespace-only, and '(no content)' placeholder messages. The thinking block logic was already correct (only sends on telegram-verbose), but the text extraction was picking up the '(no content)' placeholder that Claude Code writes when a turn has only thinking/tool use."
+    }
+  ]
+}

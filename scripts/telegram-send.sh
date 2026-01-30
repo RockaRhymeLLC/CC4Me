@@ -2,10 +2,14 @@
 #
 # Telegram Send Utility
 # Usage:
-#   telegram-send.sh typing              # Send typing indicator
-#   telegram-send.sh "message text"      # Send a message
+#   telegram-send.sh typing                        # Send typing indicator
+#   telegram-send.sh "message text"                # Send a message (chat ID from pending/env)
+#   telegram-send.sh "chat_id" "message text"      # Send a message to specific chat ID
 #
-# Uses chat ID from telegram-pending.json or TELEGRAM_CHAT_ID env var
+# Chat ID resolution order:
+#   1. First argument (if two arguments provided)
+#   2. TELEGRAM_CHAT_ID environment variable
+#   3. telegram-pending.json file
 
 set -e
 
@@ -21,19 +25,24 @@ if [ -z "$BOT_TOKEN" ]; then
   exit 1
 fi
 
-# Get chat ID from pending file or environment
-if [ -n "$TELEGRAM_CHAT_ID" ]; then
-  CHAT_ID="$TELEGRAM_CHAT_ID"
-elif [ -f "$PENDING_FILE" ]; then
-  CHAT_ID=$(/usr/bin/jq -r '.chatId' "$PENDING_FILE" 2>/dev/null)
+# If two arguments provided, first is chat ID, second is message
+if [ $# -eq 2 ]; then
+  CHAT_ID="$1"
+  ACTION="$2"
+else
+  ACTION="$1"
+  # Get chat ID from environment or pending file
+  if [ -n "$TELEGRAM_CHAT_ID" ]; then
+    CHAT_ID="$TELEGRAM_CHAT_ID"
+  elif [ -f "$PENDING_FILE" ]; then
+    CHAT_ID=$(/usr/bin/jq -r '.chatId' "$PENDING_FILE" 2>/dev/null)
+  fi
 fi
 
 if [ -z "$CHAT_ID" ] || [ "$CHAT_ID" = "null" ]; then
   echo "Error: No chat ID available" >&2
   exit 1
 fi
-
-ACTION="$1"
 
 if [ "$ACTION" = "typing" ]; then
   # Send typing indicator

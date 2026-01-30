@@ -1,0 +1,26 @@
+{
+  "id": "y7z",
+  "title": "Plan CC4Me deployment for Will's setup",
+  "description": "Will wants his own CC4Me assistant. Plan out:\n- How to push BMO's enhancements back to upstream CC4Me repo\n- What Will needs to do to prepare (accounts, software, credentials)\n- Homework instructions for Will\n- README and documentation updates\n\nPlanning only — no implementation. Save output for Dave's review.",
+  "priority": "medium",
+  "status": "completed",
+  "created": "2026-01-29T23:45:00Z",
+  "completed": "2026-01-30T00:15:00Z",
+  "due": null,
+  "nextStep": null,
+  "blockedBy": null,
+  "tags": ["planning", "cc4me", "deployment"],
+  "specRef": null,
+  "actions": [
+    {
+      "timestamp": "2026-01-29T23:45:00Z",
+      "type": "created",
+      "note": "Requested by Dave via Telegram. Will Loving wants his own CC4Me assistant on his Mac."
+    },
+    {
+      "timestamp": "2026-01-30T00:15:00Z",
+      "type": "completed",
+      "note": "Comprehensive plan created covering: (1) Current state assessment — 15 commits ahead of upstream, 6 new skills, 18 new scripts, working integrations. (2) Upstream contribution strategy — 5 logical PRs (session persistence, email, telegram, scheduled jobs, documentation). (3) Will's homework checklist — software installs, accounts to create, credentials to gather, email provider options. (4) Deployment walkthrough — 8-step guide from clone to test. (5) README/SETUP.md update plan — proposed new structure covering all features. (6) Open questions for Dave and Will. Saved to .claude/state/research/cc4me-deployment-plan.md"
+    }
+  ]
+}

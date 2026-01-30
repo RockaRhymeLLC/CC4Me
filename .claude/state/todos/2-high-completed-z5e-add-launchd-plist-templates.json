@@ -1,0 +1,20 @@
+{
+  "id": "z5e",
+  "title": "Add launchd plist templates for each job",
+  "description": "Create launchd plist templates for: email-reminder, todo-reminder, context-watchdog, context-monitor-statusline, gateway. Each template should use YOUR_USERNAME placeholders and include setup instructions.",
+  "priority": "high",
+  "status": "open",
+  "created": "2026-01-30T14:40:00Z",
+  "due": null,
+  "nextStep": "Review existing launchd template pattern",
+  "blockedBy": null,
+  "tags": ["upstream", "setup", "phase2"],
+  "specRef": null,
+  "actions": [
+    {
+      "timestamp": "2026-01-30T14:40:00Z",
+      "type": "created",
+      "note": "Phase 2 — launchd templates"
+    }
+  ]
+}

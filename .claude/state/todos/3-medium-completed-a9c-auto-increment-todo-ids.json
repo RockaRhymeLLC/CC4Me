@@ -1,0 +1,20 @@
+{
+  "id": "a9c",
+  "title": "Auto-increment todo IDs",
+  "description": "Replace random 3-char ID generation with a simple auto-incrementing integer system. Current approach requires manual ID creation and collision checking. Switch to scanning existing todos for the highest ID and incrementing.\n\nOptions:\n- Simple integer (1, 2, 3...)\n- Zero-padded (001, 002, 003...)\n- Store last ID in a counter file\n\nUpdate the todo skill SKILL.md and reference.md to reflect the new scheme.",
+  "priority": "medium",
+  "status": "open",
+  "created": "2026-01-30T16:50:00Z",
+  "due": null,
+  "nextStep": "Decide on ID format and update todo skill",
+  "blockedBy": null,
+  "tags": ["tooling", "todo-system"],
+  "specRef": null,
+  "actions": [
+    {
+      "timestamp": "2026-01-30T16:50:00Z",
+      "type": "created",
+      "note": null
+    }
+  ]
+}

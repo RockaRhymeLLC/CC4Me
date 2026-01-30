@@ -1,0 +1,25 @@
+{
+  "id": "n5o",
+  "title": "Email research documents to Dave as Word files",
+  "description": "Convert the two research documents to Word (.docx) format and email them to Dave at dhurley@servos.io:\n1. .claude/state/research/godaddy-m365-api-access.md\n2. .claude/state/research/subagent-best-practices.md",
+  "priority": "high",
+  "status": "completed",
+  "created": "2026-01-29T13:42:00Z",
+  "due": null,
+  "nextStep": null,
+  "blockedBy": null,
+  "tags": ["email", "research"],
+  "specRef": null,
+  "actions": [
+    {
+      "timestamp": "2026-01-29T13:42:00Z",
+      "type": "created",
+      "note": null
+    },
+    {
+      "timestamp": "2026-01-29T13:48:00Z",
+      "type": "completed",
+      "note": "Installed pandoc, converted both markdown files to .docx, added attachment support to jmap.js, emailed both docs to dhurley@servos.io with 2 attachments."
+    }
+  ]
+}

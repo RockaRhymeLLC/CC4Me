@@ -1,0 +1,11 @@
+{
+  "_modes": {
+    "yolo": "Full autonomy - just do it, notify after",
+    "confident": "Ask only for destructive/irreversible actions",
+    "cautious": "Ask for most actions, proceed only on safe reads/research",
+    "supervised": "Ask for approval on everything"
+  },
+  "mode": "yolo",
+  "setAt": "2026-01-28T12:00:00Z",
+  "setBy": "user"
+}

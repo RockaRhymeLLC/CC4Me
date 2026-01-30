@@ -1,0 +1,20 @@
+{
+  "id": "z6f",
+  "title": "Fresh-clone test of setup flow",
+  "description": "Clone upstream CC4Me to a temp directory, run the full setup flow (init.sh, /setup), verify everything works from scratch. Document any issues found. This validates the upstream experience before Will tries it.",
+  "priority": "medium",
+  "status": "open",
+  "created": "2026-01-30T14:40:00Z",
+  "due": null,
+  "nextStep": "Wait for init.sh and setup SKILL.md updates to complete",
+  "blockedBy": "Depends on z3c and z4d",
+  "tags": ["upstream", "testing", "phase2"],
+  "specRef": null,
+  "actions": [
+    {
+      "timestamp": "2026-01-30T14:40:00Z",
+      "type": "created",
+      "note": "Phase 2 — integration testing"
+    }
+  ]
+}

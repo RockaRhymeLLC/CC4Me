@@ -1,0 +1,20 @@
+{
+  "id": "z4d",
+  "title": "Update setup SKILL.md for integrations",
+  "description": "Expand /setup wizard to cover: Claude subscription verification, email integration (Fastmail + M365 options), Telegram integration (bot + tunnel + webhook), persistent tmux session, scheduled launchd jobs, calendar integration (icalBuddy), channel/notification preferences.",
+  "priority": "high",
+  "status": "open",
+  "created": "2026-01-30T14:40:00Z",
+  "due": null,
+  "nextStep": "Read current setup SKILL.md",
+  "blockedBy": null,
+  "tags": ["upstream", "setup", "phase2"],
+  "specRef": null,
+  "actions": [
+    {
+      "timestamp": "2026-01-30T14:40:00Z",
+      "type": "created",
+      "note": "Phase 2 — setup wizard expansion"
+    }
+  ]
+}

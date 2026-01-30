@@ -1,0 +1,30 @@
+{
+  "id": "k2l",
+  "title": "Research GoDaddy M365 API access for bmo@bmobot.ai",
+  "description": "Dave is trying to get API access to the bmo@bmobot.ai email (M365 Exchange account provisioned through GoDaddy). The Microsoft Entra admin UI keeps redirecting to GoDaddy's admin settings. Need to research:\n- Can GoDaddy-provisioned M365 accounts access Entra/Azure AD directly?\n- How to get API keys (Microsoft Graph API) for GoDaddy M365 accounts\n- Is this a paid feature GoDaddy locks down?\n- Workarounds or alternatives\n\nSave research to a file for later discussion.",
+  "priority": "high",
+  "status": "completed",
+  "created": "2026-01-29T13:30:00Z",
+  "due": null,
+  "nextStep": null,
+  "blockedBy": null,
+  "tags": ["email", "m365", "godaddy", "research"],
+  "specRef": null,
+  "actions": [
+    {
+      "timestamp": "2026-01-29T13:30:00Z",
+      "type": "created",
+      "note": null
+    },
+    {
+      "timestamp": "2026-01-29T13:30:00Z",
+      "type": "status_change",
+      "note": "Starting research immediately"
+    },
+    {
+      "timestamp": "2026-01-29T13:38:00Z",
+      "type": "completed",
+      "note": "Research saved to .claude/state/research/godaddy-m365-api-access.md. TL;DR: GoDaddy's M365 is a federated tenant that blocks Entra admin access by design. Best path is defederation (official Microsoft process, no data loss). Quick workarounds to try first: portal.azure.com directly, or PowerShell app registration."
+    }
+  ]
+}

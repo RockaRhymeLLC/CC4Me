@@ -1,0 +1,25 @@
+{
+  "id": "j1k",
+  "title": "Add self-healing transcript file detection to watcher",
+  "description": "The transcript watcher can get stuck tailing a stale transcript file when a new Claude session starts. Add periodic checking so the watcher detects newer .jsonl files in the transcript directory and switches to them automatically.\n\nApproach:\n- In the watcher's main loop, periodically check if a newer .jsonl file exists\n- If found, switch to tailing the new file\n- Log the switchover",
+  "priority": "high",
+  "status": "completed",
+  "created": "2026-01-29T13:20:00Z",
+  "due": null,
+  "nextStep": null,
+  "blockedBy": null,
+  "tags": ["telegram", "watcher", "reliability"],
+  "specRef": null,
+  "actions": [
+    {
+      "timestamp": "2026-01-29T13:20:00Z",
+      "type": "created",
+      "note": null
+    },
+    {
+      "timestamp": "2026-01-29T13:27:00Z",
+      "type": "completed",
+      "note": "Replaced tail -f pipe with polling loop that checks for new lines every 1s and for newer transcript files every 10s. Handles file truncation, logs switchovers. Restarted watcher with updated script."
+    }
+  ]
+}

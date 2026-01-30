@@ -1,0 +1,26 @@
+{
+  "id": "e5f",
+  "title": "Add Telegram progress indicators",
+  "description": "Send immediate 'got it' confirmation when message received, then meaningful status updates while working on longer tasks. This improves UX by keeping Dave informed instead of waiting in the dark.",
+  "priority": "medium",
+  "status": "completed",
+  "created": "2026-01-28T23:45:00Z",
+  "completed": "2026-01-28T23:55:00Z",
+  "actions": [
+    {
+      "timestamp": "2026-01-28T23:45:00Z",
+      "type": "created",
+      "note": "Requested by Dave via Telegram after successful wake-on-message test"
+    },
+    {
+      "timestamp": "2026-01-28T23:47:00Z",
+      "type": "status-change",
+      "note": "Started work - approach: typing indicator via hooks, progress messages stay personal"
+    },
+    {
+      "timestamp": "2026-01-28T23:55:00Z",
+      "type": "completed",
+      "note": "Implemented: gateway sends typing indicator on message receipt, telegram-send.sh utility for progress messages. Dave confirmed working."
+    }
+  ]
+}

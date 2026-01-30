@@ -1,0 +1,20 @@
+{
+  "id": "z2b",
+  "title": "Rewrite SETUP.md for upstream CC4Me",
+  "description": "Update SETUP.md with integration prerequisites (Telegram, email, Cloudflare), Keychain credential setup, tmux session setup, launchd job configuration, verification steps. Remove outdated npm/Jest references.",
+  "priority": "high",
+  "status": "open",
+  "created": "2026-01-30T14:40:00Z",
+  "due": null,
+  "nextStep": "Review current SETUP.md and draft updates",
+  "blockedBy": null,
+  "tags": ["upstream", "documentation", "phase2"],
+  "specRef": null,
+  "actions": [
+    {
+      "timestamp": "2026-01-30T14:40:00Z",
+      "type": "created",
+      "note": "Phase 2 — upstream documentation updates"
+    }
+  ]
+}

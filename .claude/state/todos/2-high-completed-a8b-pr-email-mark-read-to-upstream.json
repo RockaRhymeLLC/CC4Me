@@ -1,0 +1,20 @@
+{
+  "id": "a8b",
+  "title": "PR email mark-read to upstream CC4Me",
+  "description": "Push mark-as-read improvements to upstream CC4Me repo:\n- graph.js: markAsRead() function, auto-mark on read, mark-read command\n- jmap.js: markAsRead() function, auto-mark on read, mark-read command\n- jmap.js: Fix unread filter (notKeyword instead of hasKeyword object)\n- jmap.js: Fix empty query result handling in listInbox\n\nDepends on a7a (merge upstream first to avoid conflicts).",
+  "priority": "high",
+  "status": "open",
+  "created": "2026-01-30T16:45:00Z",
+  "due": null,
+  "nextStep": "Complete a7a merge first, then create upstream PR",
+  "blockedBy": "a7a",
+  "tags": ["upstream", "email"],
+  "specRef": null,
+  "actions": [
+    {
+      "timestamp": "2026-01-30T16:45:00Z",
+      "type": "created",
+      "note": null
+    }
+  ]
+}

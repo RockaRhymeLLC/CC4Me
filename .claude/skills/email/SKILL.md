@@ -1,12 +1,12 @@
 ---
 name: email
-description: Read and send emails via Fastmail. Use for checking inbox, reading messages, searching, or sending email.
+description: Read and send emails via Fastmail or Microsoft 365. Use for checking inbox, reading messages, searching, or sending email.
 argument-hint: [check|unread|read|search|send]
 ---
 
 # Email Management
 
-Read and send emails via Fastmail JMAP API.
+Read and send emails. **Primary account: bmo@bmobot.ai** (Microsoft Graph API). Secondary: bmo_hurley@fastmail.com (JMAP).
 
 ## Commands
 
@@ -19,22 +19,40 @@ Parse the arguments to determine action:
 - `unread` - Show unread emails only
 
 ### Send
-- `send "to" "subject" "body"` - Send an email
+- `send "to" "subject" "body"` - Send an email (from bmo@bmobot.ai by default)
+- `send fastmail "to" "subject" "body"` - Send from Fastmail account instead
+- Use `--cc addr` to add CC recipients (repeatable)
+- Use `--bcc addr` to add BCC recipients (repeatable)
 
 ### Examples
 - `/email check` - Show recent inbox
 - `/email unread` - Show unread messages
 - `/email search "cloudflare"` - Find emails mentioning cloudflare
 - `/email send "dave@example.com" "Hello" "Message body here"`
+- `/email send "dave@example.com" "Hello" "Body" --cc "other@example.com"`
+- `/email send "dave@example.com" "Hello" "Body" --cc "a@ex.com" --bcc "b@ex.com"`
 
 ## Account Details
+
+### Primary: bmo@bmobot.ai (Microsoft 365)
+
+| Field | Value |
+|-------|-------|
+| Email | bmo@bmobot.ai |
+| Provider | Microsoft 365 (via GoDaddy, Entra at portal.azure.com) |
+| Protocol | Microsoft Graph API |
+| Credentials | Keychain (`credential-azure-*`) |
+| Script | `scripts/email/graph.js` |
+
+### Secondary: bmo_hurley@fastmail.com
 
 | Field | Value |
 |-------|-------|
 | Email | bmo_hurley@fastmail.com |
 | Provider | Fastmail |
 | Protocol | JMAP API |
-| Credentials | Keychain (see below) |
+| Credentials | Keychain (`credential-fastmail-*`) |
+| Script | `scripts/email/jmap.js` |
 
 ## Scheduled Maintenance
 
@@ -42,7 +60,7 @@ Parse the arguments to determine action:
 - Job: `com.bmo.email-reminder`
 - Script: `scripts/email-reminder.sh`
 - Interval: 3600 seconds (1 hour)
-- Behavior: If unread emails exist and BMO is idle, prompts to check
+- Behavior: Checks both M365 and Fastmail for unread emails. If any exist and BMO is idle, prompts to check.
 
 ### Check job status
 ```bash
@@ -56,66 +74,48 @@ tail -f /Users/bmo/CC4Me-BMO/logs/email-reminder.log
 
 ## Implementation
 
-Use the JMAP API via the helper script at `scripts/email/jmap.js`:
+### Primary: Microsoft Graph API (`scripts/email/graph.js`)
 
 ```bash
 # Check inbox
-node /Users/bmo/CC4Me-BMO/scripts/email/jmap.js inbox
+node /Users/bmo/CC4Me-BMO/scripts/email/graph.js inbox
 
 # Show unread only
-node /Users/bmo/CC4Me-BMO/scripts/email/jmap.js unread
+node /Users/bmo/CC4Me-BMO/scripts/email/graph.js unread
 
 # Read email by ID
-node /Users/bmo/CC4Me-BMO/scripts/email/jmap.js read <email_id>
+node /Users/bmo/CC4Me-BMO/scripts/email/graph.js read <email_id>
 
 # Search
-node /Users/bmo/CC4Me-BMO/scripts/email/jmap.js search "query"
+node /Users/bmo/CC4Me-BMO/scripts/email/graph.js search "query"
 
-# Send
-node /Users/bmo/CC4Me-BMO/scripts/email/jmap.js send "to" "subject" "body"
+# Send (with optional CC, BCC, and attachments)
+node /Users/bmo/CC4Me-BMO/scripts/email/graph.js send "to" "subject" "body" [--cc addr] [--bcc addr] [attachment1] [attachment2]
+```
+
+### Secondary: Fastmail JMAP (`scripts/email/jmap.js`)
+
+```bash
+# Same commands as above but using jmap.js
+node /Users/bmo/CC4Me-BMO/scripts/email/jmap.js inbox
+node /Users/bmo/CC4Me-BMO/scripts/email/jmap.js send "to" "subject" "body" [--cc addr] [--bcc addr] [attachment1] [attachment2]
 ```
 
 ## Authentication
 
+### Microsoft Graph (Primary)
+Credentials stored in Keychain:
+- `credential-azure-client-id` - Application (client) ID
+- `credential-azure-tenant-id` - Directory (tenant) ID
+- `credential-azure-secret-value` - Client secret value
+- `credential-azure-secret-id` - Client secret ID (reference only)
+
+Uses OAuth2 client credentials flow (no user interaction needed).
+
+### Fastmail (Secondary)
 Credentials stored in Keychain:
 - `credential-fastmail-email` - Email address
 - `credential-fastmail-token` - JMAP API token
-
-### Retrieve credentials
-```bash
-security find-generic-password -s "credential-fastmail-email" -w
-security find-generic-password -s "credential-fastmail-token" -w
-```
-
-### Set up new token
-1. Log into Fastmail web: https://app.fastmail.com
-2. Settings → Privacy & Security → Integrations → API tokens
-3. Create new token with mail access scope
-4. Store: `security add-generic-password -a "assistant" -s "credential-fastmail-token" -w "TOKEN" -U`
-
-## JMAP API Reference
-
-### Endpoints
-- Session: `https://api.fastmail.com/.well-known/jmap`
-- API: Retrieved from session response
-
-### Key Methods
-| Method | Purpose |
-|--------|---------|
-| `Mailbox/query` | Find mailbox IDs (inbox, sent, etc.) |
-| `Email/query` | Search/list emails |
-| `Email/get` | Fetch email content |
-| `Email/set` | Create drafts |
-| `EmailSubmission/set` | Send emails |
-
-### Using Namespaces
-```javascript
-using: [
-  'urn:ietf:params:jmap:core',
-  'urn:ietf:params:jmap:mail',
-  'urn:ietf:params:jmap:submission'
-]
-```
 
 ## Output Format
 

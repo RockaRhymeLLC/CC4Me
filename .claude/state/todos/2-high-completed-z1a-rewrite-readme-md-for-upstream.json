@@ -1,0 +1,20 @@
+{
+  "id": "z1a",
+  "title": "Rewrite README.md for upstream CC4Me",
+  "description": "Comprehensive README rewrite covering all features: session persistence, email, Telegram, scheduled jobs, autonomy modes, security policy. See deployment plan section 5 for proposed structure.",
+  "priority": "high",
+  "status": "open",
+  "created": "2026-01-30T14:40:00Z",
+  "due": null,
+  "nextStep": "Draft README based on proposed structure in deployment plan",
+  "blockedBy": null,
+  "tags": ["upstream", "documentation", "phase2"],
+  "specRef": null,
+  "actions": [
+    {
+      "timestamp": "2026-01-30T14:40:00Z",
+      "type": "created",
+      "note": "Phase 2 — upstream documentation updates"
+    }
+  ]
+}

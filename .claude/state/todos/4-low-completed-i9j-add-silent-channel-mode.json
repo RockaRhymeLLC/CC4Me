@@ -1,0 +1,25 @@
+{
+  "id": "i9j",
+  "title": "Add silent channel mode",
+  "description": "When channel is set to silent, no messages are sent to any external channel until the channel is changed. The watcher already has a silent case that does nothing - this todo is for adding a way to set it (e.g., Dave says 'go silent' or a command to set it).",
+  "priority": "low",
+  "status": "completed",
+  "created": "2026-01-29T17:40:00Z",
+  "due": null,
+  "nextStep": null,
+  "blockedBy": null,
+  "tags": ["telegram", "channel"],
+  "specRef": null,
+  "actions": [
+    {
+      "timestamp": "2026-01-29T17:40:00Z",
+      "type": "created",
+      "note": null
+    },
+    {
+      "timestamp": "2026-01-29T17:45:00Z",
+      "type": "completed",
+      "note": "Silent mode already works - BMO can set it manually when asked"
+    }
+  ]
+}

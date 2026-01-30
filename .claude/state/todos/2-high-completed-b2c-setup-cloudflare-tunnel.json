@@ -1,0 +1,13 @@
+{
+  "id": "b2c",
+  "title": "Set up Cloudflare Tunnel for Telegram webhook",
+  "description": "Install cloudflared, create tunnel, build webhook server, configure Telegram to push messages via Cloudflare Tunnel for real-time communication.",
+  "priority": "high",
+  "status": "completed",
+  "createdAt": "2026-01-28T00:00:00Z",
+  "completedAt": "2026-01-28T21:50:00Z",
+  "actions": [
+    {"timestamp": "2026-01-28T00:00:00Z", "type": "created", "note": "Dave requested Cloudflare Tunnel setup for Telegram"},
+    {"timestamp": "2026-01-28T21:50:00Z", "type": "completed", "note": "Named tunnel 'bmo' created with permanent URL bmo.playplan.app"}
+  ]
+}

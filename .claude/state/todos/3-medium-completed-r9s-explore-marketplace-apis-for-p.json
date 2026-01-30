@@ -1,0 +1,25 @@
+{
+  "id": "r9s",
+  "title": "Explore marketplace APIs for purchasing",
+  "description": "Research Amazon and other major marketplace APIs so BMO can make purchases for Dave as a personal shopper.\n\nExplore:\n- Amazon Product Advertising API / SP-API\n- Other major marketplace APIs (Walmart, Target, Best Buy, etc.)\n- What's possible: product search, price comparison, order placement\n- Authentication requirements and limitations\n- Any terms of service concerns with automated purchasing\n- Practical approach for a personal shopping assistant",
+  "priority": "medium",
+  "status": "completed",
+  "created": "2026-01-29T16:15:00Z",
+  "due": null,
+  "nextStep": null,
+  "blockedBy": null,
+  "tags": ["research", "shopping", "apis"],
+  "specRef": null,
+  "actions": [
+    {
+      "timestamp": "2026-01-29T16:15:00Z",
+      "type": "created",
+      "note": "Requested by Dave via Telegram"
+    },
+    {
+      "timestamp": "2026-01-29T16:55:00Z",
+      "type": "completed",
+      "note": "Key finding: no major retailer has a public consumer purchasing API. New agentic commerce protocols emerging (OpenAI ACP + Stripe, Google UCP/AP2). Best near-term path: ACP for Stripe merchants, Instacart for groceries, browser automation (Skyvern) for everything else. Saved to .claude/state/research/marketplace-apis.md"
+    }
+  ]
+}

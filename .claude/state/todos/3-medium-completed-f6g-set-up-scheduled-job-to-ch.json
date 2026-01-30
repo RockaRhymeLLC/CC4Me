@@ -1,0 +1,21 @@
+{
+  "id": "f6g",
+  "title": "Set up scheduled job to check and maintain email inbox hourly",
+  "description": "Create a launchd job or similar scheduled task to check and maintain the BMO email inbox (bmo_hurley@fastmail.com) approximately every hour. This ensures email doesn't pile up and I stay responsive to incoming messages.",
+  "priority": "medium",
+  "status": "completed",
+  "created": "2026-01-28T23:52:00Z",
+  "completed": "2026-01-29T01:31:00Z",
+  "actions": [
+    {
+      "timestamp": "2026-01-28T23:52:00Z",
+      "type": "created",
+      "note": "Requested by Dave via Telegram"
+    },
+    {
+      "timestamp": "2026-01-29T01:31:00Z",
+      "type": "completed",
+      "note": "Implemented: email-reminder.sh uses jmap.js to check unread count, prompts if any. Launchd job runs hourly."
+    }
+  ]
+}

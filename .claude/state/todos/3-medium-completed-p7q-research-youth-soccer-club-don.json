@@ -1,0 +1,25 @@
+{
+  "id": "p7q",
+  "title": "Research youth soccer club donation support",
+  "description": "Dave's local youth soccer club needs donations: https://www.givebacks.com/donate/hzrpc\n1. Research the club and the GiveBacks platform\n2. Come up with ways BMO can help (promotion ideas, outreach, etc.)\n3. Email findings to Dave's personal email address\n\nNote: Need Dave's personal email address before sending.",
+  "priority": "medium",
+  "status": "completed",
+  "created": "2026-01-29T16:15:00Z",
+  "due": null,
+  "nextStep": null,
+  "blockedBy": null,
+  "tags": ["research", "email", "community"],
+  "specRef": null,
+  "actions": [
+    {
+      "timestamp": "2026-01-29T16:15:00Z",
+      "type": "created",
+      "note": "Requested by Dave via Telegram"
+    },
+    {
+      "timestamp": "2026-01-29T16:45:00Z",
+      "type": "completed",
+      "note": "Researched HZRPC (Hereford Zone Rec Council, northern Baltimore County 501(c)(3)). Key finding: only 2.9% of $1.4M revenue from donations - huge untapped potential. Emailed comprehensive findings with 30 actionable recommendations to daveh@outlook.com via bmo@bmobot.ai."
+    }
+  ]
+}

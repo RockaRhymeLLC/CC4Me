@@ -95,11 +95,18 @@ $thinking
 </thinking>"
   fi
 
-  # Send text response
-  if [ -n "$text" ] && [ "$text" != "null" ]; then
+  # Send text response (skip empty, whitespace-only, and placeholder messages)
+  local trimmed=$(echo "$text" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+  if [ -n "$trimmed" ] && [ "$trimmed" != "null" ] && [ "$trimmed" != "(no content)" ]; then
     log "New assistant text, channel=$channel"
     send_telegram "$text"
   fi
+}
+
+# Find the newest transcript file in the directory
+get_newest_transcript() {
+  local dir="$1"
+  ls -t "$dir"/*.jsonl 2>/dev/null | head -1
 }
 
 # Main
@@ -113,9 +120,42 @@ if [ ! -f "$TRANSCRIPT_PATH" ]; then
   exit 1
 fi
 
-log "Starting watcher for: $TRANSCRIPT_PATH"
+TRANSCRIPT_DIR=$(dirname "$TRANSCRIPT_PATH")
+NEW_FILE_CHECK_INTERVAL=10  # seconds between checking for newer transcripts
+current_file="$TRANSCRIPT_PATH"
+lines_seen=$(wc -l < "$current_file" 2>/dev/null | tr -d ' ')
+check_timer=0
 
-# Tail the file, processing new lines
-tail -n 0 -f "$TRANSCRIPT_PATH" | while read -r line; do
-  process_line "$line"
+log "Starting watcher for: $current_file"
+
+while true; do
+  # Check for new lines in the current transcript
+  current_lines=$(wc -l < "$current_file" 2>/dev/null | tr -d ' ')
+
+  if [ "$current_lines" -gt "$lines_seen" ] 2>/dev/null; then
+    new_count=$((current_lines - lines_seen))
+    tail -n "$new_count" "$current_file" | while IFS= read -r line; do
+      process_line "$line"
+    done
+    lines_seen=$current_lines
+  elif [ "$current_lines" -lt "$lines_seen" ] 2>/dev/null; then
+    # File was truncated or replaced — reset
+    log "File shrank (truncated?), resetting line count"
+    lines_seen=$current_lines
+  fi
+
+  # Periodically check for a newer transcript file
+  check_timer=$((check_timer + 1))
+  if [ "$check_timer" -ge "$NEW_FILE_CHECK_INTERVAL" ]; then
+    check_timer=0
+    newest=$(get_newest_transcript "$TRANSCRIPT_DIR")
+    if [ -n "$newest" ] && [ "$newest" != "$current_file" ]; then
+      log "Newer transcript found: $(basename "$newest"), switching..."
+      current_file="$newest"
+      lines_seen=$(wc -l < "$current_file" 2>/dev/null | tr -d ' ')
+      log "Now watching: $(basename "$current_file") (from line $lines_seen)"
+    fi
+  fi
+
+  sleep 1
 done

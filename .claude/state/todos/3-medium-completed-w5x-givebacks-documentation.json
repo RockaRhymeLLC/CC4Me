@@ -1,0 +1,26 @@
+{
+  "id": "w5x",
+  "title": "Create GiveBacks-specific documentation with intro email template",
+  "description": "Research GiveBacks platform thoroughly and create documentation specific to HZRPC's use case. Include:\n- How GiveBacks works (Shop to Give, crowdfunding, A-Thon tools)\n- Setup steps for HZRPC\n- An introductory email template that can be shared with friends and families to get them onboarded\n\nEmail to daveh@outlook.com.",
+  "priority": "medium",
+  "status": "completed",
+  "created": "2026-01-29T18:25:00Z",
+  "completed": "2026-01-29T19:05:00Z",
+  "due": null,
+  "nextStep": null,
+  "blockedBy": null,
+  "tags": ["research", "hzrpc", "givebacks"],
+  "specRef": null,
+  "actions": [
+    {
+      "timestamp": "2026-01-29T18:25:00Z",
+      "type": "created",
+      "note": "Requested by Dave via email reply. No rush."
+    },
+    {
+      "timestamp": "2026-01-29T19:05:00Z",
+      "type": "completed",
+      "note": "Created comprehensive GiveBacks guide Word doc with: platform overview, Shop to Give guide, campaign tools, pricing, setup steps, family email template, social media templates, and promotion strategy. Emailed to daveh@outlook.com via Fastmail with attachment."
+    }
+  ]
+}

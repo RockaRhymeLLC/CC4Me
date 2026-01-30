@@ -1,0 +1,21 @@
+{
+  "id": "g7h",
+  "title": "Set up scheduled job to check for pending todos every 30 minutes (if idle)",
+  "description": "Create a launchd job that prompts BMO to check for pending todos every 30 minutes, but only if not already working on something. This keeps BMO productive during idle periods.",
+  "priority": "medium",
+  "status": "completed",
+  "created": "2026-01-28T23:58:00Z",
+  "completed": "2026-01-29T00:02:00Z",
+  "actions": [
+    {
+      "timestamp": "2026-01-28T23:58:00Z",
+      "type": "created",
+      "note": "Requested by Dave via Telegram"
+    },
+    {
+      "timestamp": "2026-01-29T00:02:00Z",
+      "type": "completed",
+      "note": "Implemented: todo-reminder.sh checks if idle (no pending telegram, session exists), counts open todos, injects reminder. Launchd job runs every 30 min."
+    }
+  ]
+}

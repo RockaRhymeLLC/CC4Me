@@ -1,0 +1,26 @@
+{
+  "id": "v4w",
+  "title": "Draft HZRPC grant applications",
+  "description": "Find and access grant application forms for:\n- Baltimore Community Foundation Stronger Neighborhoods Grant\n- Baltimore Ravens Foundation / Under Armour Youth Sports Grants\n- Maryland DNR Outdoor Equity Mini Grants\n- Maryland Youth Sports Enhancement Grant (HB1275)\n\nDraft applications as best as possible. Include as individual supplement files with the recommendations doc. Email to daveh@outlook.com.",
+  "priority": "medium",
+  "status": "completed",
+  "created": "2026-01-29T18:25:00Z",
+  "completed": "2026-01-29T23:15:00Z",
+  "due": null,
+  "nextStep": null,
+  "blockedBy": null,
+  "tags": ["research", "hzrpc", "grants"],
+  "specRef": null,
+  "actions": [
+    {
+      "timestamp": "2026-01-29T18:25:00Z",
+      "type": "created",
+      "note": "Requested by Dave via email reply. No rush."
+    },
+    {
+      "timestamp": "2026-01-29T23:15:00Z",
+      "type": "completed",
+      "note": "Created 3 Word documents: (1) BCF Stronger Neighborhoods draft application with full narrative, budget template, and attachments checklist — strongest fit, March 25 deadline. (2) Ravens PLAY 60 draft application with two program options, measurable goals, and budget — opens April 2026. (3) Guidance notes for Good Sports (eligibility inquiry email included) and DICK'S Sports Matter (invitation-only, sign up recommended). Research covered all four programs plus Good Sports and DICK'S as alternatives. Maryland DNR and HB1275 were not viable (HB1275 never passed legislature). Emailed all 3 files to daveh@outlook.com via Fastmail."
+    }
+  ]
+}

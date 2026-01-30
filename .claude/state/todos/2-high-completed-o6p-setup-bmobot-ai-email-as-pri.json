@@ -1,0 +1,30 @@
+{
+  "id": "o6p",
+  "title": "Set up bmo@bmobot.ai as primary email account",
+  "description": "Set up Microsoft Graph API email access for bmo@bmobot.ai and make it the preferred email:\n1. Create Graph API email helper script (like jmap.js but for M365)\n2. Update email skill to use bmo@bmobot.ai as primary\n3. Update scheduled email check to include M365 mailbox\n4. Update knowledge/integrations docs\n5. Update memory with preferred email\n6. Send test email to Dave at dhurley@servos.io\n7. Ping Dave on Telegram when done",
+  "priority": "high",
+  "status": "completed",
+  "created": "2026-01-29T14:00:00Z",
+  "due": null,
+  "nextStep": null,
+  "blockedBy": null,
+  "tags": ["email", "m365", "setup"],
+  "specRef": null,
+  "actions": [
+    {
+      "timestamp": "2026-01-29T14:00:00Z",
+      "type": "created",
+      "note": null
+    },
+    {
+      "timestamp": "2026-01-29T14:00:00Z",
+      "type": "status_change",
+      "note": "Starting immediately"
+    },
+    {
+      "timestamp": "2026-01-29T14:10:00Z",
+      "type": "completed",
+      "note": "All 7 items done: created scripts/email/graph.js, updated email skill to dual-account with M365 primary, updated email-reminder.sh to check both accounts, created knowledge/integrations/microsoft-graph.md, updated memory with preferred email, sent test email from bmo@bmobot.ai to dhurley@servos.io, pinged Dave on Telegram."
+    }
+  ]
+}

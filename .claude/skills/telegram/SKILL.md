@@ -68,10 +68,28 @@ Then write your message as normal text - the watcher will send it.
 
 ## Sending Messages
 
-### Via Utility Script
+### Which Method to Use
+
+**IMPORTANT**: Do NOT double-send. The channel mode determines how to send:
+
+| Channel | How to Send | Why |
+|---------|-------------|-----|
+| `telegram` | Just write to terminal — the watcher delivers | Watcher is active and forwarding. Using telegram-send.sh would cause duplicate messages. |
+| `telegram-verbose` | Just write to terminal — the watcher delivers | Same as above, but thinking blocks also forwarded. |
+| `silent` | Use `telegram-send.sh` for important messages only | Watcher is NOT forwarding. Use sparingly — deliverables, alerts, blockers. |
+| `terminal` | Don't send to Telegram at all | User is at the terminal. |
+
+### Via Transcript Watcher (channel = telegram)
+
+Just write your response as normal terminal output. The transcript watcher will detect the new assistant text and send it to Telegram automatically. No extra action needed.
+
+### Via Utility Script (channel = silent only)
 ```bash
 # With explicit chat ID
 TELEGRAM_CHAT_ID=7629737488 /Users/bmo/CC4Me-BMO/scripts/telegram-send.sh "Your message"
+
+# Two-argument form
+/Users/bmo/CC4Me-BMO/scripts/telegram-send.sh "7629737488" "Your message"
 
 # Typing indicator
 TELEGRAM_CHAT_ID=7629737488 /Users/bmo/CC4Me-BMO/scripts/telegram-send.sh typing

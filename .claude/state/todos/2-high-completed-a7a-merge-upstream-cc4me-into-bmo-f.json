@@ -1,0 +1,25 @@
+{
+  "id": "a7a",
+  "title": "Merge upstream CC4Me into BMO fork",
+  "description": "Pull 12 upstream commits into CC4Me-BMO. Includes:\n- gateway.js fixes (tmux escaping, findTmux(), SIGINT handlers)\n- graph.js cleanup (unused token param)\n- Deleted webhook-server.js and add-domain.js\n- README.md, SETUP.md, init.sh rewrites\n- Setup SKILL.md expansion\n- Launchd templates\n\nMay have merge conflicts on graph.js (both sides modified).",
+  "priority": "high",
+  "status": "in-progress",
+  "created": "2026-01-30T16:45:00Z",
+  "due": null,
+  "nextStep": "git merge upstream/main and resolve conflicts",
+  "blockedBy": null,
+  "tags": ["upstream", "git"],
+  "specRef": null,
+  "actions": [
+    {
+      "timestamp": "2026-01-30T16:45:00Z",
+      "type": "created",
+      "note": null
+    },
+    {
+      "timestamp": "2026-01-30T16:52:00Z",
+      "type": "status_change",
+      "note": "Starting upstream merge"
+    }
+  ]
+}
