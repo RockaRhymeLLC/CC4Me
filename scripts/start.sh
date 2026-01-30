@@ -11,25 +11,32 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
+# Find claude binary - check common locations, fall back to PATH
+if command -v claude >/dev/null 2>&1; then
+    CLAUDE="$(command -v claude)"
+elif [ -x "$HOME/.local/bin/claude" ]; then
+    CLAUDE="$HOME/.local/bin/claude"
+else
+    echo "Error: claude not found. Install Claude Code first." >&2
+    exit 1
+fi
+
 # Change to project directory
 cd "$PROJECT_DIR"
 
 # System prompt file location
 SYSTEM_PROMPT_FILE=".claude/state/system-prompt.txt"
 
-# Build claude command
-CLAUDE_CMD="claude"
+# Build arguments array
+ARGS=()
 
 # Add system prompt if it exists
 if [ -f "$SYSTEM_PROMPT_FILE" ]; then
-    SYSTEM_PROMPT=$(cat "$SYSTEM_PROMPT_FILE")
-    CLAUDE_CMD="$CLAUDE_CMD --append-system-prompt \"$SYSTEM_PROMPT\""
+    ARGS+=("--append-system-prompt" "$(cat "$SYSTEM_PROMPT_FILE")")
 fi
 
 # Add any additional arguments passed to this script
-if [ $# -gt 0 ]; then
-    CLAUDE_CMD="$CLAUDE_CMD $@"
-fi
+ARGS+=("$@")
 
-# Execute
-eval $CLAUDE_CMD
+# Execute claude with proper argument handling
+exec "$CLAUDE" "${ARGS[@]}"
