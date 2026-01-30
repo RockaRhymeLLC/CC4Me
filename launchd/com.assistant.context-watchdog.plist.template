@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+    Context Watchdog - launchd Service Template
+
+    Monitors Claude Code context usage and triggers auto-save when
+    approaching limits. Prevents context loss by saving state proactively.
+
+    Installation:
+    1. Copy to ~/Library/LaunchAgents/com.assistant.context-watchdog.plist
+    2. Replace YOUR_USERNAME and YOUR_PROJECT with your values
+    3. launchctl load ~/Library/LaunchAgents/com.assistant.context-watchdog.plist
+    -->
+
+    <key>Label</key>
+    <string>com.assistant.context-watchdog</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <!-- TODO: Update to your project directory -->
+        <string>/Users/YOUR_USERNAME/YOUR_PROJECT/scripts/context-watchdog.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/YOUR_USERNAME/YOUR_PROJECT</string>
+
+    <key>StartInterval</key>
+    <!-- Check every 5 minutes (300 seconds) -->
+    <integer>300</integer>
+
+    <key>StandardOutPath</key>
+    <string>/Users/YOUR_USERNAME/YOUR_PROJECT/logs/context-watchdog.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/YOUR_USERNAME/YOUR_PROJECT/logs/context-watchdog.error.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+</dict>
+</plist>

@@ -1,402 +1,282 @@
 # CC4Me Setup Guide
 
-Complete setup instructions for CC4Me - the spec-driven workflow for Claude Code.
+Complete setup instructions for CC4Me - your autonomous personal assistant powered by Claude Code.
 
 ## Prerequisites
 
-Before you begin, ensure you have:
-
 ### Required
 
-1. **Node.js** (v18 or higher)
-   - Download: https://nodejs.org
+1. **macOS** (Ventura 13+ recommended)
+
+2. **Homebrew** (package manager)
+   - Install: `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`
+
+3. **Node.js** (v18 or higher)
+   - Install: `brew install node`
    - Verify: `node --version`
 
-2. **npm** (comes with Node.js)
-   - Verify: `npm --version`
-
-3. **Claude Code CLI**
-   - Install: Follow instructions at https://github.com/anthropics/claude-code
+4. **Claude Code CLI**
+   - Install: `npm install -g @anthropic-ai/claude-code`
    - Verify: `claude --version`
 
-### Optional
+5. **Claude Pro or Max subscription**
+   - Subscribe at [claude.ai](https://claude.ai)
+   - Claude Code authenticates directly through the subscription (no API key needed)
+   - Max plan ($100/month) recommended for heavy usage; Pro ($20/month) works with lower limits
 
-4. **Git** (for version control)
-   - Download: https://git-scm.com
+6. **tmux** (terminal multiplexer)
+   - Install: `brew install tmux`
+   - Verify: `tmux -V`
+
+7. **jq** (JSON processor)
+   - Install: `brew install jq`
+   - Verify: `jq --version`
+
+8. **Git**
+   - Install: `brew install git`
    - Verify: `git --version`
 
-5. **Anthropic API Key**
-   - Get from: https://console.anthropic.com
-   - Required if using Claude API directly (not just Claude Code)
+### Optional (for integrations)
+
+9. **cloudflared** (for Telegram webhooks)
+   - Install: `brew install cloudflare/cloudflare/cloudflared`
+   - Only needed if you want Telegram bot integration
+
+10. **A domain name** (for Telegram webhooks)
+    - Any registrar works; Cloudflare recommended for tunnel integration
+    - Alternative: use Cloudflare's free tunnel subdomain
 
 ## Installation
 
-### Option 1: Clone from GitHub (Recommended)
+### Step 1: Clone the Repository
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-org/CC4Me.git my-project
+git clone https://github.com/RockaRhyme/CC4Me.git my-assistant
+cd my-assistant
+```
 
-# Navigate to the directory
-cd my-project
+### Step 2: Run Initialization
 
-# Run the initialization script
+```bash
 ./scripts/init.sh
 ```
 
-The `init.sh` script will:
-- Check prerequisites
-- Install npm dependencies
-- Create `.env` file
-- Make scripts executable
-- Run tests to verify setup
-- Display next steps
+This will:
+- Check all prerequisites and report missing tools
+- Offer to install missing tools via Homebrew
+- Make all scripts executable
+- Create required directories (`logs/`, `.claude/state/todos/`, etc.)
+- Install Telegram gateway dependencies (if present)
 
-### Option 2: Manual Setup
-
-If you prefer manual setup or if `init.sh` doesn't work:
+### Step 3: Start Claude Code
 
 ```bash
-# 1. Clone or download the repository
-git clone https://github.com/your-org/CC4Me.git my-project
-cd my-project
-
-# 2. Install dependencies
-npm install
-
-# 3. Make scripts executable
-chmod +x scripts/init.sh
-chmod +x .claude/hooks/pre-build.sh
-
-# 4. Create .env file
-touch .env
-# Edit .env and add your configuration (see Environment Setup below)
-
-# 5. Verify setup
-npm test -- --passWithNoTests
+./scripts/start.sh
 ```
 
-## Environment Setup
+This starts Claude Code with the custom system prompt loaded.
 
-### Creating .env File
+### Step 4: Run the Setup Wizard
 
-Create a `.env` file in the project root:
+Inside Claude Code:
+```
+> /setup
+```
+
+The wizard configures:
+1. **Identity** - Name your assistant, set personality traits
+2. **Autonomy mode** - How much freedom the assistant gets
+3. **Safe senders** - Trusted Telegram/email contacts
+4. **Integrations** - Telegram bot, email providers
+5. **State files** - Memory, calendar, todos initialized
+
+### Step 5: Start Persistent Session
 
 ```bash
-# Anthropic API Key (if using Claude API directly)
-ANTHROPIC_API_KEY=your_api_key_here
+# Start in background
+./scripts/start-tmux.sh --detach
 
-# Future: Telegram Bot Integration
-# TELEGRAM_BOT_TOKEN=your_bot_token_here
-# TELEGRAM_AUTHORIZED_USERS=123456789,987654321
+# Reattach anytime
+./scripts/attach.sh
 ```
 
-**Note**: The `.env` file is gitignored and won't be committed. This keeps your API keys secure.
+## Integration Setup
 
-### Getting an Anthropic API Key
+### Telegram Bot
 
-1. Go to https://console.anthropic.com
-2. Sign up or log in
-3. Navigate to API Keys
-4. Create a new key
-5. Copy and paste it into `.env`
+1. **Create a bot**: Message [@BotFather](https://t.me/botfather) on Telegram, send `/newbot`, choose a name and username
 
-**Note**: You may not need an API key if you're using Claude Code with its built-in authentication.
+2. **Store bot token in Keychain**:
+   ```bash
+   security add-generic-password -a "assistant" -s "credential-telegram-bot" -w "YOUR_BOT_TOKEN" -U
+   ```
+
+3. **Get your chat ID**: Message your new bot, then visit:
+   ```
+   https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates
+   ```
+   Find the `chat.id` field in the response.
+
+4. **Add to safe senders**: Edit `.claude/state/safe-senders.json`:
+   ```json
+   {
+     "telegram": {
+       "users": ["YOUR_CHAT_ID"]
+     }
+   }
+   ```
+
+5. **Set up Cloudflare tunnel** (for receiving messages):
+   ```bash
+   cd scripts/telegram-setup
+   npm install
+   node setup.js
+   ```
+   This guides you through tunnel creation and webhook registration.
+
+6. **Start the gateway**:
+   ```bash
+   node scripts/telegram-setup/gateway.js
+   ```
+
+7. **Test**: Send a message to your bot on Telegram.
+
+### Email (Fastmail)
+
+1. **Create API token**: Fastmail Settings > Privacy & Security > Integrations > API tokens > New
+
+2. **Store credentials**:
+   ```bash
+   security add-generic-password -a "assistant" -s "credential-fastmail-email" -w "you@fastmail.com" -U
+   security add-generic-password -a "assistant" -s "credential-fastmail-token" -w "YOUR_API_TOKEN" -U
+   ```
+
+3. **Test**: `node scripts/email/jmap.js inbox`
+
+### Email (Microsoft 365 / Graph API)
+
+1. **Register an Azure AD app** at [portal.azure.com](https://portal.azure.com):
+   - App registrations > New registration
+   - Name: "My Assistant Mail Client"
+   - Supported account types: Single tenant
+   - Add a client secret
+
+2. **Grant API permissions**:
+   - Required: `Mail.ReadWrite`, `Mail.Send`, `User.Read.All`
+   - Optional: `Calendars.ReadWrite`, `Contacts.ReadWrite`, `Tasks.ReadWrite.All`
+   - Grant admin consent
+
+3. **Store credentials**:
+   ```bash
+   security add-generic-password -a "assistant" -s "credential-azure-client-id" -w "YOUR_CLIENT_ID" -U
+   security add-generic-password -a "assistant" -s "credential-azure-tenant-id" -w "YOUR_TENANT_ID" -U
+   security add-generic-password -a "assistant" -s "credential-azure-secret-value" -w "YOUR_SECRET" -U
+   security add-generic-password -a "assistant" -s "credential-graph-user-email" -w "you@yourdomain.com" -U
+   ```
+
+4. **Test**: `node scripts/email/graph.js inbox`
+
+See `.claude/knowledge/integrations/microsoft-graph.md` for detailed Azure setup instructions.
+
+### Scheduled Jobs (launchd)
+
+Install background jobs for automatic monitoring:
+
+```bash
+# Copy templates to LaunchAgents
+cp launchd/com.assistant.*.plist.template ~/Library/LaunchAgents/
+
+# Edit each file: replace YOUR_USERNAME and paths
+# Then load them:
+launchctl load ~/Library/LaunchAgents/com.assistant.harness.plist
+launchctl load ~/Library/LaunchAgents/com.assistant.gateway.plist
+launchctl load ~/Library/LaunchAgents/com.assistant.email-reminder.plist
+launchctl load ~/Library/LaunchAgents/com.assistant.todo-reminder.plist
+launchctl load ~/Library/LaunchAgents/com.assistant.context-watchdog.plist
+```
+
+Available jobs:
+- **harness** - Keeps Claude Code running, auto-restart on crash
+- **gateway** - Telegram webhook receiver
+- **email-reminder** - Periodic inbox check (every 15 minutes)
+- **todo-reminder** - Check for overdue/high-priority todos (every 30 minutes)
+- **context-watchdog** - Monitor context usage, auto-save before limits
+
+See `launchd/README.md` for details on each template.
 
 ## Verification
 
-### Verify Installation
-
-Run these commands to verify everything is set up correctly:
+After setup, verify everything works:
 
 ```bash
-# Check Node.js
-node --version
-# Should output v18.x.x or higher
+# Check tmux session is running
+tmux ls
 
-# Check npm
-npm --version
-# Should output 8.x.x or higher
+# Check Telegram gateway (if configured)
+curl http://localhost:3847/health
 
-# Check Claude Code
-claude --version
-# Should output the Claude Code version
+# Check email (if configured)
+node scripts/email/jmap.js inbox     # Fastmail
+node scripts/email/graph.js inbox    # M365
 
-# Check dependencies
-npm list --depth=0
-# Should show all dependencies installed
-
-# Run tests (empty test suite for now)
-npm test
-# Should pass with "No tests found"
-```
-
-### Verify Claude Code Skills
-
-Start Claude Code and check that skills are available:
-
-```bash
-# Start Claude Code
-claude
-
-# In Claude Code, try:
-> /help
-
-# You should see:
-# - /spec - Create specification
-# - /plan - Create plan
-# - /validate - Validate spec/plan/implementation
-# - /build - Build from plan
-```
-
-If skills don't appear, verify that `.claude/skills/` directory exists and contains the skill files.
-
-## First Run
-
-### Start Claude Code
-
-```bash
-# From your project directory
-claude
-```
-
-Claude will:
-1. Read `.claude/CLAUDE.md` for context
-2. Load skills from `.claude/skills/`
-3. Be ready to use the workflow
-
-### Create Your First Feature
-
-Try the workflow with a simple test feature:
-
-```bash
-# In Claude Code:
-
-# Step 1: Create a spec
-> /spec hello-world
-
-# Claude will interview you. Respond with:
-# Goal: "Create a simple hello world function"
-# Must-have: "Function that returns 'Hello, World!'"
-# ... etc
-
-# Step 2: Create a plan
-> /plan specs/20260127-hello-world.spec.md
-
-# Claude will create tasks and tests
-
-# Step 3: Build it
-> /build plans/20260127-hello-world.plan.md
-
-# Claude will implement and run tests
+# Inside Claude Code:
+> /todo list           # Should show empty list
+> /memory              # Should show empty memory
+> /mode                # Should show current autonomy mode
 ```
 
 ## Troubleshooting
 
-### Issue: "claude: command not found"
+### "claude: command not found"
+Install Claude Code: `npm install -g @anthropic-ai/claude-code`
 
-**Solution**: Install Claude Code CLI
-```bash
-# Follow installation instructions at:
-# https://github.com/anthropics/claude-code
-```
+### Scripts not executable
+Run: `chmod +x scripts/*.sh .claude/hooks/*.sh`
 
-### Issue: npm install fails
+### Keychain permission denied
+- Unlock Keychain: open Keychain Access app
+- Check "Always allow" for security tool access
 
-**Solution**: Check Node.js version
-```bash
-node --version
-# Must be v18 or higher
+### tmux session won't start
+- Check if session exists: `tmux ls`
+- Kill stuck session: `tmux kill-session -t assistant`
+- Try again: `./scripts/start-tmux.sh --detach`
 
-# Update Node.js if needed
-# Download from https://nodejs.org
-```
+### Telegram webhook not receiving messages
+- Verify tunnel: `cloudflared tunnel list`
+- Check gateway health: `curl http://localhost:3847/health`
+- Re-register webhook: `./scripts/telegram-setup/start-tunnel.sh`
 
-### Issue: Skills not appearing in Claude Code
-
-**Solution**: Verify skill files exist
-```bash
-# Check if skill files exist
-ls -la .claude/skills/
-
-# Should show:
-# - spec.md
-# - plan.md
-# - validate.md
-# - build.md
-
-# If missing, you may need to re-clone or restore from backup
-```
-
-### Issue: Permission denied when running scripts
-
-**Solution**: Make scripts executable
-```bash
-chmod +x scripts/init.sh
-chmod +x .claude/hooks/pre-build.sh
-```
-
-### Issue: Tests fail during setup
-
-**Solution**: Check dependencies
-```bash
-# Reinstall dependencies
-rm -rf node_modules package-lock.json
-npm install
-
-# Verify TypeScript is installed
-npx tsc --version
-
-# Verify Jest is installed
-npx jest --version
-```
-
-### Issue: Pre-build hook fails
-
-**Solution**: Verify validation scripts work
-```bash
-# Test spec validator
-npm run validate:spec -- templates/spec.template.md
-
-# Test plan validator
-npm run validate:plan -- templates/plan.template.md
-
-# If these fail, check that tsx is installed:
-npm install -D tsx
-```
-
-## Directory Structure After Setup
-
-After successful setup, your project should look like:
-
-```
-my-project/
-├── .claude/
-│   ├── skills/
-│   │   ├── spec.md
-│   │   ├── plan.md
-│   │   ├── validate.md
-│   │   └── build.md
-│   ├── hooks/
-│   │   └── pre-build.sh
-│   └── CLAUDE.md
-├── templates/
-│   ├── spec.template.md
-│   ├── plan.template.md
-│   └── test.template.ts
-├── scripts/
-│   ├── init.sh
-│   ├── validate-spec.ts
-│   └── validate-plan.ts
-├── specs/                    # Empty initially
-├── plans/                    # Empty initially
-├── tests/                    # Empty initially
-├── src/                      # Empty initially
-├── node_modules/             # Created by npm install
-├── .env                      # Created by init.sh
-├── .gitignore
-├── package.json
-├── package-lock.json         # Created by npm install
-├── tsconfig.json
-├── jest.config.js
-├── README.md
-└── SETUP.md                  # This file
-```
+### "Node.js v18+ required"
+Update Node.js: `brew upgrade node`
 
 ## Customization
 
-### Modify Templates
+### Modify Your Assistant
 
-Edit templates to match your project needs:
-- `templates/spec.template.md` - Customize spec structure
-- `templates/plan.template.md` - Customize plan structure
-- `templates/test.template.ts` - Customize test structure
-
-### Modify Skills
-
-Edit skills to change workflow behavior:
-- `.claude/skills/spec.md` - Change spec interview process
-- `.claude/skills/plan.md` - Change planning logic
-- `.claude/skills/validate.md` - Add/remove validation layers
-- `.claude/skills/build.md` - Change build process
+- **Personality**: Edit `.claude/state/system-prompt.txt`
+- **Behavior rules**: Edit `.claude/CLAUDE.md`
+- **Autonomy**: `/mode <level>` or edit `.claude/state/autonomy.json`
+- **Skills**: Add new skills in `.claude/skills/` or use `/skill-create`
 
 ### Add Hooks
 
-Add more hooks in `.claude/hooks/`:
-- `post-build.sh` - Run after builds complete
-- `pre-commit.sh` - Run before git commits
-- `pre-plan.sh` - Run before planning
-
-Configure hooks in `.claude/settings.json` (create if doesn't exist).
+Configure hooks in `.claude/settings.json`. See `.claude/skills/hooks/SKILL.md` for details.
 
 ## Updating CC4Me
 
-If the CC4Me template is updated:
-
 ```bash
-# Add upstream remote (one time only)
-git remote add upstream https://github.com/your-org/CC4Me.git
+# Add upstream remote (one time)
+git remote add upstream https://github.com/RockaRhyme/CC4Me.git
 
-# Fetch updates
+# Fetch and merge updates
 git fetch upstream
-
-# Merge updates (be careful with conflicts)
 git merge upstream/main
 
-# Or rebase your changes on top of updates
-git rebase upstream/main
-
-# Reinstall dependencies if package.json changed
-npm install
+# Re-run init if scripts changed
+./scripts/init.sh
 ```
-
-## Next Steps
-
-Now that setup is complete:
-
-1. **Read README.md** - Understand the workflow
-2. **Read .claude/CLAUDE.md** - See what Claude knows about the project
-3. **Try the workflow** - Create a simple feature with /spec → /plan → /build
-4. **Customize** - Adjust templates and skills to your needs
-5. **Build features** - Use the workflow for real projects
-
-## Getting Help
-
-- **Documentation**: See README.md for workflow details
-- **Issues**: https://github.com/anthropics/claude-code/issues
-- **Claude Code Docs**: https://docs.anthropic.com/claude-code
-
-## Security Notes
-
-### Sensitive Files
-
-Never commit these files:
-- `.env` - Contains API keys
-- `.claude/settings.local.json` - User-specific settings
-- `node_modules/` - Dependencies (reinstall via npm)
-
-These are already in `.gitignore`.
-
-### API Keys
-
-- Store API keys in `.env` only
-- Never hardcode API keys in source files
-- Use environment variables in code: `process.env.ANTHROPIC_API_KEY`
-- Rotate keys if exposed
-
-### Hook Security
-
-- Review hook scripts before making executable
-- Hooks run with your permissions
-- Only add trusted hooks
 
 ---
 
-**Setup Complete!** 🎉
-
-You're ready to start using the spec-driven workflow. Begin with:
-
-```bash
-claude
-> /spec my-first-feature
-```
+**Setup complete!** Start with `./scripts/start-tmux.sh --detach` and message your assistant.
