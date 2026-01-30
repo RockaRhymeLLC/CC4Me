@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+    Telegram Gateway - launchd Service Template
+
+    Runs the Telegram webhook gateway (gateway.js) as a persistent service.
+    Receives messages from Telegram and injects them into the Claude Code session.
+
+    Installation:
+    1. Copy to ~/Library/LaunchAgents/com.assistant.gateway.plist
+    2. Replace YOUR_USERNAME and YOUR_PROJECT with your values
+    3. launchctl load ~/Library/LaunchAgents/com.assistant.gateway.plist
+    -->
+
+    <key>Label</key>
+    <string>com.assistant.gateway</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <!-- TODO: Update node path if different -->
+        <string>/opt/homebrew/bin/node</string>
+        <!-- TODO: Update to your project directory -->
+        <string>/Users/YOUR_USERNAME/YOUR_PROJECT/scripts/telegram-setup/gateway.js</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <!-- TODO: Update to your project directory -->
+    <string>/Users/YOUR_USERNAME/YOUR_PROJECT</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <key>StandardOutPath</key>
+    <string>/Users/YOUR_USERNAME/YOUR_PROJECT/logs/gateway.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/YOUR_USERNAME/YOUR_PROJECT/logs/gateway.error.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>GATEWAY_PORT</key>
+        <string>3847</string>
+    </dict>
+</dict>
+</plist>
