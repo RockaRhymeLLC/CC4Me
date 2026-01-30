@@ -18,6 +18,7 @@
  *   graph.js read <id>      - Read a specific email
  *   graph.js search "query" - Search emails
  *   graph.js send "to" "subject" "body" [--cc addr] [--bcc addr] [attachment1] ...
+ *   graph.js mark-read <id>  - Mark an email as read
  */
 
 const { execSync } = require('child_process');
@@ -130,6 +131,14 @@ async function readEmail(emailId) {
   return graphRequest(`/users/${encodeURIComponent(userEmail)}/messages/${emailId}?$select=id,subject,from,toRecipients,receivedDateTime,body,isRead`);
 }
 
+// Mark email as read
+async function markAsRead(emailId) {
+  return graphRequest(`/users/${encodeURIComponent(userEmail)}/messages/${emailId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ isRead: true }),
+  });
+}
+
 // Search emails
 async function searchEmails(query, limit = 10) {
   const endpoint = `/users/${encodeURIComponent(userEmail)}/messages?$top=${limit}&$search="${encodeURIComponent(query)}"&$select=id,subject,from,receivedDateTime,bodyPreview`;
@@ -197,6 +206,7 @@ async function main() {
         const emailId = args[0];
         if (!emailId) { console.error('Usage: graph.js read <email_id>'); process.exit(1); }
         const email = await readEmail(emailId);
+        if (!email.isRead) await markAsRead(emailId);
         console.log('## Email\n');
         console.log(`From: ${email.from?.emailAddress?.address}`);
         console.log(`To: ${email.toRecipients?.map(r => r.emailAddress.address).join(', ')}`);
@@ -212,6 +222,14 @@ async function main() {
         } else {
           console.log('(no body)');
         }
+        break;
+      }
+
+      case 'mark-read': {
+        const emailId = args[0];
+        if (!emailId) { console.error('Usage: graph.js mark-read <email_id>'); process.exit(1); }
+        await markAsRead(emailId);
+        console.log('✅ Marked as read');
         break;
       }
 
@@ -250,7 +268,7 @@ async function main() {
 
       default:
         console.log('Usage: graph.js <command> [args]');
-        console.log('Commands: inbox, unread, read <id>, search "query", send "to" "subject" "body" [attachments...]');
+        console.log('Commands: inbox, unread, read <id>, mark-read <id>, search "query", send "to" "subject" "body" [attachments...]');
     }
   } catch (error) {
     console.error('Error:', error.message);

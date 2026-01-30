@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 const { execSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
 
 // Get credentials from Keychain
 function getCredential(name) {
@@ -65,7 +67,7 @@ async function listInbox(limit = 10, unreadOnly = false) {
   const inboxId = await getInboxId(apiUrl, accountId);
 
   const filter = { inMailbox: inboxId };
-  if (unreadOnly) filter.hasKeyword = { '$seen': false };
+  if (unreadOnly) filter.notKeyword = '$seen';
 
   const data = await jmapRequest(apiUrl, accountId, [
     ['Email/query', {
@@ -81,8 +83,10 @@ async function listInbox(limit = 10, unreadOnly = false) {
     }, 'b'],
   ]);
 
+  const queryResult = data.methodResponses[0][1];
+  if (!queryResult.ids || queryResult.ids.length === 0) return [];
   const emails = data.methodResponses[1][1].list;
-  return emails;
+  return emails || [];
 }
 
 // Read single email
@@ -95,12 +99,22 @@ async function readEmail(emailId) {
     ['Email/get', {
       accountId,
       ids: [emailId],
-      properties: ['id', 'subject', 'from', 'to', 'receivedAt', 'textBody', 'bodyValues'],
+      properties: ['id', 'subject', 'from', 'to', 'receivedAt', 'keywords', 'textBody', 'bodyValues'],
       fetchTextBodyValues: true,
     }, 'a'],
   ]);
 
-  return data.methodResponses[0][1].list[0];
+  return { email: data.methodResponses[0][1].list[0], apiUrl, accountId };
+}
+
+// Mark email as read
+async function markAsRead(apiUrl, accountId, emailId) {
+  return jmapRequest(apiUrl, accountId, [
+    ['Email/set', {
+      accountId,
+      update: { [emailId]: { 'keywords/$seen': true } },
+    }, 'a'],
+  ]);
 }
 
 // Search emails
@@ -126,8 +140,46 @@ async function searchEmails(query, limit = 10) {
   return data.methodResponses[1][1].list;
 }
 
-// Send email
-async function sendEmail(to, subject, body) {
+// Upload a blob (for attachments)
+async function uploadBlob(uploadUrl, accountId, filePath) {
+  const fileData = fs.readFileSync(filePath);
+  const url = uploadUrl.replace('{accountId}', accountId);
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      ...headers,
+      'Content-Type': 'application/octet-stream',
+    },
+    body: fileData,
+  });
+  if (!response.ok) throw new Error(`Upload failed: ${response.status}`);
+  return response.json();
+}
+
+// MIME type lookup for common attachment types
+function getMimeType(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  const types = {
+    '.pdf': 'application/pdf',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    '.doc': 'application/msword',
+    '.txt': 'text/plain',
+    '.csv': 'text/csv',
+    '.json': 'application/json',
+    '.zip': 'application/zip',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.md': 'text/markdown',
+  };
+  return types[ext] || 'application/octet-stream';
+}
+
+// Send email (with optional attachments)
+async function sendEmail(to, subject, body, attachmentPaths = [], cc = [], bcc = []) {
   const session = await getSession();
   const apiUrl = session.apiUrl;
   const accountId = session.primaryAccounts['urn:ietf:params:jmap:mail'];
@@ -144,6 +196,39 @@ async function sendEmail(to, subject, body) {
   const identity = identities.find(i => i.email === email) || identities[0];
   const identityId = identity.id;
 
+  // Upload attachments if any
+  const attachments = [];
+  for (const filePath of attachmentPaths) {
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`Attachment not found: ${filePath}`);
+    }
+    console.log(`Uploading: ${path.basename(filePath)}...`);
+    const blob = await uploadBlob(session.uploadUrl, accountId, filePath);
+    attachments.push({
+      blobId: blob.blobId,
+      type: getMimeType(filePath),
+      name: path.basename(filePath),
+      size: fs.statSync(filePath).size,
+    });
+  }
+
+  // Build the email object
+  const draft = {
+    mailboxIds: { [draftsMailboxId]: true },
+    from: [{ email }],
+    to: [{ email: to }],
+    ...(cc.length > 0 ? { cc: cc.map(addr => ({ email: addr })) } : {}),
+    ...(bcc.length > 0 ? { bcc: bcc.map(addr => ({ email: addr })) } : {}),
+    subject,
+    keywords: { '$draft': true },
+    textBody: [{ partId: 'body', type: 'text/plain' }],
+    bodyValues: { 'body': { value: body } },
+  };
+
+  if (attachments.length > 0) {
+    draft.attachments = attachments;
+  }
+
   // Build the onSuccessUpdateEmail patch object
   const updatePatch = {};
   updatePatch['mailboxIds/' + draftsMailboxId] = null;
@@ -154,17 +239,7 @@ async function sendEmail(to, subject, body) {
   const sendData = await jmapRequest(apiUrl, accountId, [
     ['Email/set', {
       accountId,
-      create: {
-        draft: {
-          mailboxIds: { [draftsMailboxId]: true },
-          from: [{ email }],
-          to: [{ email: to }],
-          subject,
-          keywords: { '$draft': true },
-          textBody: [{ partId: 'body', type: 'text/plain' }],
-          bodyValues: { 'body': { value: body } },
-        },
-      },
+      create: { draft },
     }, '0'],
     ['EmailSubmission/set', {
       accountId,
@@ -231,19 +306,32 @@ async function main() {
       case 'read': {
         const emailId = args[0];
         if (!emailId) { console.error('Usage: jmap.js read <email_id>'); process.exit(1); }
-        const email = await readEmail(emailId);
+        const { email: msg, apiUrl, accountId } = await readEmail(emailId);
+        const unread = !msg.keywords || !msg.keywords['$seen'];
+        if (unread) await markAsRead(apiUrl, accountId, emailId);
         console.log('## Email\n');
-        console.log(`From: ${email.from?.[0]?.email}`);
-        console.log(`To: ${email.to?.[0]?.email}`);
-        console.log(`Subject: ${email.subject}`);
-        console.log(`Date: ${new Date(email.receivedAt).toLocaleString()}`);
+        console.log(`From: ${msg.from?.[0]?.email}`);
+        console.log(`To: ${msg.to?.[0]?.email}`);
+        console.log(`Subject: ${msg.subject}`);
+        console.log(`Date: ${new Date(msg.receivedAt).toLocaleString()}`);
         console.log('\n---\n');
-        const bodyPart = email.textBody?.[0];
-        if (bodyPart && email.bodyValues?.[bodyPart.partId]) {
-          console.log(email.bodyValues[bodyPart.partId].value);
+        const bodyPart = msg.textBody?.[0];
+        if (bodyPart && msg.bodyValues?.[bodyPart.partId]) {
+          console.log(msg.bodyValues[bodyPart.partId].value);
         } else {
           console.log('(no text body)');
         }
+        break;
+      }
+
+      case 'mark-read': {
+        const emailId = args[0];
+        if (!emailId) { console.error('Usage: jmap.js mark-read <email_id>'); process.exit(1); }
+        const session = await getSession();
+        const apiUrl = session.apiUrl;
+        const accountId = session.primaryAccounts['urn:ietf:params:jmap:mail'];
+        await markAsRead(apiUrl, accountId, emailId);
+        console.log('✅ Marked as read');
         break;
       }
 
@@ -257,16 +345,32 @@ async function main() {
       }
 
       case 'send': {
-        const [to, subject, body] = args;
-        if (!to || !subject || !body) { console.error('Usage: jmap.js send "to" "subject" "body"'); process.exit(1); }
-        await sendEmail(to, subject, body);
-        console.log(`✅ Email sent to ${to}`);
+        // Parse --cc and --bcc flags from args
+        const ccAddresses = [];
+        const bccAddresses = [];
+        const remaining = [];
+        for (let i = 0; i < args.length; i++) {
+          if (args[i] === '--cc' && i + 1 < args.length) {
+            ccAddresses.push(args[++i]);
+          } else if (args[i] === '--bcc' && i + 1 < args.length) {
+            bccAddresses.push(args[++i]);
+          } else {
+            remaining.push(args[i]);
+          }
+        }
+        const [to, subject, body, ...attachments] = remaining;
+        if (!to || !subject || !body) { console.error('Usage: jmap.js send "to" "subject" "body" [--cc addr] [--bcc addr] [attachment1] ...'); process.exit(1); }
+        await sendEmail(to, subject, body, attachments, ccAddresses, bccAddresses);
+        const attachNote = attachments.length > 0 ? ` with ${attachments.length} attachment(s)` : '';
+        const ccNote = ccAddresses.length > 0 ? ` (cc: ${ccAddresses.join(', ')})` : '';
+        const bccNote = bccAddresses.length > 0 ? ` (bcc: ${bccAddresses.length} recipient(s))` : '';
+        console.log(`✅ Email sent to ${to}${ccNote}${bccNote}${attachNote}`);
         break;
       }
 
       default:
         console.log('Usage: jmap.js <command> [args]');
-        console.log('Commands: inbox, unread, read <id>, search "query", send "to" "subject" "body"');
+        console.log('Commands: inbox, unread, read <id>, mark-read <id>, search "query", send "to" "subject" "body"');
     }
   } catch (error) {
     console.error('Error:', error.message);
