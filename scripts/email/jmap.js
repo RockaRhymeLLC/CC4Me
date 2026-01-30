@@ -14,6 +14,7 @@
  *   jmap.js inbox          - Show recent inbox messages
  *   jmap.js unread         - Show unread messages only
  *   jmap.js read <id>      - Read a specific email
+ *   jmap.js mark-read <id>  - Mark an email as read
  *   jmap.js search "query" - Search emails
  *   jmap.js send "to" "subject" "body" [--cc addr] [--bcc addr] [attachment1] ...
  */
@@ -91,7 +92,7 @@ async function listInbox(limit = 10, unreadOnly = false) {
   const inboxId = await getInboxId(apiUrl, accountId);
 
   const filter = { inMailbox: inboxId };
-  if (unreadOnly) filter.hasKeyword = { '$seen': false };
+  if (unreadOnly) filter.notKeyword = '$seen';
 
   const data = await jmapRequest(apiUrl, accountId, [
     ['Email/query', {
@@ -107,6 +108,9 @@ async function listInbox(limit = 10, unreadOnly = false) {
     }, 'b'],
   ]);
 
+  const queryResult = data.methodResponses[0][1];
+  if (!queryResult.ids || queryResult.ids.length === 0) return [];
+
   const emails = data.methodResponses[1][1].list;
   return emails;
 }
@@ -121,12 +125,22 @@ async function readEmail(emailId) {
     ['Email/get', {
       accountId,
       ids: [emailId],
-      properties: ['id', 'subject', 'from', 'to', 'receivedAt', 'textBody', 'bodyValues'],
+      properties: ['id', 'subject', 'from', 'to', 'receivedAt', 'keywords', 'textBody', 'bodyValues'],
       fetchTextBodyValues: true,
     }, 'a'],
   ]);
 
-  return data.methodResponses[0][1].list[0];
+  return { email: data.methodResponses[0][1].list[0], apiUrl, accountId };
+}
+
+// Mark email as read
+async function markAsRead(apiUrl, accountId, emailId) {
+  return jmapRequest(apiUrl, accountId, [
+    ['Email/set', {
+      accountId,
+      update: { [emailId]: { 'keywords/$seen': true } },
+    }, 'a'],
+  ]);
 }
 
 // Search emails
@@ -318,19 +332,32 @@ async function main() {
       case 'read': {
         const emailId = args[0];
         if (!emailId) { console.error('Usage: jmap.js read <email_id>'); process.exit(1); }
-        const email = await readEmail(emailId);
+        const { email: msg, apiUrl, accountId } = await readEmail(emailId);
+        const unread = !msg.keywords || !msg.keywords['$seen'];
+        if (unread) await markAsRead(apiUrl, accountId, emailId);
         console.log('## Email\n');
-        console.log(`From: ${email.from?.[0]?.email}`);
-        console.log(`To: ${email.to?.[0]?.email}`);
-        console.log(`Subject: ${email.subject}`);
-        console.log(`Date: ${new Date(email.receivedAt).toLocaleString()}`);
+        console.log(`From: ${msg.from?.[0]?.email}`);
+        console.log(`To: ${msg.to?.[0]?.email}`);
+        console.log(`Subject: ${msg.subject}`);
+        console.log(`Date: ${new Date(msg.receivedAt).toLocaleString()}`);
         console.log('\n---\n');
-        const bodyPart = email.textBody?.[0];
-        if (bodyPart && email.bodyValues?.[bodyPart.partId]) {
-          console.log(email.bodyValues[bodyPart.partId].value);
+        const bodyPart = msg.textBody?.[0];
+        if (bodyPart && msg.bodyValues?.[bodyPart.partId]) {
+          console.log(msg.bodyValues[bodyPart.partId].value);
         } else {
           console.log('(no text body)');
         }
+        break;
+      }
+
+      case 'mark-read': {
+        const emailId = args[0];
+        if (!emailId) { console.error('Usage: jmap.js mark-read <email_id>'); process.exit(1); }
+        const session = await getSession();
+        const apiUrl = session.apiUrl;
+        const accountId = session.primaryAccounts['urn:ietf:params:jmap:mail'];
+        await markAsRead(apiUrl, accountId, emailId);
+        console.log('✅ Marked as read');
         break;
       }
 
@@ -369,7 +396,7 @@ async function main() {
 
       default:
         console.log('Usage: jmap.js <command> [args]');
-        console.log('Commands: inbox, unread, read <id>, search "query", send "to" "subject" "body"');
+        console.log('Commands: inbox, unread, read <id>, mark-read <id>, search "query", send "to" "subject" "body"');
     }
   } catch (error) {
     console.error('Error:', error.message);
