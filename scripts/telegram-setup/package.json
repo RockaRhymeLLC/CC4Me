@@ -1,0 +1,20 @@
+{
+  "name": "telegram-setup",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Telegram bot setup and gateway scripts for CC4Me assistant integration",
+  "main": "gateway.js",
+  "scripts": {
+    "gateway": "node gateway.js",
+    "setup": "node setup.js",
+    "tunnel": "bash start-tunnel.sh"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "imapflow": "^1.2.8",
+    "playwright": "^1.58.0"
+  }
+}

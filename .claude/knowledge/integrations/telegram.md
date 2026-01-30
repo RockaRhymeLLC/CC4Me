@@ -2,6 +2,8 @@
 
 How to set up and use Telegram bot integration for the assistant.
 
+**See also**: `.claude/skills/telegram/SKILL.md` for full architecture, channel modes, and operational details.
+
 ## Prerequisites
 
 - Telegram account
@@ -41,64 +43,42 @@ Update `.claude/state/safe-senders.json`:
 }
 ```
 
-## Library: telegraf
+## Architecture
 
-We use [telegraf](https://telegraf.js.org/) for Telegram integration.
+Responses are delivered via a transcript watcher that streams to the active channel.
 
-### Installation
+See `.claude/skills/telegram/SKILL.md` for full architecture details, including:
+- Channel modes (terminal, telegram, telegram-verbose, silent)
+- Transcript watcher operation
+- Gateway details
+- Proactive communication guidelines
 
-```bash
-npm install telegraf
-```
+### Channel Modes (Quick Reference)
 
-### Basic Usage
-
-```typescript
-import { Telegraf } from 'telegraf';
-
-// Retrieve token from Keychain
-const token = execSync('security find-generic-password -s "credential-telegram-bot" -w').toString().trim();
-
-const bot = new Telegraf(token);
-
-// Handle incoming messages
-bot.on('text', async (ctx) => {
-  const chatId = ctx.chat.id.toString();
-  const message = ctx.message.text;
-
-  // Check if sender is in safe list
-  // Process message
-  // Send response
-  await ctx.reply('Response here');
-});
-
-// Start bot
-bot.launch();
-```
+| Channel | Behavior |
+|---------|----------|
+| `terminal` | Responses stay in terminal only (default) |
+| `telegram` | Text responses sent to Telegram (no thinking blocks) |
+| `telegram-verbose` | Text + thinking blocks sent to Telegram |
+| `silent` | No messages sent anywhere |
 
 ## Common Operations
 
 ### Send a Message
 
-```typescript
-await bot.telegram.sendMessage(chatId, 'Hello!');
+```bash
+BOT_TOKEN=$(security find-generic-password -s "credential-telegram-bot" -w)
+curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+  -H "Content-Type: application/json" \
+  -d '{"chat_id": "CHAT_ID", "text": "Message"}'
 ```
 
 ### Send with Markdown
 
-```typescript
-await bot.telegram.sendMessage(chatId, '*Bold* and _italic_', {
-  parse_mode: 'Markdown'
-});
-```
-
-### Send a File
-
-```typescript
-await bot.telegram.sendDocument(chatId, {
-  source: '/path/to/file.pdf',
-  filename: 'document.pdf'
-});
+```bash
+curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+  -H "Content-Type: application/json" \
+  -d '{"chat_id": "CHAT_ID", "text": "*Bold* and _italic_", "parse_mode": "Markdown"}'
 ```
 
 ## Security Notes
@@ -112,8 +92,9 @@ await bot.telegram.sendDocument(chatId, {
 
 **Bot not responding:**
 - Check token is correct
-- Ensure bot is running (launchd service)
+- Ensure gateway is running: `curl http://localhost:3847/health`
 - Verify chat ID in safe senders
+- Check watcher is running: `pgrep -f transcript-watcher`
 
 **Permission denied:**
 - Keychain may need unlock
