@@ -96,14 +96,41 @@ const SESSION_NAME = 'bmo';
 // Track if we're currently starting a session
 let sessionStarting = false;
 let pendingMessages = [];
+let typingInterval = null;
+let typingCooldown = false;
 
-// Send typing indicator
+// Send typing indicator (single shot)
 function sendTypingIndicator(chatId) {
+  if (typingCooldown) return; // Suppress during cooldown after stop
   try {
     execSync(`TELEGRAM_CHAT_ID=${chatId} "${TELEGRAM_SEND}" typing`, { stdio: 'ignore' });
     console.log('⌨️  Sent typing indicator');
   } catch (e) {
     console.error('⚠️  Failed to send typing indicator');
+  }
+}
+
+// Start repeating typing indicator every 4 seconds until response is sent
+function startTypingLoop(chatId) {
+  stopTypingLoop(); // Clear any existing loop
+  typingCooldown = false;
+  sendTypingIndicator(chatId); // Send immediately
+  typingInterval = setInterval(() => {
+    sendTypingIndicator(chatId);
+  }, 4000);
+  // Safety timeout: stop after 3 minutes no matter what
+  setTimeout(() => stopTypingLoop(), 180000);
+}
+
+// Stop the typing indicator loop
+function stopTypingLoop() {
+  if (typingInterval) {
+    clearInterval(typingInterval);
+    typingInterval = null;
+    // Brief cooldown to prevent straggling interval ticks
+    typingCooldown = true;
+    setTimeout(() => { typingCooldown = false; }, 2000);
+    console.log('⌨️  Typing loop stopped');
   }
 }
 
@@ -207,8 +234,8 @@ async function processMessage(msg) {
   if (!sessionExists()) {
     console.log(`💤 No session found - waking up BMO...`);
 
-    // Send typing indicator while waking up
-    sendTypingIndicator(chatId);
+    // Start typing loop while waking up
+    startTypingLoop(chatId);
 
     // Queue this message
     pendingMessages.push({ text, chatId, firstName });
@@ -225,8 +252,8 @@ async function processMessage(msg) {
     return;
   }
 
-  // Send typing indicator - BMO is about to work on this
-  sendTypingIndicator(chatId);
+  // Start typing loop - keeps going until response is sent
+  startTypingLoop(chatId);
 
   // Inject into session
   injectMessage(text, chatId, firstName);
@@ -242,6 +269,14 @@ const server = http.createServer((req, res) => {
       mode: 'gateway-v4-tmux',
       session: hasSession ? 'connected' : 'not found'
     }));
+    return;
+  }
+
+  // Internal endpoint: transcript watcher calls this to stop typing
+  if (req.method === 'POST' && req.url === '/typing-done') {
+    stopTypingLoop();
+    res.writeHead(200);
+    res.end('ok');
     return;
   }
 

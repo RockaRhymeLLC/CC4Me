@@ -45,6 +45,10 @@ send_telegram() {
       '{chat_id: $chat_id, text: $text}')" > /dev/null
 
   log "Sent to Telegram (${#text} chars)"
+
+  # Tell gateway to stop typing indicator loop
+  /usr/bin/curl -s -X POST "http://localhost:3847/typing-done" > /dev/null 2>&1 || true
+  log "Sent typing-done signal"
 }
 
 get_channel() {

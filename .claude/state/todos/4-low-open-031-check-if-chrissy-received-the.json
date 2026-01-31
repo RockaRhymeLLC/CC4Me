@@ -1,0 +1,16 @@
+{
+  "id": "031",
+  "title": "Check if Chrissy received the calendar invite for 'Butt Slapping' event",
+  "description": "Verify that the Calendar attendee invitation sent to chrissyhurley@outlook.com was received and rendered properly. Also check if the .ics file sent via iMessage came through. Report findings to Dave.",
+  "priority": "low",
+  "status": "open",
+  "due": "2026-01-31",
+  "created": "2026-01-30T22:10:00Z",
+  "actions": [
+    {
+      "timestamp": "2026-01-30T22:10:00Z",
+      "type": "created",
+      "note": "Created — calendar invite sent via Calendar attendee + iMessage .ics file"
+    }
+  ]
+}

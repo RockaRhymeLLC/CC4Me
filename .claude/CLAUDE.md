@@ -112,6 +112,12 @@ Reference documentation lives in `.claude/knowledge/`:
 
 ## Core Behaviors
 
+### Telegram Sending
+
+When the channel (`.claude/state/channel.txt`) is `telegram`, the **transcript watcher** automatically forwards your terminal output to Telegram. Do NOT also call `telegram-send.sh` — that causes double messages. Just write to the terminal normally.
+
+Only use `telegram-send.sh` directly when the channel is `silent` and you need to proactively reach Dave.
+
 ### Check Memory First
 
 **Before asking the user for information**, check `.claude/state/memory.md`. It contains:

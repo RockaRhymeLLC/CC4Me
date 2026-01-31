@@ -8,6 +8,8 @@ This file stores facts about the user that BMO should remember.
 - Telegram chat ID: 7629737488
 - Work email: dhurley@servos.io
 - Personal email: daveh@outlook.com
+- Home address: 17756 Big Falls Rd, White Hall, MD 21161
+- Wife: Chrissy Hurley (phone: 724-681-1112, iMessage: +17246811112, email: chrissyhurley@outlook.com / chrissyh22@gmail.com)
 - Will Loving (Dave's boss): wloving@servos.io
 
 ## Preferences
@@ -34,6 +36,15 @@ This file stores facts about the user that BMO should remember.
 - Domain: playplan.app (on Cloudflare)
 - Telegram webhook: https://bmo.playplan.app/telegram
 - Cloudflare tunnel: bmo (ID: cb511994-8ac6-4b47-b8f2-f02222da30dc)
+
+## Family
+
+- Son: Grant (plays soccer — 2018 Boys Maroon team)
+- Son: Gabe (age 10, plays basketball — Hereford Goodson team, loves Ireland and soccer — favorites: Bukayo Saka, Troy Parrott)
+
+## Tools Installed
+
+- icalBuddy (Homebrew) — reads macOS Calendar app. Use for Dave's real-world schedule (synced iCloud, Exchange, subscriptions).
 
 ## Other
 

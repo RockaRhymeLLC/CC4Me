@@ -163,9 +163,75 @@ The assistant should:
 - Link to to-dos when relevant
 - Add reminder notes for actions needed
 
+## macOS Calendar (icalBuddy)
+
+Dave's macOS Calendar app has synced calendars (iCloud, Exchange, subscriptions). Use `icalBuddy` to read them.
+
+**Important**: `icalBuddy` is read-only for Dave's real calendar. Use `calendar.md` for BMO's own scheduling/reminders.
+
+### Common Commands
+
+```bash
+export PATH="/opt/homebrew/bin:/usr/bin:$PATH"
+
+# Today's events
+icalBuddy eventsToday
+
+# Tomorrow's events
+icalBuddy eventsFrom:'tomorrow' to:'tomorrow'
+
+# Next 7 days
+icalBuddy eventsToday+7
+
+# Events on a specific date
+icalBuddy eventsFrom:'2026-02-01' to:'2026-02-01'
+
+# Events happening right now
+icalBuddy eventsNow
+
+# List all calendars
+icalBuddy calendars
+```
+
+### Available Calendars
+
+| Calendar | Type | Content |
+|----------|------|---------|
+| Work | CalDAV | Work events |
+| Calendar | CalDAV / Exchange | General events |
+| Family | CalDAV | Family events |
+| Home | CalDAV | Home events |
+| BCPS School Calendar | CalDAV | School district calendar |
+| 2018 Boys Maroon | Subscription | Grant's soccer schedule |
+| Hereford (Goodson) | Subscription | Basketball schedule |
+| Ravens Schedule | CalDAV | Baltimore Ravens games |
+| Birthdays | Birthday / Exchange | Contact birthdays |
+| US Holidays | Subscription / Exchange | Holidays |
+
+### Useful Options
+
+```bash
+# Exclude all-day events (holidays, etc.)
+icalBuddy -ea eventsToday
+
+# Only specific calendars
+icalBuddy -ic "2018 Boys Maroon" eventsToday+7
+
+# No calendar names in output
+icalBuddy -nc eventsToday
+
+# No property names (cleaner output)
+icalBuddy -npn eventsToday
+
+# Strip ANSI formatting (for parsing)
+icalBuddy -f eventsToday
+```
+
 ## Notes
 
 - Calendar file is human-readable and editable
 - User can modify directly via text editor
 - Empty date sections can be cleaned up
 - Past events are kept for reference (can archive manually)
+- icalBuddy reads macOS Calendar app — use it for Dave's real-world schedule
+- `calendar.md` is BMO's own scheduling layer (reminders, to-do deadlines)
