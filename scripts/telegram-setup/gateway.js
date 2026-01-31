@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * Telegram Gateway (media support)
- * Receives webhooks and injects messages into the Claude Code session via tmux.
+ * BMO Telegram Gateway v6 (media support)
+ * Receives webhooks and injects messages into the real Claude Code session via tmux.
  * Supports text, photos, and documents.
- * If no session exists, starts one automatically.
- * The transcript watcher handles sending responses back to Telegram.
+ * If no session exists, starts one automatically!
+ * The Stop hook handles sending responses back to Telegram.
  */
 
 const http = require('http');
@@ -13,10 +13,8 @@ const fs = require('fs');
 const path = require('path');
 const { execSync, spawn } = require('child_process');
 
-// Resolve project directory (parent of scripts/telegram-setup/)
-const BASE_DIR = path.resolve(__dirname, '../..');
-const TELEGRAM_SEND = path.join(BASE_DIR, 'scripts/telegram-send.sh');
-const MEDIA_DIR = path.join(BASE_DIR, '.claude/state/telegram-media');
+const TELEGRAM_SEND = '/Users/bmo/CC4Me-BMO/scripts/telegram-send.sh';
+const MEDIA_DIR = '/Users/bmo/CC4Me-BMO/.claude/state/telegram-media';
 
 // Ensure media directory exists
 if (!fs.existsSync(MEDIA_DIR)) {
@@ -41,7 +39,7 @@ async function downloadTelegramFile(fileId, filename) {
   try {
     // Get file path from Telegram
     const fileInfo = await new Promise((resolve, reject) => {
-      https.get(`https://api.telegram.org/bot${token}/getFile?file_id=${encodeURIComponent(fileId)}`, (res) => {
+      https.get(`https://api.telegram.org/bot${token}/getFile?file_id=${fileId}`, (res) => {
         let data = '';
         res.on('data', chunk => data += chunk);
         res.on('end', () => {
@@ -77,7 +75,7 @@ async function downloadTelegramFile(fileId, filename) {
       });
     });
 
-    console.log(`Downloaded: ${filename}`);
+    console.log(`📥 Downloaded: ${filename}`);
     return localPath;
   } catch (e) {
     console.error(`Failed to download file: ${e.message}`);
@@ -85,41 +83,54 @@ async function downloadTelegramFile(fileId, filename) {
   }
 }
 
-// Find tmux binary
-function findTmux() {
-  if (process.env.TMUX_PATH) return process.env.TMUX_PATH;
-  try {
-    return execSync('which tmux', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
-  } catch (e) {
-    const locations = ['/opt/homebrew/bin/tmux', '/usr/local/bin/tmux', '/usr/bin/tmux'];
-    for (const loc of locations) {
-      try { fs.accessSync(loc, fs.constants.X_OK); return loc; } catch (e) {}
-    }
-    console.error('tmux not found. Install with: brew install tmux');
-    process.exit(1);
-  }
-}
-
 // Configuration
-const PORT = parseInt(process.env.GATEWAY_PORT || '3847', 10);
+const PORT = 3847;
+const BASE_DIR = '/Users/bmo/CC4Me-BMO';
 const STATE_DIR = path.join(BASE_DIR, '.claude/state');
 const SAFE_SENDERS_FILE = path.join(STATE_DIR, 'safe-senders.json');
 const CHANNEL_FILE = path.join(STATE_DIR, 'channel.txt');
 const START_SCRIPT = path.join(BASE_DIR, 'scripts/start-tmux.sh');
-const TMUX = findTmux();
-const SESSION_NAME = process.env.TMUX_SESSION || 'assistant';
+const TMUX = '/opt/homebrew/bin/tmux';
+const SESSION_NAME = 'bmo';
 
 // Track if we're currently starting a session
 let sessionStarting = false;
 let pendingMessages = [];
+let typingInterval = null;
+let typingCooldown = false;
 
-// Send typing indicator
+// Send typing indicator (single shot)
 function sendTypingIndicator(chatId) {
+  if (typingCooldown) return; // Suppress during cooldown after stop
   try {
     execSync(`TELEGRAM_CHAT_ID=${chatId} "${TELEGRAM_SEND}" typing`, { stdio: 'ignore' });
-    console.log('Sent typing indicator');
+    console.log('⌨️  Sent typing indicator');
   } catch (e) {
-    console.error('Failed to send typing indicator');
+    console.error('⚠️  Failed to send typing indicator');
+  }
+}
+
+// Start repeating typing indicator every 4 seconds until response is sent
+function startTypingLoop(chatId) {
+  stopTypingLoop(); // Clear any existing loop
+  typingCooldown = false;
+  sendTypingIndicator(chatId); // Send immediately
+  typingInterval = setInterval(() => {
+    sendTypingIndicator(chatId);
+  }, 4000);
+  // Safety timeout: stop after 3 minutes no matter what
+  setTimeout(() => stopTypingLoop(), 180000);
+}
+
+// Stop the typing indicator loop
+function stopTypingLoop() {
+  if (typingInterval) {
+    clearInterval(typingInterval);
+    typingInterval = null;
+    // Brief cooldown to prevent straggling interval ticks
+    typingCooldown = true;
+    setTimeout(() => { typingCooldown = false; }, 2000);
+    console.log('⌨️  Typing loop stopped');
   }
 }
 
@@ -135,7 +146,7 @@ function getSafeSenders() {
 // Check if tmux session exists
 function sessionExists() {
   try {
-    execSync(`"${TMUX}" has-session -t "${SESSION_NAME}" 2>/dev/null`);
+    execSync(`${TMUX} has-session -t ${SESSION_NAME} 2>/dev/null`);
     return true;
   } catch (e) {
     return false;
@@ -145,12 +156,12 @@ function sessionExists() {
 // Start a new Claude session
 async function startSession() {
   if (sessionStarting) {
-    console.log('Session already starting, queuing message...');
+    console.log('⏳ Session already starting, queuing message...');
     return false;
   }
 
   sessionStarting = true;
-  console.log('Starting Claude session...');
+  console.log('🚀 Starting Claude session...');
 
   try {
     // Run start-tmux.sh --detach (this handles the full startup including auto-prompt)
@@ -160,15 +171,15 @@ async function startSession() {
     });
 
     // Wait additional time for Claude to fully initialize
-    console.log('Waiting for Claude to initialize...');
+    console.log('⏳ Waiting for Claude to initialize...');
     await new Promise(resolve => setTimeout(resolve, 12000));
 
     sessionStarting = false;
-    console.log('Session started!');
+    console.log('✅ Session started!');
 
     // Process any queued messages
     if (pendingMessages.length > 0) {
-      console.log(`Processing ${pendingMessages.length} queued message(s)...`);
+      console.log(`📬 Processing ${pendingMessages.length} queued message(s)...`);
       for (const msg of pendingMessages) {
         injectMessage(msg.text, msg.chatId, msg.firstName);
       }
@@ -178,7 +189,7 @@ async function startSession() {
     return true;
   } catch (e) {
     sessionStarting = false;
-    console.error(`Failed to start session: ${e.message}`);
+    console.error(`❌ Failed to start session: ${e.message}`);
     return false;
   }
 }
@@ -188,20 +199,19 @@ function injectMessage(text, chatId, firstName) {
   // Set channel to telegram so the watcher sends responses there
   fs.writeFileSync(CHANNEL_FILE, 'telegram\n');
 
-  // Strip newlines/CRs — they would trigger Enter in tmux, submitting partial messages
-  const cleaned = text.replace(/[\r\n]+/g, ' ');
-  // Escape single quotes for shell single-quote context
-  const sanitized = cleaned.replace(/'/g, "'\\''");
+  // Format and inject the message
+  // Escape special characters for tmux
+  const sanitized = text.replace(/'/g, "'\\''");
   const formatted = `[Telegram] ${firstName}: ${sanitized}`;
 
   try {
     // Send the text first, then Enter separately for reliability
-    execSync(`"${TMUX}" send-keys -t "${SESSION_NAME}" -l '${formatted}'`);
-    execSync(`"${TMUX}" send-keys -t "${SESSION_NAME}" Enter`);
-    console.log(`Injected: "${text.substring(0, 50)}..."`);
+    execSync(`${TMUX} send-keys -t ${SESSION_NAME} -l '${formatted}'`);
+    execSync(`${TMUX} send-keys -t ${SESSION_NAME} Enter`);
+    console.log(`📨 Injected: "${text.substring(0, 50)}..."`);
     return true;
   } catch (e) {
-    console.error(`Failed to inject: ${e.message}`);
+    console.error(`❌ Failed to inject: ${e.message}`);
     return false;
   }
 }
@@ -216,16 +226,16 @@ async function processMessage(msg) {
 
   // Check authorization
   if (!safeSenders.includes(senderId)) {
-    console.log(`Rejected message from unauthorized sender: ${senderId}`);
+    console.log(`⚠️  Rejected message from: ${senderId}`);
     return;
   }
 
   // Check session exists - if not, start one!
   if (!sessionExists()) {
-    console.log('No session found - waking up assistant...');
+    console.log(`💤 No session found - waking up BMO...`);
 
-    // Send typing indicator while waking up
-    sendTypingIndicator(chatId);
+    // Start typing loop while waking up
+    startTypingLoop(chatId);
 
     // Queue this message
     pendingMessages.push({ text, chatId, firstName });
@@ -237,13 +247,13 @@ async function processMessage(msg) {
 
   // If session is starting, queue the message
   if (sessionStarting) {
-    console.log('Session starting, queuing message...');
+    console.log('⏳ Session starting, queuing message...');
     pendingMessages.push({ text, chatId, firstName });
     return;
   }
 
-  // Send typing indicator - assistant is about to work on this
-  sendTypingIndicator(chatId);
+  // Start typing loop - keeps going until response is sent
+  startTypingLoop(chatId);
 
   // Inject into session
   injectMessage(text, chatId, firstName);
@@ -256,9 +266,17 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       status: 'ok',
-      mode: 'gateway-tmux',
+      mode: 'gateway-v4-tmux',
       session: hasSession ? 'connected' : 'not found'
     }));
+    return;
+  }
+
+  // Internal endpoint: transcript watcher calls this to stop typing
+  if (req.method === 'POST' && req.url === '/typing-done') {
+    stopTypingLoop();
+    res.writeHead(200);
+    res.end('ok');
     return;
   }
 
@@ -275,7 +293,7 @@ const server = http.createServer((req, res) => {
 
         // Handle text messages
         if (msg.text) {
-          processMessage(msg).catch(e => console.error('Message error:', e.message));
+          processMessage(msg);
         }
         // Handle photos
         else if (msg.photo && msg.photo.length > 0) {
@@ -290,7 +308,7 @@ const server = http.createServer((req, res) => {
             const text = caption
               ? `[Sent a photo: ${localPath}] ${caption}`
               : `[Sent a photo: ${localPath}]`;
-            processMessage({ ...msg, text }).catch(e => console.error('Message error:', e.message));
+            processMessage({ ...msg, text });
           }
         }
         // Handle documents
@@ -304,7 +322,7 @@ const server = http.createServer((req, res) => {
             const text = caption
               ? `[Sent a document: ${localPath}] ${caption}`
               : `[Sent a document: ${localPath}]`;
-            processMessage({ ...msg, text }).catch(e => console.error('Message error:', e.message));
+            processMessage({ ...msg, text });
           }
         }
       } catch (e) {
@@ -319,6 +337,6 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Telegram Gateway | Port ${PORT} | Ready`);
-  console.log(`Session: ${sessionExists() ? 'connected to ' + SESSION_NAME : 'sleeping (will wake on message)'}`);
+  console.log(`🤖 BMO Gateway v5 (wake-on-message) | Port ${PORT} | Ready!`);
+  console.log(`📡 Session: ${sessionExists() ? 'connected to ' + SESSION_NAME : 'sleeping (will wake on message)'}`);
 });

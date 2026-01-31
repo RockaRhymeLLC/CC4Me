@@ -14,14 +14,9 @@
 set -e
 
 TRANSCRIPT_PATH="$1"
-
-# Resolve project directory (parent of scripts/)
-BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+BASE_DIR="/Users/bmo/CC4Me-BMO"
 CHANNEL_FILE="$BASE_DIR/.claude/state/channel.txt"
 LOG_FILE="$BASE_DIR/logs/watcher.log"
-
-# Ensure log directory exists
-mkdir -p "$(dirname "$LOG_FILE")"
 
 log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
@@ -29,20 +24,7 @@ log() {
 
 send_telegram() {
   local text="$1"
-
-  # Get chat ID from safe-senders or environment
-  local chat_id="${TELEGRAM_CHAT_ID:-}"
-  if [ -z "$chat_id" ]; then
-    local safe_senders_file="$BASE_DIR/.claude/state/safe-senders.json"
-    if [ -f "$safe_senders_file" ]; then
-      chat_id=$(/usr/bin/jq -r '.telegram.users[0] // empty' "$safe_senders_file" 2>/dev/null)
-    fi
-  fi
-
-  if [ -z "$chat_id" ]; then
-    log "ERROR: No chat ID available (set TELEGRAM_CHAT_ID or configure safe-senders.json)"
-    return 1
-  fi
+  local chat_id="7629737488"  # Dave's chat ID from memory
 
   # Get bot token
   local token=$(security find-generic-password -s "credential-telegram-bot" -w 2>/dev/null)
@@ -63,6 +45,10 @@ send_telegram() {
       '{chat_id: $chat_id, text: $text}')" > /dev/null
 
   log "Sent to Telegram (${#text} chars)"
+
+  # Tell gateway to stop typing indicator loop
+  /usr/bin/curl -s -X POST "http://localhost:3847/typing-done" > /dev/null 2>&1 || true
+  log "Sent typing-done signal"
 }
 
 get_channel() {
@@ -157,7 +143,7 @@ while true; do
     done
     lines_seen=$current_lines
   elif [ "$current_lines" -lt "$lines_seen" ] 2>/dev/null; then
-    # File was truncated or replaced -- reset
+    # File was truncated or replaced — reset
     log "File shrank (truncated?), resetting line count"
     lines_seen=$current_lines
   fi
