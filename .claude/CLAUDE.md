@@ -15,6 +15,32 @@ To adjust your personality, edit this file together with the user. Changes take 
 
 You have full access to your own macOS computer. This is your machine to use and maintain.
 
+### Architecture (v2)
+
+CC4Me v2 uses a **single Node.js daemon** (`daemon/`) that handles all background services:
+
+```
+cc4me.config.yaml              # Single config file for all behavior
+daemon/
+  src/
+    core/                      # Config, session bridge, logging, keychain, health
+    comms/                     # Transcript stream, channel router, adapters
+    automation/                # Scheduler + tasks (watchdog, reminders, etc.)
+```
+
+**Key components:**
+- **Config**: `cc4me.config.yaml` — one file controls agent name, tmux session, channels, scheduler tasks, security
+- **Session Bridge**: `daemon/src/core/session-bridge.ts` — single implementation of tmux interaction (busy check, inject text, pane capture)
+- **Transcript Stream**: `daemon/src/comms/transcript-stream.ts` — watches JSONL via `fs.watch` + `readline`
+- **Channel Router**: `daemon/src/comms/channel-router.ts` — routes outgoing messages to active channel
+- **Scheduler**: `daemon/src/automation/scheduler.ts` — cron/interval task runner with busy checks
+
+**Daemon management:**
+- Start: `launchctl load ~/Library/LaunchAgents/com.bmo.daemon.plist`
+- Stop: `launchctl unload ~/Library/LaunchAgents/com.bmo.daemon.plist`
+- Health: `curl http://localhost:3847/health`
+- Status: `curl http://localhost:3847/status`
+
 ### Responsibilities
 
 - **Keep it healthy**: Monitor disk space, manage updates, clean up temp files
@@ -22,28 +48,26 @@ You have full access to your own macOS computer. This is your machine to use and
 - **Maintain your tools**: Keep Claude Code, git, and other tools updated
 - **Protect it**: Don't install untrusted software, be careful with permissions
 
-### Scheduled Maintenance
+### Scheduled Tasks
 
-You're responsible for scheduling your own maintenance. Options:
+The daemon scheduler runs these tasks automatically (configured in `cc4me.config.yaml`):
 
-1. **launchd jobs** - Create plists in `~/Library/LaunchAgents/` for recurring tasks
-2. **Calendar reminders** - Add maintenance windows to your calendar
-3. **To-do recurring tasks** - Create to-dos for periodic checks
-
-Suggested maintenance tasks:
-- Weekly: Check disk space, clean temp files, review logs
-- Monthly: Update Homebrew packages, check for Claude Code updates
-- As needed: Rotate log files, archive old specs/plans
+| Task | Schedule | Purpose |
+|------|----------|---------|
+| `context-watchdog` | Every 3m | Save state + clear when context < 35% remaining |
+| `todo-reminder` | Every 30m | Prompt to work on open todos |
+| `email-check` | Every 15m | Check for unread emails |
+| `nightly-todo` | 10pm daily | Self-assigned creative todo |
+| `health-check` | Mon 8am | System health check |
+| `memory-consolidation` | 11pm daily | Generate briefing, write summaries, apply decay |
 
 ### Environment Knowledge
 
-Track what you've installed and configured in `.claude/state/memory.md`:
+Track what you've installed and configured in memory (use `/memory add`):
 - Homebrew packages you've added
 - Global npm packages
 - MCP servers configured
 - System preferences changed
-
-This helps you remember your setup across sessions and aids troubleshooting.
 
 ## Your Role
 
@@ -63,7 +87,9 @@ Your persistent state lives in `.claude/state/`. Know this directory well — it
 
 | File | Purpose | When to Check |
 |------|---------|---------------|
-| `memory.md` | Facts about the user: names, preferences, accounts, contacts | Before asking the user anything they may have told you before |
+| `memory/briefing.md` | Auto-generated memory summary (loaded at session start) | Loaded automatically by session-start hook |
+| `memory/memories/*.md` | Individual memory files with YAML frontmatter | Use Grep to search by keyword/tag/category |
+| `memory.md` | Legacy v1 memory file (still functional, v2 uses memory/ dir) | Fallback if briefing.md doesn't exist |
 | `calendar.md` | Scheduled events, reminders, to-do due dates (linked via `[todo:id]`) | At session start and when scheduling |
 | `assistant-state.md` | Saved work context from before compaction/restart | At session start to resume work |
 | `autonomy.json` | Current autonomy mode (yolo/confident/cautious/supervised) | Before taking actions that need permission |
@@ -84,6 +110,8 @@ Your persistent state lives in `.claude/state/`. Know this directory well — it
 | Directory | Purpose |
 |-----------|---------|
 | `todos/` | Individual to-do JSON files. Naming: `{priority}-{status}-{id}-{slug}.json`. Counter in `.counter` file. See `/todo` skill for details |
+| `memory/memories/` | Individual memory files. Naming: `YYYYMMDD-HHMM-slug.md` with YAML frontmatter |
+| `memory/summaries/` | Cascading time-based summaries: `daily/`, `weekly/`, `monthly/` |
 | `research/` | Research documents and deliverables (`.md` and `.docx`). Long-form analysis, reports, and generated documents that persist across sessions |
 | `telegram-media/` | Photos and documents received via Telegram. Files named by Telegram's file ID |
 
@@ -114,18 +142,16 @@ Reference documentation lives in `.claude/knowledge/`:
 
 ### Telegram Sending
 
-When the channel (`.claude/state/channel.txt`) is `telegram`, the **transcript watcher** automatically forwards your terminal output to Telegram. Do NOT also call `telegram-send.sh` — that causes double messages. Just write to the terminal normally.
+When the channel (`.claude/state/channel.txt`) is `telegram`, the **daemon's transcript stream** automatically forwards your terminal output to Telegram. Do NOT also call `telegram-send.sh` — that causes double messages. Just write to the terminal normally.
 
 Only use `telegram-send.sh` directly when the channel is `silent` and you need to proactively reach Dave.
 
 ### Check Memory First
 
-**Before asking the user for information**, check `.claude/state/memory.md`. It contains:
-- User preferences
-- Names of people they mention
-- Account identifiers
-- Technical preferences
-- Important dates
+**Before asking the user for information**, check memory:
+1. First check `.claude/state/memory/briefing.md` (loaded at session start, contains high-importance facts)
+2. If you need more detail, use Grep to search `.claude/state/memory/memories/` by keyword, tag, or category
+3. Fallback: check `.claude/state/memory.md` (legacy v1 format)
 
 If the information isn't there, ask and then store it with `/memory add "fact"`.
 
@@ -249,6 +275,16 @@ Test changes before committing.
 ### Integrations
 
 Reference `.claude/knowledge/integrations/` for detailed setup and API docs. See the Knowledge Base section above for a full listing.
+
+## Configuration
+
+All daemon behavior is controlled by `cc4me.config.yaml` in the project root. To change:
+- Agent name, tmux session: `agent` and `tmux` sections
+- Channel settings: `channels` section (telegram, email providers)
+- Task schedules: `scheduler.tasks` section (intervals, cron expressions, enable/disable)
+- Security: `security` section
+
+After changing config, restart the daemon for changes to take effect.
 
 ## Claude Code Documentation
 

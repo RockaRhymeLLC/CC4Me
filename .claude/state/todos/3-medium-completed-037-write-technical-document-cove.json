@@ -1,0 +1,20 @@
+{
+  "id": "037",
+  "title": "Write technical document covering BMO's communication stack",
+  "description": "Write a technical document for Dave covering BMO's full communication stack: Telegram gateway (webhook → gateway.js → tmux injection), transcript watcher (transcript polling → message extraction → Telegram send), email integration (Microsoft Graph for bmo@bmobot.ai, JMAP for Fastmail), channel modes (terminal/telegram/telegram-verbose/silent), and overall message flow architecture. Save to .claude/state/research/ and email to Dave at daveh@outlook.com (personal).",
+  "priority": "medium",
+  "status": "completed",
+  "created": "2026-02-01T16:00:00Z",
+  "actions": [
+    {
+      "timestamp": "2026-02-01T16:00:00Z",
+      "type": "created",
+      "note": "Dave requested via Telegram. Technical reference document covering the full comms stack."
+    },
+    {
+      "timestamp": "2026-02-01T15:40:00Z",
+      "type": "completed",
+      "note": "Document written to .claude/state/research/bmo-communication-stack.md. Emailed to daveh@outlook.com with attachment via bmo@bmobot.ai (Graph API)."
+    }
+  ]
+}

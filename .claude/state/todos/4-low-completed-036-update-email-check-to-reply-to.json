@@ -1,0 +1,20 @@
+{
+  "id": "036",
+  "title": "Update email check to reply to emails from approved senders",
+  "description": "Modify email-reminder.sh to prompt BMO to respond to unread emails from approved senders, not just notify about them. Currently the reminder only tells BMO there are unread emails — it should instruct BMO to actually read and reply to them.",
+  "priority": "low",
+  "status": "completed",
+  "created": "2026-02-01T05:15:00Z",
+  "actions": [
+    {
+      "timestamp": "2026-02-01T05:15:00Z",
+      "type": "created",
+      "note": "Dave requested via Telegram. Low priority — focus on nightly self-todo first."
+    },
+    {
+      "timestamp": "2026-02-01T15:45:00Z",
+      "type": "completed",
+      "note": "Updated email-reminder.sh prompt from passive 'Run /email check' to directive: read each unread email and reply to any from approved senders in safe-senders.json."
+    }
+  ]
+}

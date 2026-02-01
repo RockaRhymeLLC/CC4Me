@@ -1,0 +1,21 @@
+{
+  "id": "034",
+  "title": "CC4Me lessons learned improvements from Will's install",
+  "description": "Implement improvements to CC4Me template repo based on Will's install experience: (1) Central config file, (2) Session name consistency, (3) PATH fixes for launchd, (4) --dangerously-skip-permissions option, (5) cloudflared install timeout, (6) Webhook auto-registration, (7) Script naming (setup.sh alias).",
+  "priority": "high",
+  "status": "completed",
+  "created": "2026-01-31T20:50:00Z",
+  "completed": "2026-01-31T22:30:00Z",
+  "actions": [
+    {
+      "timestamp": "2026-01-31T20:50:00Z",
+      "type": "created",
+      "note": "Dave requested improvements based on Will's install lessons learned. Working on upstream CC4Me template repo."
+    },
+    {
+      "timestamp": "2026-01-31T22:30:00Z",
+      "type": "completed",
+      "note": "Implemented on feature/central-config branch: shared config.sh, session name fix, init timeout, setup.sh alias, --skip-permissions flag, PATH fix. PR #9 created at https://github.com/RockaRhyme/CC4Me/pull/9"
+    }
+  ]
+}

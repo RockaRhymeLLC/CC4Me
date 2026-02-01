@@ -1,0 +1,21 @@
+{
+  "id": "033",
+  "title": "Create nightly self-assigned todo job",
+  "description": "Nightly launchd job that triggers BMO to add 1 todo of its own choosing at 11 PM each night.",
+  "priority": "medium",
+  "status": "completed",
+  "created": "2026-01-31T05:45:00Z",
+  "completed": "2026-01-31T14:05:00Z",
+  "actions": [
+    {
+      "timestamp": "2026-01-31T05:45:00Z",
+      "type": "created",
+      "note": "Dave emailed the idea. Wants BMO to have creative autonomy for nightly self-improvement."
+    },
+    {
+      "timestamp": "2026-01-31T14:05:00Z",
+      "type": "completed",
+      "note": "Built and deployed. Script: scripts/nightly-todo.sh. Plist: com.bmo.nightly-todo (11 PM nightly). Directives: nothing evil/harmful, must be constructive/creative/helpful, achievable in one session, variety encouraged. Script checks busy state before injecting prompt, retries once if busy, skips if still busy."
+    }
+  ]
+}

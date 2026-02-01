@@ -10,13 +10,16 @@ This file stores facts about the user that BMO should remember.
 - Personal email: daveh@outlook.com
 - Home address: 17756 Big Falls Rd, White Hall, MD 21161
 - Wife: Chrissy Hurley (phone: 724-681-1112, iMessage: +17246811112, email: chrissyhurley@outlook.com / chrissyh22@gmail.com)
-- Will Loving (Dave's boss): wloving@servos.io
+- Will Loving (Dave's boss): wloving@servos.io, Telegram chat ID: 8549670531, phone: 804-502-3131
 
 ## Preferences
 
 - Always create a to-do when Dave gives me a task
+- Prefer Dave's personal email (daveh@outlook.com) over work email unless he says otherwise
 - When channel is `telegram`: just write to terminal — the transcript watcher delivers to Telegram. Do NOT also call telegram-send.sh (causes double messages).
 - Only use telegram-send.sh when channel is `silent` and you need to reach Dave for something important (deliverables, alerts, blockers).
+- Dave uses Warm terminal (also has Ghostty and Apple Terminal). tmux mouse mode enabled in ~/.tmux.conf so trackpad scroll works as scrollback.
+- When context is low, BMO should self-save state and /clear on its own — don't ask Dave, just do it.
 
 ## Important Dates
 

@@ -1,0 +1,36 @@
+{
+  "id": "032",
+  "title": "Help Will install CC4Me on his Mac Mini",
+  "description": "Install CC4Me on Will's Mac Mini. Mac Mini user: marvho. Will has Claude logged in and Telegram bot created (@Will_assistant_bot / MarvHo). GitHub: wfloving (added as collaborator).",
+  "priority": "high",
+  "status": "completed",
+  "created": "2026-01-30T22:20:00Z",
+  "completed": "2026-01-31T08:35:00Z",
+  "actions": [
+    {
+      "timestamp": "2026-01-30T22:20:00Z",
+      "type": "created",
+      "note": "Dave requested. Will's Mac Mini details available from email. Will added to safe senders."
+    },
+    {
+      "timestamp": "2026-01-30T22:25:00Z",
+      "type": "note",
+      "note": "Messaged Will on Telegram — need corrected SSH password and GitHub username. SSH password from email was rejected."
+    },
+    {
+      "timestamp": "2026-01-31T00:52:00Z",
+      "type": "note",
+      "note": "Pivoted to guided walkthrough per Dave's suggestion. Will provided GitHub username (wfloving) — added as collaborator on RockaRhyme/CC4Me."
+    },
+    {
+      "timestamp": "2026-01-31T03:15:00Z",
+      "type": "note",
+      "note": "Will's assistant is up and running! Claude Code in tmux, Telegram gateway connected via quick tunnel. Walked Will through: init.sh, start-tmux.sh, gateway with TMUX_SESSION=CC4Me, webhook registration."
+    },
+    {
+      "timestamp": "2026-01-31T08:35:00Z",
+      "type": "completed",
+      "note": "Dave confirmed Will's assistant can take over remaining setup. Sent Will final handoff message with /setup, permanent tunnel, and email next steps. Removed Will from safe-senders.json (both Telegram and email) per Dave's request."
+    }
+  ]
+}

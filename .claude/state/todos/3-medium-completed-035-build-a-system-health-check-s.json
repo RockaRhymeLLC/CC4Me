@@ -1,0 +1,20 @@
+{
+  "id": "035",
+  "title": "Build a system health check script",
+  "description": "Build a system health check script — checks disk space, memory, log sizes, running launchd jobs, and reports issues. Should be runnable on-demand and optionally scheduled weekly.",
+  "priority": "medium",
+  "status": "completed",
+  "created": "2026-02-01T04:00:00Z",
+  "actions": [
+    {
+      "timestamp": "2026-02-01T04:00:00Z",
+      "type": "created",
+      "note": "Nightly self-assigned todo. System maintenance is part of BMO's responsibilities but no health check tooling exists yet."
+    },
+    {
+      "timestamp": "2026-02-01T15:33:00Z",
+      "type": "completed",
+      "note": "Built scripts/health-check.sh — checks disk, memory, logs, 7 launchd jobs, 4 key processes, network (Telegram API + gateway), and 6 state files. Supports --quiet and --json modes. Scheduled weekly via com.bmo.health-check launchd job (Mondays 8am)."
+    }
+  ]
+}

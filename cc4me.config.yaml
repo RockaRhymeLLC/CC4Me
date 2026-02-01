@@ -1,0 +1,56 @@
+# CC4Me v2 Configuration — BMO
+# BMO-specific overrides on top of the template defaults.
+
+# ── Core ──────────────────────────────
+agent:
+  name: "BMO"
+
+tmux:
+  session: "bmo"
+
+daemon:
+  port: 3847
+  log_level: "info"
+  log_dir: "logs"
+  log_rotation:
+    max_size_mb: 10
+    max_files: 5
+
+# ── Communications ────────────────────
+channels:
+  telegram:
+    enabled: true
+    webhook_path: "/telegram"
+  email:
+    enabled: true
+    providers:
+      - type: "graph"
+      - type: "jmap"
+
+# ── Automation ────────────────────────
+scheduler:
+  tasks:
+    - name: "context-watchdog"
+      enabled: true
+      interval: "3m"
+      config:
+        threshold_percent: 35
+    - name: "todo-reminder"
+      enabled: true
+      interval: "30m"
+    - name: "email-check"
+      enabled: true
+      interval: "15m"
+    - name: "nightly-todo"
+      enabled: true
+      cron: "0 22 * * *"
+    - name: "health-check"
+      enabled: true
+      cron: "0 8 * * 1"
+    - name: "memory-consolidation"
+      enabled: true
+      cron: "0 23 * * *"
+
+# ── Security ──────────────────────────
+security:
+  safe_senders_file: ".claude/state/safe-senders.json"
