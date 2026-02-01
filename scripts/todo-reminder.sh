@@ -5,30 +5,19 @@
 #
 # Requires: tmux session running the assistant
 
-BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-STATE_DIR="$BASE_DIR/.claude/state"
+# Load shared config (provides BASE_DIR, SESSION_NAME, TMUX_CMD, STATE_DIR, etc.)
+source "$(cd "$(dirname "$0")" && pwd)/lib/config.sh"
+
 TODOS_DIR="$STATE_DIR/todos"
 PENDING_FILE="$STATE_DIR/telegram-pending.json"
-LOG_FILE="$BASE_DIR/logs/todo-reminder.log"
-
-# tmux configuration - auto-detect or override via environment
-TMUX_BIN="${TMUX_BIN:-$(command -v tmux)}"
-TMUX_SESSION="${TMUX_SESSION:-assistant}"
-
-# Detect tmux socket for launchd compatibility
-if [ -z "$TMUX_SOCKET" ]; then
-  TMUX_SOCKET="/private/tmp/tmux-$(id -u)/default"
-fi
-
-TMUX_CMD="$TMUX_BIN -S $TMUX_SOCKET"
+LOG_FILE="$LOG_DIR/todo-reminder.log"
 
 log() {
-  mkdir -p "$(dirname "$LOG_FILE")"
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+  cc4me_log "$1"
 }
 
 # Check if session exists (use explicit socket for launchd compatibility)
-if ! $TMUX_CMD has-session -t "$TMUX_SESSION" 2>/dev/null; then
+if ! session_exists; then
   log "No session - assistant is not running, skipping"
   exit 0
 fi
@@ -60,7 +49,7 @@ fi
 log "Reminding assistant about $OPEN_COUNT open todo(s)"
 REMINDER="[System] You have $OPEN_COUNT open todo(s). Run /todo list to see them, or continue what you're working on."
 
-$TMUX_CMD send-keys -t "$TMUX_SESSION" -l "$REMINDER"
-$TMUX_CMD send-keys -t "$TMUX_SESSION" Enter
+$TMUX_CMD send-keys -t "$SESSION_NAME" -l "$REMINDER"
+$TMUX_CMD send-keys -t "$SESSION_NAME" Enter
 
 log "Reminder sent"

@@ -12,15 +12,12 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
-# Session name defaults to directory name, override via CC4ME_SESSION
-SESSION_NAME="${CC4ME_SESSION:-$(basename "$PROJECT_DIR")}"
+# Load shared config (provides SESSION_NAME, TMUX_BIN, etc.)
+BASE_DIR="$PROJECT_DIR"
+source "$SCRIPT_DIR/lib/config.sh"
 
-# Find tmux - prefer Homebrew, fall back to PATH
-if [ -x /opt/homebrew/bin/tmux ]; then
-    TMUX=/opt/homebrew/bin/tmux
-elif command -v tmux >/dev/null 2>&1; then
-    TMUX=$(command -v tmux)
-else
+TMUX="$TMUX_BIN"
+if [ -z "$TMUX" ]; then
     echo "Error: tmux not found. Install with: brew install tmux" >&2
     exit 1
 fi

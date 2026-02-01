@@ -141,15 +141,38 @@ if [ ${#OPTIONAL_MISSING[@]} -gt 0 ]; then
     echo "Install optional tools? (y/n)"
     read -r OPT_CHOICE
     if [ "$OPT_CHOICE" = "y" ] || [ "$OPT_CHOICE" = "Y" ]; then
+      # Portable timeout: macOS lacks `timeout`, so use background process + kill
+      brew_install_with_timeout() {
+        local tool_name="$1"
+        shift
+        local timeout_secs=120
+
+        echo "Installing $tool_name (${timeout_secs}s timeout, Ctrl+C to skip)..."
+        brew "$@" &
+        local pid=$!
+        ( sleep "$timeout_secs" && kill "$pid" 2>/dev/null ) &
+        local timer_pid=$!
+        if wait "$pid" 2>/dev/null; then
+          kill "$timer_pid" 2>/dev/null
+          wait "$timer_pid" 2>/dev/null
+          echo "  Done"
+          return 0
+        else
+          kill "$timer_pid" 2>/dev/null
+          wait "$timer_pid" 2>/dev/null
+          echo "  Skipped ($tool_name install timed out or failed)"
+          echo "  Retry later: brew $*"
+          return 1
+        fi
+      }
+
       for tool in "${OPTIONAL_MISSING[@]}"; do
         case "$tool" in
           cloudflared)
-            echo "Installing cloudflared..."
-            brew install cloudflare/cloudflare/cloudflared
+            brew_install_with_timeout "cloudflared" install cloudflare/cloudflare/cloudflared
             ;;
           python3)
-            echo "Installing Python 3..."
-            brew install python3
+            brew_install_with_timeout "Python 3" install python3
             ;;
         esac
       done

@@ -10,27 +10,16 @@
 
 set -e
 
-BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# Load shared config (provides BASE_DIR, SESSION_NAME, TMUX_CMD, STATE_DIR, etc.)
+source "$(cd "$(dirname "$0")" && pwd)/lib/config.sh"
 
-# tmux configuration - auto-detect or override via environment
-TMUX_BIN="${TMUX_BIN:-$(command -v tmux)}"
-TMUX_SESSION="${TMUX_SESSION:-assistant}"
-
-# Detect tmux socket for launchd compatibility
-if [ -z "$TMUX_SOCKET" ]; then
-  TMUX_SOCKET="/private/tmp/tmux-$(id -u)/default"
-fi
-
-TMUX_CMD="$TMUX_BIN -S $TMUX_SOCKET"
-
-STATE_FILE="$BASE_DIR/.claude/state/context-usage.json"
-LOG_FILE="$BASE_DIR/logs/context-watchdog.log"
+STATE_FILE="$STATE_DIR/context-usage.json"
+LOG_FILE="$LOG_DIR/context-watchdog.log"
 THRESHOLD=35  # Trigger when remaining_percentage < this value
 STALE_SECONDS=300  # Ignore data older than 5 minutes
 
 log() {
-  mkdir -p "$(dirname "$LOG_FILE")"
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+  cc4me_log "$1"
 }
 
 # 1. Check if context data file exists
@@ -61,7 +50,7 @@ fi
 log "Context low: ${USED}% used, ${REMAINING}% remaining (threshold: ${THRESHOLD}%)"
 
 # 4. Check if Claude is actively working (not safe to clear)
-PANE=$($TMUX_CMD capture-pane -t "$TMUX_SESSION" -p 2>/dev/null || echo "")
+PANE=$($TMUX_CMD capture-pane -t "$SESSION_NAME" -p 2>/dev/null || echo "")
 
 if echo "$PANE" | grep -q "esc to interrupt"; then
   log "Skipping: Claude is actively working (esc to interrupt visible)"
@@ -91,19 +80,19 @@ fi
 log "Triggering save-state + clear (${REMAINING}% remaining)"
 
 # Send save-state command
-$TMUX_CMD send-keys -t "$TMUX_SESSION" "/save-state \"Auto-save: context at ${USED}% used\"" Enter
+$TMUX_CMD send-keys -t "$SESSION_NAME" "/save-state \"Auto-save: context at ${USED}% used\"" Enter
 log "Sent /save-state"
 
 # Wait for save-state to complete (poll transcript for new lines)
 sleep 15
 
 # Verify Claude isn't now busy from the save-state
-PANE=$($TMUX_CMD capture-pane -t "$TMUX_SESSION" -p 2>/dev/null || echo "")
+PANE=$($TMUX_CMD capture-pane -t "$SESSION_NAME" -p 2>/dev/null || echo "")
 if echo "$PANE" | grep -q "esc to interrupt"; then
   log "Waiting: save-state still running"
   sleep 15
 fi
 
 # Send /clear
-$TMUX_CMD send-keys -t "$TMUX_SESSION" "/clear" Enter
+$TMUX_CMD send-keys -t "$SESSION_NAME" "/clear" Enter
 log "Sent /clear - context reset complete"

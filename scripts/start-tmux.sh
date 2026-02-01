@@ -7,33 +7,42 @@
 # On startup, Claude automatically checks for pending work.
 #
 # Usage:
-#   ./start-tmux.sh          # Start new session or attach to existing
-#   ./start-tmux.sh --detach # Start detached (for launchd)
+#   ./start-tmux.sh                     # Start new session or attach to existing
+#   ./start-tmux.sh --detach            # Start detached (for launchd)
+#   ./start-tmux.sh --skip-permissions  # Skip Claude Code permission prompts
+#   ./start-tmux.sh --detach --skip-permissions  # Both
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
-# Session name defaults to directory name, override via CC4ME_SESSION
-SESSION_NAME="${CC4ME_SESSION:-$(basename "$PROJECT_DIR")}"
+# Load shared config (provides SESSION_NAME, TMUX_BIN, etc.)
+BASE_DIR="$PROJECT_DIR"
+source "$SCRIPT_DIR/lib/config.sh"
 
-# Find tmux - prefer Homebrew, fall back to PATH
-if [ -x /opt/homebrew/bin/tmux ]; then
-    TMUX=/opt/homebrew/bin/tmux
-elif command -v tmux >/dev/null 2>&1; then
-    TMUX=$(command -v tmux)
-else
+TMUX="$TMUX_BIN"
+if [ -z "$TMUX" ]; then
     echo "Error: tmux not found. Install with: brew install tmux" >&2
     exit 1
 fi
+
+# Parse arguments
+DETACH=false
+SKIP_PERMISSIONS=false
+for arg in "$@"; do
+    case "$arg" in
+        --detach) DETACH=true ;;
+        --skip-permissions) SKIP_PERMISSIONS=true ;;
+    esac
+done
 
 # Auto-prompt sent to Claude on fresh start
 AUTO_PROMPT="Session auto-started. Check todos, calendar, and any saved state. Work on pending tasks autonomously."
 
 # Check if session already exists
 if $TMUX has-session -t "$SESSION_NAME" 2>/dev/null; then
-    if [[ "$1" == "--detach" ]]; then
+    if [ "$DETACH" = true ]; then
         echo "Session '$SESSION_NAME' already running"
         exit 0
     else
@@ -42,10 +51,13 @@ if $TMUX has-session -t "$SESSION_NAME" 2>/dev/null; then
     fi
 fi
 
-# Build the claude command (fresh session, not --continue to avoid conflicts)
+# Build the claude command
 CLAUDE_CMD="'$PROJECT_DIR/scripts/start.sh'"
+if [ "$SKIP_PERMISSIONS" = true ]; then
+    CLAUDE_CMD="$CLAUDE_CMD --dangerously-skip-permissions"
+fi
 
-if [[ "$1" == "--detach" ]]; then
+if [ "$DETACH" = true ]; then
     # Start detached session (for launchd)
     $TMUX new-session -d -s "$SESSION_NAME" -c "$PROJECT_DIR" "$CLAUDE_CMD"
 

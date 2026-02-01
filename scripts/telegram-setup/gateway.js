@@ -107,7 +107,8 @@ const SAFE_SENDERS_FILE = path.join(STATE_DIR, 'safe-senders.json');
 const CHANNEL_FILE = path.join(STATE_DIR, 'channel.txt');
 const START_SCRIPT = path.join(BASE_DIR, 'scripts/start-tmux.sh');
 const TMUX = findTmux();
-const SESSION_NAME = process.env.TMUX_SESSION || 'assistant';
+// Session name: env var > directory name (consistent with start-tmux.sh)
+const SESSION_NAME = process.env.TMUX_SESSION || path.basename(BASE_DIR);
 
 // Track if we're currently starting a session
 let sessionStarting = false;
