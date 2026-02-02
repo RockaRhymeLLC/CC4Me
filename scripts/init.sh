@@ -7,6 +7,28 @@
 
 set -e
 
+# Install a brew formula with a timeout (prevents hanging on slow installs)
+brew_install_with_timeout() {
+  local tool="$1"
+  local formula="$2"
+  local timeout="${3:-120}"
+  echo "  Installing $tool..."
+  if command -v timeout >/dev/null 2>&1; then
+    if timeout "$timeout" brew install "$formula" 2>/dev/null; then
+      echo "  Installed $tool"
+    else
+      echo "  [!!] Failed to install $tool within ${timeout}s (skipping)"
+    fi
+  else
+    # macOS may not have timeout; fall back to direct install
+    if brew install "$formula" 2>/dev/null; then
+      echo "  Installed $tool"
+    else
+      echo "  [!!] Failed to install $tool (skipping)"
+    fi
+  fi
+}
+
 echo "CC4Me Setup - Personal Assistant + Spec-Driven Workflow"
 echo "========================================================"
 echo ""
@@ -144,12 +166,10 @@ if [ ${#OPTIONAL_MISSING[@]} -gt 0 ]; then
       for tool in "${OPTIONAL_MISSING[@]}"; do
         case "$tool" in
           cloudflared)
-            echo "Installing cloudflared..."
-            brew install cloudflare/cloudflare/cloudflared
+            brew_install_with_timeout "cloudflared" "cloudflare/cloudflare/cloudflared" 120
             ;;
           python3)
-            echo "Installing Python 3..."
-            brew install python3
+            brew_install_with_timeout "Python 3" "python3" 120
             ;;
         esac
       done
@@ -174,8 +194,18 @@ echo "Creating directories..."
 mkdir -p logs
 mkdir -p .claude/state/todos
 mkdir -p .claude/state/telegram-media
+mkdir -p .claude/state/memory/memories
+mkdir -p .claude/state/memory/summaries/{daily,weekly,monthly}
+mkdir -p .claude/state/research
 echo "  Done"
 echo ""
+
+# Build the daemon (v2 architecture)
+if [ -f "daemon/package.json" ]; then
+  echo "Building CC4Me daemon..."
+  (cd daemon && npm install --silent 2>/dev/null && npm run build 2>/dev/null) && echo "  Done" || echo "  [!!] Daemon build failed (can retry with: cd daemon && npm install && npm run build)"
+  echo ""
+fi
 
 # Install gateway dependencies (if telegram-setup exists)
 if [ -f "scripts/telegram-setup/package.json" ]; then

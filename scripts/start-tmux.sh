@@ -7,56 +7,64 @@
 # On startup, Claude automatically checks for pending work.
 #
 # Usage:
-#   ./start-tmux.sh          # Start new session or attach to existing
-#   ./start-tmux.sh --detach # Start detached (for launchd)
+#   ./start-tmux.sh                    # Start new session or attach to existing
+#   ./start-tmux.sh --detach           # Start detached (for launchd)
+#   ./start-tmux.sh --skip-permissions # Skip Claude's permission prompts
 
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+# Source shared config
+source "$(dirname "${BASH_SOURCE[0]}")/lib/config.sh"
 
-# Session name defaults to directory name, override via CC4ME_SESSION
-SESSION_NAME="${CC4ME_SESSION:-$(basename "$PROJECT_DIR")}"
-
-# Find tmux - prefer Homebrew, fall back to PATH
-if [ -x /opt/homebrew/bin/tmux ]; then
-    TMUX=/opt/homebrew/bin/tmux
-elif command -v tmux >/dev/null 2>&1; then
-    TMUX=$(command -v tmux)
-else
+if [ -z "$TMUX_BIN" ]; then
     echo "Error: tmux not found. Install with: brew install tmux" >&2
     exit 1
 fi
+
+# Parse arguments
+DETACH=false
+SKIP_PERMISSIONS=false
+
+for arg in "$@"; do
+    case "$arg" in
+        --detach) DETACH=true ;;
+        --skip-permissions) SKIP_PERMISSIONS=true ;;
+        *) echo "Unknown argument: $arg" >&2; exit 1 ;;
+    esac
+done
 
 # Auto-prompt sent to Claude on fresh start
 AUTO_PROMPT="Session auto-started. Check todos, calendar, and any saved state. Work on pending tasks autonomously."
 
 # Check if session already exists
-if $TMUX has-session -t "$SESSION_NAME" 2>/dev/null; then
-    if [[ "$1" == "--detach" ]]; then
+if session_exists; then
+    if $DETACH; then
         echo "Session '$SESSION_NAME' already running"
         exit 0
     else
         # Attach to existing session
-        exec $TMUX attach-session -t "$SESSION_NAME"
+        exec $TMUX_CMD attach-session -t "$SESSION_NAME"
     fi
 fi
 
-# Build the claude command (fresh session, not --continue to avoid conflicts)
-CLAUDE_CMD="'$PROJECT_DIR/scripts/start.sh'"
+# Build the claude command
+CLAUDE_CMD="'$BASE_DIR/scripts/start.sh'"
+if $SKIP_PERMISSIONS; then
+    CLAUDE_CMD="'$BASE_DIR/scripts/start.sh' --dangerously-skip-permissions"
+fi
 
-if [[ "$1" == "--detach" ]]; then
+if $DETACH; then
     # Start detached session (for launchd)
-    $TMUX new-session -d -s "$SESSION_NAME" -c "$PROJECT_DIR" "$CLAUDE_CMD"
+    $TMUX_CMD new-session -d -s "$SESSION_NAME" -c "$BASE_DIR" "$CLAUDE_CMD"
 
     # Wait for Claude to initialize, then send auto-prompt
     sleep 8
-    $TMUX send-keys -t "$SESSION_NAME" "$AUTO_PROMPT"
+    $TMUX_CMD send-keys -t "$SESSION_NAME" "$AUTO_PROMPT"
     sleep 1
-    $TMUX send-keys -t "$SESSION_NAME" Enter
+    $TMUX_CMD send-keys -t "$SESSION_NAME" Enter
 
     echo "Started session '$SESSION_NAME' (detached, auto-prompted)"
 else
     # Start and attach interactively (no auto-prompt)
-    exec $TMUX new-session -s "$SESSION_NAME" -c "$PROJECT_DIR" "$CLAUDE_CMD"
+    exec $TMUX_CMD new-session -s "$SESSION_NAME" -c "$BASE_DIR" "$CLAUDE_CMD"
 fi
