@@ -34,6 +34,9 @@ Thumbs.db
 !.claude/state/.gitkeep
 .claude/state/todos/*.json
 !.claude/state/todos/.gitkeep
+.claude/state/memory/
+.claude/state/research/
+.claude/state/telegram-media/
 
 # Assistant history (if used)
 .claude/history/
