@@ -9,37 +9,29 @@
 
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+# Source shared config
+source "$(dirname "${BASH_SOURCE[0]}")/lib/config.sh"
 
-# Session name defaults to directory name, override via CC4ME_SESSION
-SESSION_NAME="${CC4ME_SESSION:-$(basename "$PROJECT_DIR")}"
-
-# Find tmux - prefer Homebrew, fall back to PATH
-if [ -x /opt/homebrew/bin/tmux ]; then
-    TMUX=/opt/homebrew/bin/tmux
-elif command -v tmux >/dev/null 2>&1; then
-    TMUX=$(command -v tmux)
-else
+if [ -z "$TMUX_BIN" ]; then
     echo "Error: tmux not found. Install with: brew install tmux" >&2
     exit 1
 fi
 
-RESTART_FLAG="$PROJECT_DIR/.claude/state/restart-requested"
+RESTART_FLAG="$STATE_DIR/restart-requested"
 
 # Clear restart flag if it exists
 rm -f "$RESTART_FLAG"
 
 # Kill existing session if running
-if $TMUX has-session -t "$SESSION_NAME" 2>/dev/null; then
-    echo "Killing existing session '$SESSION_NAME'..."
-    $TMUX kill-session -t "$SESSION_NAME"
+if session_exists; then
+    cc4me_log "Killing existing session '$SESSION_NAME'..."
+    $TMUX_CMD kill-session -t "$SESSION_NAME"
     sleep 2
 fi
 
 # Start fresh session (detached with auto-prompt)
-echo "Starting fresh session..."
-"$SCRIPT_DIR/start-tmux.sh" --detach
+cc4me_log "Starting fresh session..."
+"$SCRIPTS_DIR/start-tmux.sh" --detach
 
-echo "Restart complete. Session '$SESSION_NAME' is running."
-echo "Attach with: tmux attach -t $SESSION_NAME"
+cc4me_log "Restart complete. Session '$SESSION_NAME' is running."
+echo "Attach with: $TMUX_BIN attach -t $SESSION_NAME"
