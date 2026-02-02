@@ -40,12 +40,65 @@ interface TelegramUpdate {
 }
 
 interface TelegramMessage {
-  chat: { id: number };
-  from?: { first_name?: string };
+  chat: { id: number; type?: 'private' | 'group' | 'supergroup' | 'channel' };
+  from?: { id?: number; first_name?: string; is_bot?: boolean };
   text?: string;
   photo?: Array<{ file_id: string }>;
   document?: { file_id: string; file_name?: string };
   caption?: string;
+}
+
+// ── Group chat context ──────────────────────────────────────
+
+/**
+ * Track the most recent reply chat ID so outgoing transcript messages
+ * go to the right place (group or DM). Falls back to Keychain default
+ * (primary's DM) on cold start when no incoming message has been received yet.
+ */
+let _replyChatId: string | null = null;
+
+interface MessageContext {
+  /** User ID for access control (from.id in groups, chat.id in DMs) */
+  senderId: string;
+  /** Chat ID for sending replies (always chat.id — the group or DM) */
+  replyChatId: string;
+  /** Whether this message is from our own bot (self-loop prevention) */
+  isSelf: boolean;
+  /** Display name */
+  firstName: string;
+}
+
+/**
+ * Get our own bot's user ID from the token (format: {bot_id}:{secret}).
+ * Used to skip our own messages in groups and prevent self-loops.
+ */
+function getOwnBotId(): string | null {
+  const token = getTelegramBotToken();
+  if (!token) return null;
+  const parts = token.split(':');
+  return parts[0] ?? null;
+}
+
+function extractMessageContext(msg: TelegramMessage): MessageContext {
+  const chatType = msg.chat.type ?? 'private';
+  const isGroup = chatType === 'group' || chatType === 'supergroup';
+  const replyChatId = msg.chat.id.toString();
+
+  // In groups, use from.id for identity; in DMs, chat.id is the user's ID
+  const senderId = isGroup && msg.from?.id
+    ? msg.from.id.toString()
+    : replyChatId;
+
+  // Only skip our own messages (not other bots — they may be peers like R2)
+  const ownBotId = getOwnBotId();
+  const isSelf = msg.from?.is_bot === true && msg.from?.id?.toString() === ownBotId;
+
+  return {
+    senderId,
+    replyChatId,
+    isSelf,
+    firstName: msg.from?.first_name ?? 'User',
+  };
 }
 
 // ── Typing indicator management ─────────────────────────────
@@ -187,13 +240,18 @@ function sendMessage(text: string, chatId?: string): void {
 
 // State for session wake-up
 let _sessionStarting = false;
-let _pendingMessages: Array<{ text: string; chatId: string; firstName: string }> = [];
+let _pendingMessages: Array<{ text: string; senderId: string; replyChatId: string; firstName: string }> = [];
 
 // State for 3rd-party approval flow
-// Maps chatId to queued messages awaiting primary approval
+// Maps senderId to queued messages awaiting primary approval
 const _approvalQueues: Map<string, Array<{ text: string; firstName: string }>> = new Map();
-// Maps a context key to the pending sender's chatId (so we can match primary's reply)
-let _pendingApprovalContext: { senderChatId: string; senderName: string; channel: string } | null = null;
+// Maps a context key to the pending sender info (so we can match primary's reply)
+let _pendingApprovalContext: {
+  senderChatId: string;
+  senderReplyChatId: string;
+  senderName: string;
+  channel: string;
+} | null = null;
 
 const AUTO_BLOCK_THRESHOLD = 3;
 
@@ -225,13 +283,14 @@ function parseApprovalDuration(text: string): string | null {
 
 /**
  * Check if a message from the primary is an approval/denial response.
+ * Uses senderId for identity matching (works in both DMs and groups).
  */
-function checkForApprovalResponse(text: string, chatId: string): boolean {
+function checkForApprovalResponse(text: string, senderId: string): boolean {
   if (!_pendingApprovalContext) return false;
 
   // Only the primary human can approve/deny
   const primaryChatId = getTelegramChatId();
-  if (chatId !== primaryChatId) return false;
+  if (senderId !== primaryChatId) return false;
 
   const lower = text.toLowerCase().trim();
 
@@ -251,11 +310,11 @@ function checkForApprovalResponse(text: string, chatId: string): boolean {
       notes: expires ? `Approved with expiry` : 'Approved persistently',
     });
 
-    // Send self-introduction to the new sender
+    // Send self-introduction to the new sender (reply to the chat they messaged from)
     const agentName = loadConfig().agent.name;
     sendMessage(
       `Hi! I'm ${agentName}, a personal assistant. My human just approved you to chat with me. I can help with general tasks, tech questions, brainstorming, and more. What can I help you with?`,
-      ctx.senderChatId,
+      ctx.senderReplyChatId,
     );
 
     // Notify primary
@@ -266,7 +325,7 @@ function checkForApprovalResponse(text: string, chatId: string): boolean {
     const queued = _approvalQueues.get(ctx.senderChatId) ?? [];
     _approvalQueues.delete(ctx.senderChatId);
     for (const msg of queued) {
-      doInject(msg.text, ctx.senderChatId, msg.firstName, true);
+      doInject(msg.text, ctx.senderChatId, ctx.senderReplyChatId, msg.firstName, true);
     }
 
     log.info(`Primary approved sender: ${ctx.senderName} (${ctx.senderChatId})`);
@@ -284,10 +343,10 @@ function checkForApprovalResponse(text: string, chatId: string): boolean {
     if (denialCount >= AUTO_BLOCK_THRESHOLD) {
       addBlocked(ctx.senderChatId, ctx.channel, ctx.senderName, 'agent', `Auto-blocked after ${denialCount} denials`);
       sendMessage(`${ctx.senderName} has been denied ${denialCount} times — auto-blocked.`);
-      sendMessage(`Sorry, I'm not able to help right now.`, ctx.senderChatId);
+      sendMessage(`Sorry, I'm not able to help right now.`, ctx.senderReplyChatId);
     } else {
       sendMessage(`Denied ${ctx.senderName}. They can try again later.`);
-      sendMessage(`Sorry, I'm not able to help with that right now. You're welcome to try again later.`, ctx.senderChatId);
+      sendMessage(`Sorry, I'm not able to help with that right now. You're welcome to try again later.`, ctx.senderReplyChatId);
     }
 
     _approvalQueues.delete(ctx.senderChatId);
@@ -309,47 +368,47 @@ function checkForApprovalResponse(text: string, chatId: string): boolean {
   return false;
 }
 
-async function processIncomingMessage(text: string, chatId: string, firstName: string): Promise<void> {
-  // Classify the sender
-  const tier: SenderTier = classifySender(chatId, 'telegram');
+async function processIncomingMessage(text: string, senderId: string, replyChatId: string, firstName: string): Promise<void> {
+  // Classify the sender by their user ID (works for both DMs and groups)
+  const tier: SenderTier = classifySender(senderId, 'telegram');
 
-  log.debug(`Sender ${firstName} (${chatId}) classified as: ${tier}`);
+  log.debug(`Sender ${firstName} (${senderId}) classified as: ${tier} [replyChatId=${replyChatId}]`);
 
   // ── Blocked: silently drop ──
   if (tier === 'blocked') {
-    log.info(`Dropped message from blocked sender: ${firstName} (${chatId})`);
+    log.info(`Dropped message from blocked sender: ${firstName} (${senderId})`);
     return;
   }
 
   // ── Safe sender: full access (existing behavior) ──
   if (tier === 'safe') {
     // Check if this is an approval response from the primary
-    if (checkForApprovalResponse(text, chatId)) {
+    if (checkForApprovalResponse(text, senderId)) {
       return;
     }
 
     // Normal safe sender flow
-    await injectWithSessionWakeup(text, chatId, firstName, false);
+    await injectWithSessionWakeup(text, senderId, replyChatId, firstName, false);
     return;
   }
 
   // ── Approved 3rd party: rate-limit check, then inject with tag ──
   if (tier === 'approved') {
-    if (!checkIncomingRate(chatId, 'telegram')) {
-      sendMessage("You're sending messages faster than I can process them. Please slow down — I'll catch up shortly.", chatId);
-      log.warn(`Rate-limited approved sender: ${firstName} (${chatId})`);
+    if (!checkIncomingRate(senderId, 'telegram')) {
+      sendMessage("You're sending messages faster than I can process them. Please slow down — I'll catch up shortly.", replyChatId);
+      log.warn(`Rate-limited approved sender: ${firstName} (${senderId})`);
       return;
     }
-    await injectWithSessionWakeup(text, chatId, firstName, true);
+    await injectWithSessionWakeup(text, senderId, replyChatId, firstName, true);
     return;
   }
 
   // ── Pending: queue additional messages ──
-  if (isPending(chatId, 'telegram')) {
-    const queue = _approvalQueues.get(chatId) ?? [];
+  if (isPending(senderId, 'telegram')) {
+    const queue = _approvalQueues.get(senderId) ?? [];
     queue.push({ text, firstName });
-    _approvalQueues.set(chatId, queue);
-    log.info(`Queued additional message from pending sender: ${firstName} (${chatId})`);
+    _approvalQueues.set(senderId, queue);
+    log.info(`Queued additional message from pending sender: ${firstName} (${senderId})`);
     return;
   }
 
@@ -360,42 +419,49 @@ async function processIncomingMessage(text: string, chatId: string, firstName: s
     return;
   }
 
-  // Tell the sender we're checking
-  sendMessage("I need to check with my human first — I'll get back to you when I hear from them.", chatId);
+  // Tell the sender we're checking (reply in the chat they messaged from)
+  sendMessage("I need to check with my human first — I'll get back to you when I hear from them.", replyChatId);
 
-  // Add to pending
-  addPending(chatId, 'telegram', firstName, text);
+  // Add to pending (using senderId for identity)
+  addPending(senderId, 'telegram', firstName, text);
 
   // Queue the message
-  const queue = _approvalQueues.get(chatId) ?? [];
+  const queue = _approvalQueues.get(senderId) ?? [];
   queue.push({ text, firstName });
-  _approvalQueues.set(chatId, queue);
+  _approvalQueues.set(senderId, queue);
 
-  // Set context for matching primary's reply
-  _pendingApprovalContext = { senderChatId: chatId, senderName: firstName, channel: 'telegram' };
+  // Set context for matching primary's reply (store both IDs)
+  _pendingApprovalContext = {
+    senderChatId: senderId,
+    senderReplyChatId: replyChatId,
+    senderName: firstName,
+    channel: 'telegram',
+  };
 
   // Notify primary
   const preview = text.length > 200 ? text.substring(0, 200) + '...' : text;
   sendMessage(
     `New message from unknown sender:\n\n` +
     `Name: ${firstName}\n` +
-    `Telegram ID: ${chatId}\n` +
+    `Telegram ID: ${senderId}\n` +
     `Message: "${preview}"\n\n` +
     `Reply "approve", "approve for 1 week", "deny", or "block".`,
     primaryChatId,
   );
 
-  log.info(`Approval request sent to primary for sender: ${firstName} (${chatId})`);
+  log.info(`Approval request sent to primary for sender: ${firstName} (${senderId})`);
 }
 
 /**
  * Inject a message into the Claude session, waking it up first if needed.
+ * @param senderId - User ID for identity (used in pending message storage)
+ * @param replyChatId - Chat ID for replies (typing indicator, response routing)
  */
-async function injectWithSessionWakeup(text: string, chatId: string, firstName: string, isThirdParty: boolean): Promise<void> {
+async function injectWithSessionWakeup(text: string, senderId: string, replyChatId: string, firstName: string, isThirdParty: boolean): Promise<void> {
   if (!sessionExists()) {
     log.info('No session found, waking up...');
-    startTypingLoop(chatId);
-    _pendingMessages.push({ text, chatId, firstName });
+    startTypingLoop(replyChatId);
+    _pendingMessages.push({ text, senderId, replyChatId, firstName });
 
     if (!_sessionStarting) {
       _sessionStarting = true;
@@ -406,7 +472,7 @@ async function injectWithSessionWakeup(text: string, chatId: string, firstName: 
       _sessionStarting = false;
 
       for (const msg of _pendingMessages) {
-        doInject(msg.text, msg.chatId, msg.firstName, isThirdParty);
+        doInject(msg.text, msg.senderId, msg.replyChatId, msg.firstName, isThirdParty);
       }
       _pendingMessages = [];
     }
@@ -414,15 +480,15 @@ async function injectWithSessionWakeup(text: string, chatId: string, firstName: 
   }
 
   if (_sessionStarting) {
-    _pendingMessages.push({ text, chatId, firstName });
+    _pendingMessages.push({ text, senderId, replyChatId, firstName });
     return;
   }
 
-  startTypingLoop(chatId);
-  doInject(text, chatId, firstName, isThirdParty);
+  startTypingLoop(replyChatId);
+  doInject(text, senderId, replyChatId, firstName, isThirdParty);
 }
 
-function doInject(text: string, chatId: string, firstName: string, isThirdParty: boolean): void {
+function doInject(text: string, _senderId: string, _targetChatId: string, firstName: string, isThirdParty: boolean): void {
   setChannel('telegram');
 
   const prefix = isThirdParty ? '[3rdParty][Telegram]' : '[Telegram]';
@@ -442,9 +508,11 @@ export interface TelegramRouter {
 }
 
 export function createTelegramRouter(): TelegramRouter {
-  // Register outgoing message handler with channel router
+  // Register outgoing message handler with channel router.
+  // Uses _replyChatId so transcript responses go to the most recent incoming chat
+  // (group or DM). Falls back to Keychain default (primary's DM) on cold start.
   registerTelegramHandler((text) => {
-    sendMessage(text);
+    sendMessage(text, _replyChatId ?? undefined);
   });
 
   log.info('Telegram adapter initialized');
@@ -454,12 +522,22 @@ export function createTelegramRouter(): TelegramRouter {
       const msg = update.message;
       if (!msg) return;
 
-      const chatId = msg.chat.id.toString();
-      const firstName = msg.from?.first_name ?? 'User';
+      const ctx = extractMessageContext(msg);
+
+      // Skip our own messages to prevent self-loops (but process other bots like R2)
+      if (ctx.isSelf) {
+        log.debug(`Skipping own bot message in chat ${ctx.replyChatId}`);
+        return;
+      }
+
+      // Track reply target so outgoing messages go to the right chat
+      _replyChatId = ctx.replyChatId;
+
+      const { senderId, replyChatId, firstName } = ctx;
 
       // Handle text messages
       if (msg.text) {
-        await processIncomingMessage(msg.text, chatId, firstName);
+        await processIncomingMessage(msg.text, senderId, replyChatId, firstName);
         return;
       }
 
@@ -471,7 +549,7 @@ export function createTelegramRouter(): TelegramRouter {
         if (localPath) {
           const caption = msg.caption ?? '';
           const text = caption ? `[Sent a photo: ${localPath}] ${caption}` : `[Sent a photo: ${localPath}]`;
-          await processIncomingMessage(text, chatId, firstName);
+          await processIncomingMessage(text, senderId, replyChatId, firstName);
         }
         return;
       }
@@ -483,7 +561,7 @@ export function createTelegramRouter(): TelegramRouter {
         if (localPath) {
           const caption = msg.caption ?? '';
           const text = caption ? `[Sent a document: ${localPath}] ${caption}` : `[Sent a document: ${localPath}]`;
-          await processIncomingMessage(text, chatId, firstName);
+          await processIncomingMessage(text, senderId, replyChatId, firstName);
         }
         return;
       }
@@ -508,27 +586,28 @@ export function createTelegramRouter(): TelegramRouter {
       const trimmed = text.trim();
 
       // Echo in Telegram chat
-      sendMessage(`User (via Siri): ${trimmed}`, chatId);
+      const ownerName = 'User';
+      sendMessage(`${ownerName} (via Siri): ${trimmed}`, chatId);
 
       // Set channel and start typing
       setChannel('telegram');
       startTypingLoop(chatId);
 
-      // Inject into session
+      // Siri Shortcut always targets primary's DM (senderId = replyChatId = chatId)
       if (!sessionExists()) {
-        _pendingMessages.push({ text: trimmed, chatId, firstName: 'User' });
+        _pendingMessages.push({ text: trimmed, senderId: chatId, replyChatId: chatId, firstName: ownerName });
         if (!_sessionStarting) {
           _sessionStarting = true;
           startSession();
           await new Promise(resolve => setTimeout(resolve, 12_000));
           _sessionStarting = false;
           for (const msg of _pendingMessages) {
-            doInject(msg.text, msg.chatId, msg.firstName, false);
+            doInject(msg.text, msg.senderId, msg.replyChatId, msg.firstName, false);
           }
           _pendingMessages = [];
         }
       } else {
-        doInject(trimmed, chatId, 'User', false);
+        doInject(trimmed, chatId, chatId, ownerName, false);
       }
 
       return { status: 200, body: { ok: true, message: `Delivered to ${loadConfig().agent.name}` } };
