@@ -1,0 +1,34 @@
+{
+  "id": "t-004",
+  "title": "Unknown sender triggers approval notification",
+  "description": "Verify that a message from an unknown sender triggers a notification to the primary human",
+  "storyRefs": ["s-m02"],
+  "planRef": "plans/20260201-multi-user-3rd-party-access.plan.md",
+  "type": "story",
+  "status": "passed",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Simulate a Telegram message from an unknown sender (not in safe-senders or 3rd-party-senders)",
+      "expected": "Message is not injected into the session"
+    },
+    {
+      "order": 2,
+      "action": "Check that a notification was sent to the primary's Telegram chat ID",
+      "expected": "Primary receives a message with sender name, ID, and message content"
+    },
+    {
+      "order": 3,
+      "action": "Check that the unknown sender received a 'checking with my human' response",
+      "expected": "Sender receives a holding message"
+    },
+    {
+      "order": 4,
+      "action": "Check that the message is queued in pending state",
+      "expected": "Message is stored for later processing"
+    }
+  ],
+  "created": "2026-02-01T22:30:00Z",
+  "executedAt": "2026-02-02T00:00:00Z",
+  "result": "All 4 steps verified via code inspection. Unknown sender triggers notification to primary, holding message to sender, and message queued in pending state."
+}

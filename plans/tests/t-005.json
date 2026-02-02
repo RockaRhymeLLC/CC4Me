@@ -1,0 +1,34 @@
+{
+  "id": "t-005",
+  "title": "Primary approves unknown sender",
+  "description": "Verify that approving an unknown sender adds them to 3rd-party-senders.json and processes queued messages",
+  "storyRefs": ["s-m02"],
+  "planRef": "plans/20260201-multi-user-3rd-party-access.plan.md",
+  "type": "story",
+  "status": "passed",
+  "steps": [
+    {
+      "order": 1,
+      "action": "With an unknown sender's message pending, simulate the primary replying 'approve'",
+      "expected": "Sender is added to 3rd-party-senders.json approved list with no expiry"
+    },
+    {
+      "order": 2,
+      "action": "Check that the sender received a self-introduction message",
+      "expected": "Sender receives a friendly introduction from the agent"
+    },
+    {
+      "order": 3,
+      "action": "Check that the queued message was processed (injected into session)",
+      "expected": "Message appears in the Claude session with [3rdParty] tag"
+    },
+    {
+      "order": 4,
+      "action": "Simulate the primary replying 'approve for 1 week' for a different sender",
+      "expected": "Sender added with expires date set to 1 week from now"
+    }
+  ],
+  "created": "2026-02-01T22:30:00Z",
+  "executedAt": "2026-02-02T00:00:00Z",
+  "result": "All 4 steps verified. Approve adds to approved list, self-introduction sent, queued messages processed with [3rdParty] tag. Duration parsing tested: 'approve for 1 week' sets correct expiry."
+}

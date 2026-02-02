@@ -1,0 +1,27 @@
+{
+  "id": "s-m03",
+  "title": "3rd party message injection & tagging",
+  "description": "When an approved 3rd party sends a message, inject it into the Claude session with a [3rdParty] prefix tag. This tag signals to Claude (via CLAUDE.md rules) that capability boundaries apply. Format: [3rdParty][Telegram] Name: message text. Ensure the session-start hook or CLAUDE.md explains what the tag means.",
+  "planRef": "plans/20260201-multi-user-3rd-party-access.plan.md",
+  "status": "completed",
+  "priority": 3,
+  "tests": ["t-007", "t-008"],
+  "blockedBy": ["s-m01", "s-m02"],
+  "created": "2026-02-01T22:30:00Z",
+  "updated": "2026-02-02T00:02:00Z",
+  "notes": [
+    {
+      "timestamp": "2026-02-02T00:02:00Z",
+      "content": "Tagging implemented as part of s-m02. doInject() accepts isThirdParty flag, prefixes [3rdParty][Telegram] or [Telegram] accordingly."
+    }
+  ],
+  "files": [
+    "daemon/src/comms/adapters/telegram.ts"
+  ],
+  "acceptanceCriteria": [
+    "Approved 3rd party messages are injected as [3rdParty][Telegram] Name: text",
+    "Safe sender messages remain as [Telegram] Name: text (no change to existing behavior)",
+    "The [3rdParty] tag is present in the injected text so Claude can apply behavioral rules",
+    "Channel is set to telegram so responses route back to the 3rd party"
+  ]
+}

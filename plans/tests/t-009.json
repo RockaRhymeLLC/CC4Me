@@ -1,0 +1,39 @@
+{
+  "id": "t-009",
+  "title": "CLAUDE.md contains 3rd party policy",
+  "description": "Verify that CLAUDE.md has the required 3rd party interaction policy sections",
+  "storyRefs": ["s-m04"],
+  "planRef": "plans/20260201-multi-user-3rd-party-access.plan.md",
+  "type": "story",
+  "status": "passed",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Read CLAUDE.md and check for '3rd Party' or 'Third Party' section",
+      "expected": "Section exists with clear heading"
+    },
+    {
+      "order": 2,
+      "action": "Check that capability boundaries (CAN/CANNOT) are listed",
+      "expected": "Clear list of what 3rd parties can and cannot do"
+    },
+    {
+      "order": 3,
+      "action": "Check that private info gate rule is documented",
+      "expected": "Rule states: ask primary before sharing calendar, personal details, schedule, location, preferences"
+    },
+    {
+      "order": 4,
+      "action": "Check that the [3rdParty] message tag is explained",
+      "expected": "Documentation explains how to recognize 3rd party messages by the prefix"
+    },
+    {
+      "order": 5,
+      "action": "Check that Secure Data Gate still explicitly blocks Keychain data from 3rd parties",
+      "expected": "Existing security policy preserved and reinforced"
+    }
+  ],
+  "created": "2026-02-01T22:30:00Z",
+  "executedAt": "2026-02-02T00:05:00Z",
+  "result": "All 5 steps passed. Section heading, CAN/CANNOT boundaries, Private Info Gate, [3rdParty] tag explanation, and Secure Data Gate reinforcement all present."
+}

@@ -1,0 +1,29 @@
+{
+  "id": "t-015",
+  "title": "Expired approval triggers re-approval",
+  "description": "Verify that a message from a sender with an expired approval triggers the approval flow again",
+  "storyRefs": ["s-m07"],
+  "planRef": "plans/20260201-multi-user-3rd-party-access.plan.md",
+  "type": "story",
+  "status": "passed",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Add a sender to approved list with expires set to a past date",
+      "expected": "Sender is in approved array with expired date"
+    },
+    {
+      "order": 2,
+      "action": "Simulate a message from that sender",
+      "expected": "Sender is treated as unknown — approval notification sent to primary"
+    },
+    {
+      "order": 3,
+      "action": "Primary approves again",
+      "expected": "Sender is re-added to approved list with new dates"
+    }
+  ],
+  "created": "2026-02-01T22:30:00Z",
+  "executedAt": "2026-02-02T00:12:00Z",
+  "result": "All 3 steps passed. Expired sender classified as unknown, re-approval creates new entry with updated dates."
+}

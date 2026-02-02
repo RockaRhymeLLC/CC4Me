@@ -61,8 +61,15 @@ export interface SchedulerConfig {
   tasks: TaskScheduleConfig[];
 }
 
+export interface RateLimitsConfig {
+  incoming_max_per_minute: number;
+  outgoing_max_per_minute: number;
+}
+
 export interface SecurityConfig {
   safe_senders_file: string;
+  third_party_senders_file: string;
+  rate_limits: RateLimitsConfig;
 }
 
 export interface CC4MeConfig {
@@ -90,7 +97,11 @@ const DEFAULTS: CC4MeConfig = {
     email: { enabled: false, providers: [] },
   },
   scheduler: { tasks: [] },
-  security: { safe_senders_file: '.claude/state/safe-senders.json' },
+  security: {
+    safe_senders_file: '.claude/state/safe-senders.json',
+    third_party_senders_file: '.claude/state/3rd-party-senders.json',
+    rate_limits: { incoming_max_per_minute: 5, outgoing_max_per_minute: 10 },
+  },
 };
 
 // ── Loader ───────────────────────────────────────────────────

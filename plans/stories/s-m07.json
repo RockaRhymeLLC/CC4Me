@@ -1,0 +1,33 @@
+{
+  "id": "s-m07",
+  "title": "Approval expiry & audit task",
+  "description": "Implement approval expiry checking in access-control.ts — expired approved senders are reclassified as unknown, triggering a new approval request. Create a scheduled approval-audit task that runs every 6 months (configurable cron), reviews all approved 3rd parties, removes expired entries, and notifies the primary with a summary of active approvals for review.",
+  "planRef": "plans/20260201-multi-user-3rd-party-access.plan.md",
+  "status": "completed",
+  "priority": 7,
+  "tests": ["t-015", "t-016"],
+  "blockedBy": ["s-m01"],
+  "created": "2026-02-01T22:30:00Z",
+  "updated": "2026-02-02T00:12:00Z",
+  "notes": [
+    {
+      "timestamp": "2026-02-02T00:12:00Z",
+      "content": "Created approval-audit.ts task. Registered in main.ts and config. Cron schedule every 6 months. Cleans expired entries, injects summary into session. Expiry already in classifySender(). 9/9 assertions pass."
+    }
+  ],
+  "files": [
+    "daemon/src/core/access-control.ts",
+    "daemon/src/automation/tasks/approval-audit.ts",
+    "daemon/src/core/main.ts",
+    "cc4me.config.yaml",
+    "cc4me.config.yaml.template"
+  ],
+  "acceptanceCriteria": [
+    "Approved senders with an expires date in the past are classified as unknown",
+    "Expired senders' next message triggers a fresh approval request",
+    "approval-audit task is registered in the scheduler",
+    "Audit task runs on configurable cron schedule (default: every 6 months)",
+    "Audit produces a summary of active approvals injected into the session for primary review",
+    "Expired entries are cleaned up from the approved list during audit"
+  ]
+}

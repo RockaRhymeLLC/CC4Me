@@ -19,6 +19,17 @@ import { resolveProjectPath, loadConfig } from '../../core/config.js';
 import { sessionExists, startSession, injectText, isBusy } from '../../core/session-bridge.js';
 import { registerTelegramHandler, setChannel } from '../channel-router.js';
 import { createLogger } from '../../core/logger.js';
+import {
+  classifySender,
+  addApproved,
+  addDenied,
+  addPending,
+  isPending,
+  getDenialCount,
+  addBlocked,
+  checkIncomingRate,
+  type SenderTier,
+} from '../../core/access-control.js';
 
 const log = createLogger('telegram');
 
@@ -178,25 +189,209 @@ function sendMessage(text: string, chatId?: string): void {
 let _sessionStarting = false;
 let _pendingMessages: Array<{ text: string; chatId: string; firstName: string }> = [];
 
-function getSafeSenders(): string[] {
-  try {
-    const file = resolveProjectPath(loadConfig().security.safe_senders_file);
-    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
-    return data.telegram?.users ?? [];
-  } catch {
-    return [];
+// State for 3rd-party approval flow
+// Maps chatId to queued messages awaiting primary approval
+const _approvalQueues: Map<string, Array<{ text: string; firstName: string }>> = new Map();
+// Maps a context key to the pending sender's chatId (so we can match primary's reply)
+let _pendingApprovalContext: { senderChatId: string; senderName: string; channel: string } | null = null;
+
+const AUTO_BLOCK_THRESHOLD = 3;
+
+/**
+ * Parse a duration string from the primary's approval message.
+ * Supports: "for 1 week", "for 2 days", "for 1 month", "until Friday", etc.
+ * Returns an ISO date string or null for persistent approval.
+ */
+function parseApprovalDuration(text: string): string | null {
+  const lower = text.toLowerCase();
+
+  // "approve for X days/weeks/months"
+  const durationMatch = lower.match(/for\s+(\d+)\s+(day|week|month|hour)s?/);
+  if (durationMatch) {
+    const amount = parseInt(durationMatch[1]!, 10);
+    const unit = durationMatch[2]!;
+    const now = new Date();
+    switch (unit) {
+      case 'hour': now.setHours(now.getHours() + amount); break;
+      case 'day': now.setDate(now.getDate() + amount); break;
+      case 'week': now.setDate(now.getDate() + amount * 7); break;
+      case 'month': now.setMonth(now.getMonth() + amount); break;
+    }
+    return now.toISOString();
   }
+
+  return null; // Persistent (no expiry)
+}
+
+/**
+ * Check if a message from the primary is an approval/denial response.
+ */
+function checkForApprovalResponse(text: string, chatId: string): boolean {
+  if (!_pendingApprovalContext) return false;
+
+  // Only the primary human can approve/deny
+  const primaryChatId = getTelegramChatId();
+  if (chatId !== primaryChatId) return false;
+
+  const lower = text.toLowerCase().trim();
+
+  if (lower.startsWith('approve')) {
+    const ctx = _pendingApprovalContext;
+    _pendingApprovalContext = null;
+
+    const expires = parseApprovalDuration(text);
+
+    addApproved({
+      id: ctx.senderChatId,
+      channel: ctx.channel,
+      name: ctx.senderName,
+      type: 'human', // Default; can be refined later
+      approved_by: 'primary',
+      expires,
+      notes: expires ? `Approved with expiry` : 'Approved persistently',
+    });
+
+    // Send self-introduction to the new sender
+    const agentName = loadConfig().agent.name;
+    sendMessage(
+      `Hi! I'm ${agentName}, a personal assistant. My human just approved you to chat with me. I can help with general tasks, tech questions, brainstorming, and more. What can I help you with?`,
+      ctx.senderChatId,
+    );
+
+    // Notify primary
+    const expiryNote = expires ? ` (until ${new Date(expires).toLocaleDateString()})` : ' (persistent)';
+    sendMessage(`Approved ${ctx.senderName}${expiryNote}. Processing their queued messages now.`);
+
+    // Process queued messages from this sender
+    const queued = _approvalQueues.get(ctx.senderChatId) ?? [];
+    _approvalQueues.delete(ctx.senderChatId);
+    for (const msg of queued) {
+      doInject(msg.text, ctx.senderChatId, msg.firstName, true);
+    }
+
+    log.info(`Primary approved sender: ${ctx.senderName} (${ctx.senderChatId})`);
+    return true;
+  }
+
+  if (lower.startsWith('deny') || lower.startsWith('reject') || lower === 'no') {
+    const ctx = _pendingApprovalContext;
+    _pendingApprovalContext = null;
+
+    addDenied(ctx.senderChatId, ctx.channel, ctx.senderName, 'Denied by primary');
+
+    // Check if auto-block threshold reached
+    const denialCount = getDenialCount(ctx.senderChatId, ctx.channel);
+    if (denialCount >= AUTO_BLOCK_THRESHOLD) {
+      addBlocked(ctx.senderChatId, ctx.channel, ctx.senderName, 'agent', `Auto-blocked after ${denialCount} denials`);
+      sendMessage(`${ctx.senderName} has been denied ${denialCount} times — auto-blocked.`);
+      sendMessage(`Sorry, I'm not able to help right now.`, ctx.senderChatId);
+    } else {
+      sendMessage(`Denied ${ctx.senderName}. They can try again later.`);
+      sendMessage(`Sorry, I'm not able to help with that right now. You're welcome to try again later.`, ctx.senderChatId);
+    }
+
+    _approvalQueues.delete(ctx.senderChatId);
+    log.info(`Primary denied sender: ${ctx.senderName} (${ctx.senderChatId})`);
+    return true;
+  }
+
+  if (lower.startsWith('block')) {
+    const ctx = _pendingApprovalContext;
+    _pendingApprovalContext = null;
+
+    addBlocked(ctx.senderChatId, ctx.channel, ctx.senderName, 'primary', 'Blocked by primary');
+    sendMessage(`Blocked ${ctx.senderName}. They won't be able to contact me again.`);
+    _approvalQueues.delete(ctx.senderChatId);
+    log.info(`Primary blocked sender: ${ctx.senderName} (${ctx.senderChatId})`);
+    return true;
+  }
+
+  return false;
 }
 
 async function processIncomingMessage(text: string, chatId: string, firstName: string): Promise<void> {
-  // Check authorization
-  const safeSenders = getSafeSenders();
-  if (!safeSenders.includes(chatId)) {
-    log.warn(`Rejected message from unauthorized sender: ${chatId}`);
+  // Classify the sender
+  const tier: SenderTier = classifySender(chatId, 'telegram');
+
+  log.debug(`Sender ${firstName} (${chatId}) classified as: ${tier}`);
+
+  // ── Blocked: silently drop ──
+  if (tier === 'blocked') {
+    log.info(`Dropped message from blocked sender: ${firstName} (${chatId})`);
     return;
   }
 
-  // Check if session exists
+  // ── Safe sender: full access (existing behavior) ──
+  if (tier === 'safe') {
+    // Check if this is an approval response from the primary
+    if (checkForApprovalResponse(text, chatId)) {
+      return;
+    }
+
+    // Normal safe sender flow
+    await injectWithSessionWakeup(text, chatId, firstName, false);
+    return;
+  }
+
+  // ── Approved 3rd party: rate-limit check, then inject with tag ──
+  if (tier === 'approved') {
+    if (!checkIncomingRate(chatId, 'telegram')) {
+      sendMessage("You're sending messages faster than I can process them. Please slow down — I'll catch up shortly.", chatId);
+      log.warn(`Rate-limited approved sender: ${firstName} (${chatId})`);
+      return;
+    }
+    await injectWithSessionWakeup(text, chatId, firstName, true);
+    return;
+  }
+
+  // ── Pending: queue additional messages ──
+  if (isPending(chatId, 'telegram')) {
+    const queue = _approvalQueues.get(chatId) ?? [];
+    queue.push({ text, firstName });
+    _approvalQueues.set(chatId, queue);
+    log.info(`Queued additional message from pending sender: ${firstName} (${chatId})`);
+    return;
+  }
+
+  // ── Denied or Unknown: trigger approval flow ──
+  const primaryChatId = getTelegramChatId();
+  if (!primaryChatId) {
+    log.error('Cannot notify primary: no chat ID configured');
+    return;
+  }
+
+  // Tell the sender we're checking
+  sendMessage("I need to check with my human first — I'll get back to you when I hear from them.", chatId);
+
+  // Add to pending
+  addPending(chatId, 'telegram', firstName, text);
+
+  // Queue the message
+  const queue = _approvalQueues.get(chatId) ?? [];
+  queue.push({ text, firstName });
+  _approvalQueues.set(chatId, queue);
+
+  // Set context for matching primary's reply
+  _pendingApprovalContext = { senderChatId: chatId, senderName: firstName, channel: 'telegram' };
+
+  // Notify primary
+  const preview = text.length > 200 ? text.substring(0, 200) + '...' : text;
+  sendMessage(
+    `New message from unknown sender:\n\n` +
+    `Name: ${firstName}\n` +
+    `Telegram ID: ${chatId}\n` +
+    `Message: "${preview}"\n\n` +
+    `Reply "approve", "approve for 1 week", "deny", or "block".`,
+    primaryChatId,
+  );
+
+  log.info(`Approval request sent to primary for sender: ${firstName} (${chatId})`);
+}
+
+/**
+ * Inject a message into the Claude session, waking it up first if needed.
+ */
+async function injectWithSessionWakeup(text: string, chatId: string, firstName: string, isThirdParty: boolean): Promise<void> {
   if (!sessionExists()) {
     log.info('No session found, waking up...');
     startTypingLoop(chatId);
@@ -206,14 +401,12 @@ async function processIncomingMessage(text: string, chatId: string, firstName: s
       _sessionStarting = true;
       const started = startSession();
       if (started) {
-        // Wait for Claude to initialize
         await new Promise(resolve => setTimeout(resolve, 12_000));
       }
       _sessionStarting = false;
 
-      // Process queued messages
       for (const msg of _pendingMessages) {
-        doInject(msg.text, msg.chatId, msg.firstName);
+        doInject(msg.text, msg.chatId, msg.firstName, isThirdParty);
       }
       _pendingMessages = [];
     }
@@ -226,17 +419,17 @@ async function processIncomingMessage(text: string, chatId: string, firstName: s
   }
 
   startTypingLoop(chatId);
-  doInject(text, chatId, firstName);
+  doInject(text, chatId, firstName, isThirdParty);
 }
 
-function doInject(text: string, chatId: string, firstName: string): void {
-  // Set channel to telegram
+function doInject(text: string, chatId: string, firstName: string, isThirdParty: boolean): void {
   setChannel('telegram');
 
-  const formatted = `[Telegram] ${firstName}: ${text}`;
+  const prefix = isThirdParty ? '[3rdParty][Telegram]' : '[Telegram]';
+  const formatted = `${prefix} ${firstName}: ${text}`;
   const ok = injectText(formatted);
   if (ok) {
-    log.info(`Injected message from ${firstName} (${text.substring(0, 50)}...)`);
+    log.info(`Injected ${isThirdParty ? '3rd-party ' : ''}message from ${firstName} (${text.substring(0, 50)}...)`);
   }
 }
 
@@ -330,12 +523,12 @@ export function createTelegramRouter(): TelegramRouter {
           await new Promise(resolve => setTimeout(resolve, 12_000));
           _sessionStarting = false;
           for (const msg of _pendingMessages) {
-            doInject(msg.text, msg.chatId, msg.firstName);
+            doInject(msg.text, msg.chatId, msg.firstName, false);
           }
           _pendingMessages = [];
         }
       } else {
-        doInject(trimmed, chatId, 'Dave');
+        doInject(trimmed, chatId, 'Dave', false);
       }
 
       return { status: 200, body: { ok: true, message: `Delivered to ${loadConfig().agent.name}` } };

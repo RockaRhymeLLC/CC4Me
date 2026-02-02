@@ -1,0 +1,29 @@
+{
+  "id": "t-001",
+  "title": "Classify safe sender correctly",
+  "description": "Verify that a sender in safe-senders.json is classified as 'safe'",
+  "storyRefs": ["s-m01"],
+  "planRef": "plans/20260201-multi-user-3rd-party-access.plan.md",
+  "type": "story",
+  "status": "passed",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Ensure safe-senders.json contains telegram user ID '7629737488'",
+      "expected": "File exists with the user ID in telegram.users array"
+    },
+    {
+      "order": 2,
+      "action": "Call classifySender('7629737488', 'telegram')",
+      "expected": "Returns 'safe'"
+    },
+    {
+      "order": 3,
+      "action": "Call classifySender('9999999999', 'telegram') for an unknown ID",
+      "expected": "Returns 'unknown'"
+    }
+  ],
+  "created": "2026-02-01T22:30:00Z",
+  "executedAt": "2026-02-01T23:58:00Z",
+  "result": "All 3 steps passed. Safe sender returns 'safe', unknown returns 'unknown'."
+}

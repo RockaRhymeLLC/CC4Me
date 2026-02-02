@@ -1,0 +1,29 @@
+{
+  "id": "t-013",
+  "title": "Blocked sender silently ignored",
+  "description": "Verify that messages from blocked senders are dropped with no notification or response",
+  "storyRefs": ["s-m06"],
+  "planRef": "plans/20260201-multi-user-3rd-party-access.plan.md",
+  "type": "story",
+  "status": "passed",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Add a sender to the blocked list in 3rd-party-senders.json",
+      "expected": "Sender is in the blocked array"
+    },
+    {
+      "order": 2,
+      "action": "Simulate a message from that blocked sender",
+      "expected": "Message is dropped — no injection, no notification to primary, no response to sender"
+    },
+    {
+      "order": 3,
+      "action": "Check daemon logs",
+      "expected": "Log entry shows the message was dropped due to block"
+    }
+  ],
+  "created": "2026-02-01T22:30:00Z",
+  "executedAt": "2026-02-02T00:10:00Z",
+  "result": "All 3 steps passed. Blocked sender in array, classified as blocked, block is first check in chain."
+}

@@ -1,0 +1,31 @@
+{
+  "id": "s-m08",
+  "title": "Config & state file setup",
+  "description": "Add 3rd-party config parameters to cc4me.config.yaml (and template), create initial 3rd-party-senders.json state file, extend config.ts to parse new fields.",
+  "planRef": "plans/20260201-multi-user-3rd-party-access.plan.md",
+  "status": "completed",
+  "priority": 1,
+  "tests": ["t-017"],
+  "blockedBy": [],
+  "created": "2026-02-01T22:30:00Z",
+  "updated": "2026-02-01T23:53:00Z",
+  "notes": [
+    {
+      "timestamp": "2026-02-01T23:53:00Z",
+      "content": "Added third_party_senders_file and rate_limits to config.yaml, template, and config.ts. Created empty 3rd-party-senders.json. Daemon builds and starts cleanly."
+    }
+  ],
+  "files": [
+    "cc4me.config.yaml",
+    "cc4me.config.yaml.template",
+    "daemon/src/core/config.ts",
+    ".claude/state/3rd-party-senders.json"
+  ],
+  "acceptanceCriteria": [
+    "cc4me.config.yaml has security.third_party_senders_file and security.rate_limits fields",
+    "cc4me.config.yaml.template has the same fields with sensible defaults",
+    "config.ts loadConfig() parses and exposes the new fields with type safety",
+    "3rd-party-senders.json is created with empty approved/denied/blocked/pending arrays",
+    "Daemon starts cleanly with the new config fields"
+  ]
+}

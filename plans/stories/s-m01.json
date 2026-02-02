@@ -1,0 +1,30 @@
+{
+  "id": "s-m01",
+  "title": "Access control module",
+  "description": "Create daemon/src/core/access-control.ts — the centralized module for sender classification. Reads safe-senders.json and 3rd-party-senders.json. Classifies any sender as: blocked, safe, approved-3rd-party, denied, or unknown. Provides CRUD operations for the 3rd-party-senders state file (add approved, add denied, add blocked, remove). Checks expiry on approved senders.",
+  "planRef": "plans/20260201-multi-user-3rd-party-access.plan.md",
+  "status": "completed",
+  "priority": 1,
+  "tests": ["t-001", "t-002", "t-003"],
+  "blockedBy": ["s-m08"],
+  "created": "2026-02-01T22:30:00Z",
+  "updated": "2026-02-01T23:58:00Z",
+  "notes": [
+    {
+      "timestamp": "2026-02-01T23:58:00Z",
+      "content": "Created access-control.ts with classifySender(), addApproved/Denied/Blocked/Pending(), removeSender(), rate limiting (sliding window + token bucket). All 10 test assertions pass across t-001, t-002, t-003."
+    }
+  ],
+  "files": [
+    "daemon/src/core/access-control.ts"
+  ],
+  "acceptanceCriteria": [
+    "classifySender(id, channel) returns correct tier: blocked | safe | approved | denied | unknown",
+    "Expired approved senders are classified as unknown (triggers re-approval)",
+    "addApproved() writes to 3rd-party-senders.json with all metadata fields",
+    "addDenied() logs the denial with timestamp and reason",
+    "addBlocked() adds to blocked list with timestamp, blocker (agent or primary), and reason",
+    "removeSender() removes from any list by ID",
+    "State file is read fresh on each classification (no stale cache)"
+  ]
+}

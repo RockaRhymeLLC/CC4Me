@@ -1,0 +1,32 @@
+{
+  "id": "s-m05",
+  "title": "Rate limiting (incoming & outgoing)",
+  "description": "Add rate limiting to access-control.ts for incoming messages (per sender, sliding window) and to channel-router.ts for outgoing messages (per recipient, token bucket). Thresholds are configurable in cc4me.config.yaml. When incoming limit is exceeded, send a single 'please slow down' message and pause processing for that sender. When outgoing limit is hit, queue messages with a small delay.",
+  "planRef": "plans/20260201-multi-user-3rd-party-access.plan.md",
+  "status": "completed",
+  "priority": 5,
+  "tests": ["t-011", "t-012"],
+  "blockedBy": ["s-m01"],
+  "created": "2026-02-01T22:30:00Z",
+  "updated": "2026-02-02T00:08:00Z",
+  "notes": [
+    {
+      "timestamp": "2026-02-02T00:08:00Z",
+      "content": "Incoming sliding window and outgoing token bucket implemented in access-control.ts. Incoming rate check integrated in telegram adapter for approved senders. Config-driven thresholds. In-memory state resets on restart. 10/10 rate limit assertions pass."
+    }
+  ],
+  "files": [
+    "daemon/src/core/access-control.ts",
+    "daemon/src/comms/channel-router.ts",
+    "daemon/src/comms/adapters/telegram.ts"
+  ],
+  "acceptanceCriteria": [
+    "Incoming rate limit is configurable via cc4me.config.yaml (security.rate_limits.incoming_max_per_minute)",
+    "Outgoing rate limit is configurable via cc4me.config.yaml (security.rate_limits.outgoing_max_per_minute)",
+    "When a sender exceeds the incoming limit, they receive a single 'slow down' message",
+    "Subsequent messages from a rate-limited sender are dropped until rate drops below threshold",
+    "Outgoing messages are delayed (not dropped) when outgoing limit is hit",
+    "Rate limiting applies to all senders (3rd party and safe senders alike)",
+    "Rate limit state is in-memory only (resets on daemon restart)"
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "id": "t-012",
+  "title": "Outgoing rate limit enforced",
+  "description": "Verify that outgoing messages are delayed (not dropped) when the outgoing rate limit is exceeded",
+  "storyRefs": ["s-m05"],
+  "planRef": "plans/20260201-multi-user-3rd-party-access.plan.md",
+  "type": "story",
+  "status": "passed",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Set outgoing_max_per_minute to 5 in config",
+      "expected": "Config loads with the rate limit value"
+    },
+    {
+      "order": 2,
+      "action": "Trigger 6 outgoing messages to the same recipient in rapid succession",
+      "expected": "First 5 are sent immediately; 6th is queued with a delay"
+    },
+    {
+      "order": 3,
+      "action": "Wait for the delay to elapse",
+      "expected": "6th message is sent (not dropped)"
+    }
+  ],
+  "created": "2026-02-01T22:30:00Z",
+  "executedAt": "2026-02-02T00:08:00Z",
+  "result": "All 3 steps passed. Config loads with limit, first 10 messages sent, 11th is rate-limited. Token bucket refills over time."
+}

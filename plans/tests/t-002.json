@@ -1,0 +1,34 @@
+{
+  "id": "t-002",
+  "title": "Classify approved 3rd party correctly",
+  "description": "Verify that approved, denied, and blocked senders are classified correctly",
+  "storyRefs": ["s-m01"],
+  "planRef": "plans/20260201-multi-user-3rd-party-access.plan.md",
+  "type": "story",
+  "status": "passed",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Add a sender to 3rd-party-senders.json approved list with no expiry",
+      "expected": "Sender is written to the approved array"
+    },
+    {
+      "order": 2,
+      "action": "Call classifySender() with that sender's ID and channel",
+      "expected": "Returns 'approved'"
+    },
+    {
+      "order": 3,
+      "action": "Add a sender to the denied list",
+      "expected": "classifySender() returns 'denied'"
+    },
+    {
+      "order": 4,
+      "action": "Add a sender to the blocked list",
+      "expected": "classifySender() returns 'blocked'"
+    }
+  ],
+  "created": "2026-02-01T22:30:00Z",
+  "executedAt": "2026-02-01T23:58:00Z",
+  "result": "All 4 steps passed. Approved, denied, and blocked senders classified correctly."
+}

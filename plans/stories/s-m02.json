@@ -1,0 +1,32 @@
+{
+  "id": "s-m02",
+  "title": "Telegram approval flow",
+  "description": "Modify the Telegram adapter to use access-control for sender classification. When an unknown sender is detected: (1) send a notification to the primary human via Telegram with sender info and message content, (2) tell the sender 'I need to check with my human first', (3) queue the message. When the primary replies with approve/deny (with optional duration), update 3rd-party-senders.json accordingly. On approval, send self-introduction to the new sender and process queued messages.",
+  "planRef": "plans/20260201-multi-user-3rd-party-access.plan.md",
+  "status": "completed",
+  "priority": 2,
+  "tests": ["t-004", "t-005", "t-006"],
+  "blockedBy": ["s-m01"],
+  "created": "2026-02-01T22:30:00Z",
+  "updated": "2026-02-02T00:00:00Z",
+  "notes": [
+    {
+      "timestamp": "2026-02-02T00:00:00Z",
+      "content": "Replaced safe-sender check with classifySender(). Added full approval flow: unknown → notify primary → approve/deny/block. Supports duration parsing ('approve for 1 week'). Self-introduction on approval. Queue management for pending senders. Auto-block integration."
+    }
+  ],
+  "files": [
+    "daemon/src/comms/adapters/telegram.ts"
+  ],
+  "acceptanceCriteria": [
+    "Unknown sender message triggers notification to primary's chat ID within 2 seconds",
+    "Notification includes: sender name, sender ID, channel, and message content",
+    "Sender receives 'checking with my human' response",
+    "Primary can reply 'approve' to approve persistently",
+    "Primary can reply 'approve for 1 week' (or similar duration) for time-limited approval",
+    "Primary can reply 'deny' to deny the request",
+    "On approval: sender added to 3rd-party-senders.json, self-introduction sent, queued messages processed",
+    "On denial: sender added to denied list, sender told 'sorry, can't help right now'",
+    "Multiple messages from the same pending sender are queued, not re-notified"
+  ]
+}

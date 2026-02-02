@@ -1,0 +1,34 @@
+{
+  "id": "t-014",
+  "title": "Auto-block after repeated denials",
+  "description": "Verify that a sender is auto-blocked after 3 denied requests",
+  "storyRefs": ["s-m06"],
+  "planRef": "plans/20260201-multi-user-3rd-party-access.plan.md",
+  "type": "story",
+  "status": "passed",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Simulate an unknown sender, primary denies (1st denial)",
+      "expected": "Sender added to denied list with count or timestamp"
+    },
+    {
+      "order": 2,
+      "action": "Same sender messages again, primary denies (2nd denial)",
+      "expected": "Denial count incremented"
+    },
+    {
+      "order": 3,
+      "action": "Same sender messages again, primary denies (3rd denial)",
+      "expected": "Sender is auto-moved to blocked list with blocked_by: 'agent'"
+    },
+    {
+      "order": 4,
+      "action": "Same sender messages again",
+      "expected": "Message is silently dropped (blocked behavior)"
+    }
+  ],
+  "created": "2026-02-01T22:30:00Z",
+  "executedAt": "2026-02-02T00:10:00Z",
+  "result": "All 4 steps passed. Denial count increments, auto-block at 3 denials, blocked_by is 'agent', sender classified as blocked."
+}

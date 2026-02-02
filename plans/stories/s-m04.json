@@ -1,0 +1,31 @@
+{
+  "id": "s-m04",
+  "title": "CLAUDE.md policy & behavioral rules",
+  "description": "Add a comprehensive 3rd Party Interaction Policy section to CLAUDE.md. Define: capability boundaries (what 3rd parties can/cannot do), private info gate (ask primary before sharing calendar/personal info), enhancement capture (create to-dos for improvement ideas), interaction memory logging (log who, what, and what was shared). Update the security policy to reference 3rd-party-senders.json.",
+  "planRef": "plans/20260201-multi-user-3rd-party-access.plan.md",
+  "status": "completed",
+  "priority": 4,
+  "tests": ["t-009", "t-010"],
+  "blockedBy": [],
+  "created": "2026-02-01T22:30:00Z",
+  "updated": "2026-02-02T00:05:00Z",
+  "notes": [
+    {
+      "timestamp": "2026-02-02T00:05:00Z",
+      "content": "Added 3rd Party Interaction Policy section with: Capability Boundaries (CAN/CANNOT), Private Info Gate, Interaction Logging, Enhancement Capture. Updated Security Policy to reference 3rd-party-senders.json and reinforced Secure Data Gate for 3rd parties."
+    }
+  ],
+  "files": [
+    ".claude/CLAUDE.md"
+  ],
+  "acceptanceCriteria": [
+    "CLAUDE.md has a '3rd Party Interaction Policy' section",
+    "Capability boundaries are clearly listed (CAN/CANNOT)",
+    "Private info gate rule is documented: ask primary via Telegram before sharing calendar, personal details, schedule, location, preferences",
+    "Enhancement capture rule: create a to-do when a 3rd party interaction reveals improvement opportunities",
+    "Interaction logging rule: log 3rd party interactions to memory",
+    "The [3rdParty] message tag is explained so Claude knows how to recognize 3rd party messages",
+    "Security policy section references 3rd-party-senders.json",
+    "Secure Data Gate remains absolute (Keychain data never shared with 3rd parties)"
+  ]
+}

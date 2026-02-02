@@ -1,0 +1,30 @@
+{
+  "id": "s-m06",
+  "title": "Blocked list & auto-block",
+  "description": "Implement the blocked sender list in access-control.ts. Blocked senders are silently ignored — no notification to primary, no response to sender. Primary can manually block via conversation ('block user X'). Agent can auto-block a sender who sends repeated requests after being denied (e.g., 3+ denied requests triggers auto-block). Add block/unblock operations to access control module.",
+  "planRef": "plans/20260201-multi-user-3rd-party-access.plan.md",
+  "status": "completed",
+  "priority": 6,
+  "tests": ["t-013", "t-014"],
+  "blockedBy": ["s-m01", "s-m02"],
+  "created": "2026-02-01T22:30:00Z",
+  "updated": "2026-02-02T00:10:00Z",
+  "notes": [
+    {
+      "timestamp": "2026-02-02T00:10:00Z",
+      "content": "Blocked list implemented in access-control.ts (first check in chain). Auto-block after 3 denials implemented in telegram adapter. addBlocked/unblockSender functions available. 9/9 test assertions pass."
+    }
+  ],
+  "files": [
+    "daemon/src/core/access-control.ts",
+    "daemon/src/comms/adapters/telegram.ts"
+  ],
+  "acceptanceCriteria": [
+    "Messages from blocked senders are silently dropped (no notification, no response)",
+    "access-control.ts provides blockSender() and unblockSender() functions",
+    "Auto-block triggers after 3 denied requests from the same sender",
+    "Auto-blocked entries have blocked_by: 'agent' in the state file",
+    "Manually blocked entries have blocked_by: 'primary' in the state file",
+    "Blocked list is checked before any other classification (first check in the chain)"
+  ]
+}

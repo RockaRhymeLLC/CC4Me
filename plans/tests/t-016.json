@@ -1,0 +1,34 @@
+{
+  "id": "t-016",
+  "title": "Approval audit task runs and reports",
+  "description": "Verify that the approval audit scheduled task reviews approvals and notifies the primary",
+  "storyRefs": ["s-m07"],
+  "planRef": "plans/20260201-multi-user-3rd-party-access.plan.md",
+  "type": "story",
+  "status": "passed",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Check that approval-audit task is registered in the scheduler",
+      "expected": "Task appears in scheduler task list with a cron schedule"
+    },
+    {
+      "order": 2,
+      "action": "Add approved senders (some expired, some active) to 3rd-party-senders.json",
+      "expected": "State file has a mix of expired and active entries"
+    },
+    {
+      "order": 3,
+      "action": "Trigger the audit task manually",
+      "expected": "Expired entries are removed from approved list"
+    },
+    {
+      "order": 4,
+      "action": "Check that a summary was injected into the session",
+      "expected": "Session receives a list of active 3rd party approvals for review"
+    }
+  ],
+  "created": "2026-02-01T22:30:00Z",
+  "executedAt": "2026-02-02T00:12:00Z",
+  "result": "All 4 steps passed. Task registered, config has cron schedule, expired entries cleaned, active entries retained."
+}

@@ -50,7 +50,14 @@ scheduler:
     - name: "memory-consolidation"
       enabled: true
       cron: "0 23 * * *"
+    - name: "approval-audit"
+      enabled: true
+      cron: "0 9 1 */6 *"    # 9am on the 1st, every 6 months
 
 # ── Security ──────────────────────────
 security:
   safe_senders_file: ".claude/state/safe-senders.json"
+  third_party_senders_file: ".claude/state/3rd-party-senders.json"
+  rate_limits:
+    incoming_max_per_minute: 5
+    outgoing_max_per_minute: 10

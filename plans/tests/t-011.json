@@ -1,0 +1,34 @@
+{
+  "id": "t-011",
+  "title": "Incoming rate limit enforced",
+  "description": "Verify that a sender exceeding the incoming rate limit is warned and throttled",
+  "storyRefs": ["s-m05"],
+  "planRef": "plans/20260201-multi-user-3rd-party-access.plan.md",
+  "type": "story",
+  "status": "passed",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Set incoming_max_per_minute to 3 in config",
+      "expected": "Config loads with the rate limit value"
+    },
+    {
+      "order": 2,
+      "action": "Simulate 4 messages from the same sender within 60 seconds",
+      "expected": "First 3 messages are processed normally"
+    },
+    {
+      "order": 3,
+      "action": "Check what happens on the 4th message",
+      "expected": "Sender receives a 'please slow down' message; message is not processed"
+    },
+    {
+      "order": 4,
+      "action": "Wait for the rate window to reset and send another message",
+      "expected": "Message is processed normally"
+    }
+  ],
+  "created": "2026-02-01T22:30:00Z",
+  "executedAt": "2026-02-02T00:08:00Z",
+  "result": "All 4 steps passed. Config loads with limit, first 5 messages pass, 6th is rate-limited. Sliding window resets over time."
+}
