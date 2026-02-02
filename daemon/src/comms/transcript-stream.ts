@@ -1,16 +1,17 @@
 /**
- * Transcript Stream — watches the Claude Code transcript JSONL file
- * using fs.watch + readline for reliable, efficient parsing.
+ * Transcript Stream — reads assistant messages from the Claude Code transcript
+ * JSONL file and routes them to the active channel.
  *
- * Replaces transcript-watcher.sh:
- * - No more bash polling with sleep 1
- * - No more shelling out to jq for every line
- * - Proper fs.watch for instant notifications
- * - Handles transcript file rotation (new session = new file)
+ * v3: Hook-driven approach. Instead of watching the file with fs.watch (which
+ * is unreliable on macOS), Claude Code hooks (PostToolUse + Stop) notify the
+ * daemon via HTTP when there's a new assistant message to read. This means
+ * we only read the transcript when we know there's something relevant.
+ *
+ * Still handles transcript file rotation (new session = new file) via periodic
+ * check, since hooks don't fire on session start.
  */
 
 import fs from 'node:fs';
-import readline from 'node:readline';
 import path from 'node:path';
 import { getNewestTranscript } from '../core/session-bridge.js';
 import { routeOutgoingMessage } from './channel-router.js';
@@ -29,78 +30,82 @@ interface TranscriptMessage {
   };
 }
 
-let _watcher: fs.FSWatcher | null = null;
 let _currentFile: string | null = null;
 let _fileOffset = 0;  // byte offset of where we've read to
 let _checkInterval: ReturnType<typeof setInterval> | null = null;
-let _pollInterval: ReturnType<typeof setInterval> | null = null;
 let _running = false;
-let _processing = false;  // guard against concurrent processNewLines calls
 
 /**
- * Process new lines added to the transcript file since our last read.
- * Uses a processing flag to prevent concurrent reads (fs.watch on macOS
- * can fire multiple change events for a single write).
+ * Called by the daemon's HTTP endpoint when a Claude Code hook fires
+ * (PostToolUse or Stop). Reads any new assistant messages from the
+ * transcript and routes them.
+ *
+ * @param transcriptPath - Optional path from the hook's stdin payload.
+ *   If provided and different from current, switches to the new file.
  */
-function processNewLines(filePath: string): void {
-  if (_processing) return;
-  _processing = true;
+export function onHookNotification(transcriptPath?: string): void {
+  // If the hook provides a transcript path, use it (handles rotation)
+  if (transcriptPath && transcriptPath !== _currentFile) {
+    switchToFile(transcriptPath);
+  }
 
+  if (!_currentFile) {
+    // Try to find a transcript file if we don't have one yet
+    const newest = getNewestTranscript();
+    if (newest) {
+      switchToFile(newest);
+    } else {
+      log.warn('Hook fired but no transcript file found');
+      return;
+    }
+  }
+
+  readNewMessages(_currentFile!);
+}
+
+/**
+ * Read new lines from the transcript file since our last offset.
+ * Synchronous and simple — no processing flag needed since hooks
+ * fire sequentially and we process inline.
+ */
+function readNewMessages(filePath: string): void {
   try {
     const stats = fs.statSync(filePath);
 
     if (stats.size <= _fileOffset) {
       if (stats.size < _fileOffset) {
-        // File was truncated — reset
         log.info('Transcript file truncated, resetting offset');
         _fileOffset = 0;
       }
-      _processing = false;
       return;
     }
 
-    // Capture the read range: from current offset to current file size.
-    // Update _fileOffset immediately so concurrent calls don't re-read.
     const readFrom = _fileOffset;
-    const readTo = stats.size;
-    _fileOffset = readTo;
+    _fileOffset = stats.size;
 
-    // Read only the new bytes
-    const stream = fs.createReadStream(filePath, {
-      start: readFrom,
-      end: readTo - 1,
-      encoding: 'utf8',
-    });
+    // Read only the new bytes synchronously — simple and reliable
+    const buf = Buffer.alloc(stats.size - readFrom);
+    const fd = fs.openSync(filePath, 'r');
+    fs.readSync(fd, buf, 0, buf.length, readFrom);
+    fs.closeSync(fd);
 
-    const rl = readline.createInterface({ input: stream });
+    const newContent = buf.toString('utf8');
+    const lines = newContent.split('\n');
 
-    rl.on('line', (line) => {
-      // Quick pre-filter: only parse lines that look like assistant messages
-      if (!line.includes('"type":"assistant"')) return;
-
-      // Skip very large lines (file snapshots can match the filter)
-      if (line.length > 50_000) return;
+    for (const line of lines) {
+      if (!line.includes('"type":"assistant"')) continue;
+      if (line.length > 50_000) continue;
 
       try {
         const msg = JSON.parse(line) as TranscriptMessage;
-        if (msg.type !== 'assistant') return;
-
+        if (msg.type !== 'assistant') continue;
         handleAssistantMessage(msg);
       } catch {
         // Malformed JSON line — skip
       }
-    });
-
-    rl.on('close', () => {
-      _processing = false;
-    });
-
-    rl.on('error', () => {
-      _processing = false;
-    });
+    }
   } catch (err) {
-    _processing = false;
-    log.error('processNewLines error', {
+    log.error('readNewMessages error', {
       error: err instanceof Error ? err.message : String(err),
     });
   }
@@ -108,12 +113,13 @@ function processNewLines(filePath: string): void {
 
 /**
  * Handle a parsed assistant message from the transcript.
+ * Extracts text blocks and optionally thinking blocks (for verbose mode).
  */
 function handleAssistantMessage(msg: TranscriptMessage): void {
   const content = msg.message?.content;
   if (!content || !Array.isArray(content)) return;
 
-  // Extract text blocks (non-thinking)
+  // Extract text blocks
   const textParts = content
     .filter(c => c.type === 'text' && c.text)
     .map(c => c.text!);
@@ -125,8 +131,30 @@ function handleAssistantMessage(msg: TranscriptMessage): void {
 
   log.debug(`New assistant message (${text.length} chars)`);
 
-  // Route through channel router
-  routeOutgoingMessage(text);
+  // Extract thinking blocks for verbose mode
+  const thinkingParts = content
+    .filter(c => c.type === 'thinking' && c.thinking)
+    .map(c => c.thinking!);
+
+  const thinking = thinkingParts.join('\n').trim();
+
+  // Route through channel router (passes both text and thinking)
+  routeOutgoingMessage(text, thinking || undefined);
+}
+
+/**
+ * Switch to a new transcript file.
+ */
+function switchToFile(filePath: string): void {
+  _currentFile = filePath;
+  // Start from end of file (don't replay old messages)
+  try {
+    _fileOffset = fs.statSync(filePath).size;
+    log.info(`Watching transcript: ${path.basename(filePath)} (from byte ${_fileOffset})`);
+  } catch {
+    _fileOffset = 0;
+    log.warn(`Could not stat transcript: ${path.basename(filePath)}, starting from 0`);
+  }
 }
 
 /**
@@ -136,62 +164,14 @@ function checkForNewerFile(): void {
   const newest = getNewestTranscript();
   if (newest && newest !== _currentFile) {
     log.info(`Switching to newer transcript: ${path.basename(newest)}`);
-    watchFile(newest);
+    switchToFile(newest);
   }
 }
 
 /**
- * Fallback poll: check if the current file has new content.
- * fs.watch on macOS can miss events during rapid writes.
- * This runs every 2 seconds as a safety net.
- */
-function pollForChanges(): void {
-  if (!_currentFile || _processing) return;
-  try {
-    const stats = fs.statSync(_currentFile);
-    if (stats.size > _fileOffset) {
-      processNewLines(_currentFile);
-    }
-  } catch {
-    // File may have been deleted during rotation — ignore
-  }
-}
-
-/**
- * Start watching a specific transcript file.
- */
-function watchFile(filePath: string): void {
-  // Clean up existing watcher
-  if (_watcher) {
-    _watcher.close();
-    _watcher = null;
-  }
-
-  _currentFile = filePath;
-  // Start from end of file (don't replay old messages)
-  _fileOffset = fs.statSync(filePath).size;
-
-  log.info(`Watching transcript: ${path.basename(filePath)} (from byte ${_fileOffset})`);
-
-  // Use fs.watch for instant change notifications
-  _watcher = fs.watch(filePath, (event) => {
-    if (event === 'change') {
-      processNewLines(filePath);
-    }
-  });
-
-  _watcher.on('error', (err) => {
-    log.error('Watcher error', { error: err.message });
-    // Try to recover by re-watching
-    setTimeout(() => {
-      if (_running && _currentFile) watchFile(_currentFile);
-    }, 1000);
-  });
-}
-
-/**
- * Start the transcript stream. Finds the current transcript and watches it.
- * Also periodically checks for newer transcript files (session restarts).
+ * Start the transcript stream. Finds the current transcript and sets up
+ * periodic check for file rotation. Actual message reading is triggered
+ * by hook notifications via onHookNotification().
  */
 export function startTranscriptStream(): void {
   if (_running) return;
@@ -199,39 +179,26 @@ export function startTranscriptStream(): void {
 
   const transcriptPath = getNewestTranscript();
   if (transcriptPath) {
-    watchFile(transcriptPath);
+    switchToFile(transcriptPath);
   } else {
     log.warn('No transcript file found, will check periodically');
   }
 
-  // Check for newer transcript files every 10 seconds
+  // Check for newer transcript files every 10 seconds (handles session restarts)
   _checkInterval = setInterval(checkForNewerFile, 10_000);
 
-  // Fallback poll every 2 seconds to catch missed fs.watch events
-  _pollInterval = setInterval(pollForChanges, 2_000);
-
-  log.info('Transcript stream started');
+  log.info('Transcript stream started (hook-driven mode)');
 }
 
 /**
- * Stop the transcript stream and clean up watchers.
+ * Stop the transcript stream.
  */
 export function stopTranscriptStream(): void {
   _running = false;
 
-  if (_watcher) {
-    _watcher.close();
-    _watcher = null;
-  }
-
   if (_checkInterval) {
     clearInterval(_checkInterval);
     _checkInterval = null;
-  }
-
-  if (_pollInterval) {
-    clearInterval(_pollInterval);
-    _pollInterval = null;
   }
 
   log.info('Transcript stream stopped');

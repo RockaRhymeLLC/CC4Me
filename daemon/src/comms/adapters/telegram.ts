@@ -34,9 +34,12 @@ import {
 const log = createLogger('telegram');
 
 const MEDIA_DIR_REL = '.claude/state/telegram-media';
+const REPLY_CHAT_ID_REL = '.claude/state/reply-chat-id.txt';
 
 interface TelegramUpdate {
+  update_id?: number;
   message?: TelegramMessage;
+  message_reaction?: MessageReactionUpdated;
 }
 
 interface TelegramMessage {
@@ -48,14 +51,75 @@ interface TelegramMessage {
   caption?: string;
 }
 
+interface ReactionType {
+  type: 'emoji' | 'custom_emoji' | 'paid';
+  emoji?: string;
+  custom_emoji_id?: string;
+}
+
+interface MessageReactionUpdated {
+  chat: { id: number; type?: string };
+  message_id: number;
+  date: number;
+  user?: { id?: number; first_name?: string; is_bot?: boolean };
+  actor_chat?: { id: number };
+  old_reaction: ReactionType[];
+  new_reaction: ReactionType[];
+}
+
 // ── Group chat context ──────────────────────────────────────
 
 /**
  * Track the most recent reply chat ID so outgoing transcript messages
  * go to the right place (group or DM). Falls back to Keychain default
- * (primary's DM) on cold start when no incoming message has been received yet.
+ * (Dave's DM) on cold start when no incoming message has been received yet.
+ *
+ * Persisted to disk so it survives daemon restarts. Restored in
+ * createTelegramRouter() (after config is loaded and project dir is set).
  */
 let _replyChatId: string | null = null;
+
+function loadReplyChatId(): string | null {
+  try {
+    const filePath = resolveProjectPath(REPLY_CHAT_ID_REL);
+    const value = fs.readFileSync(filePath, 'utf-8').trim();
+    return value || null;
+  } catch {
+    // File doesn't exist yet — cold start
+    return null;
+  }
+}
+
+function persistReplyChatId(chatId: string): void {
+  try {
+    const filePath = resolveProjectPath(REPLY_CHAT_ID_REL);
+    fs.writeFileSync(filePath, chatId + '\n', 'utf-8');
+  } catch (err) {
+    log.error('Failed to persist reply chat ID', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+// ── Webhook deduplication ────────────────────────────────────
+
+const DEDUP_MAX_SIZE = 1000;
+const _recentUpdateIds = new Set<number>();
+
+function isDuplicateUpdate(updateId: number): boolean {
+  if (_recentUpdateIds.has(updateId)) return true;
+
+  _recentUpdateIds.add(updateId);
+
+  // Evict oldest entry when the set gets too large.
+  // Set iteration order is insertion order, so first value is oldest.
+  if (_recentUpdateIds.size > DEDUP_MAX_SIZE) {
+    const oldest = _recentUpdateIds.values().next().value!;
+    _recentUpdateIds.delete(oldest);
+  }
+
+  return false;
+}
 
 interface MessageContext {
   /** User ID for access control (from.id in groups, chat.id in DMs) */
@@ -368,6 +432,50 @@ function checkForApprovalResponse(text: string, senderId: string): boolean {
   return false;
 }
 
+/**
+ * Handle a message_reaction update. Compares old/new reaction lists to
+ * determine which emoji were added or removed, then injects a short
+ * notification into the Claude session so BMO can see acknowledgments.
+ */
+function handleReaction(reaction: MessageReactionUpdated): void {
+  const userId = reaction.user?.id?.toString();
+  const firstName = reaction.user?.first_name ?? 'Someone';
+
+  // Only process reactions from known senders (safe or approved)
+  if (userId) {
+    const tier = classifySender(userId, 'telegram');
+    if (tier === 'blocked') return;
+  }
+
+  const oldEmojis = new Set(reaction.old_reaction.filter(r => r.emoji).map(r => r.emoji!));
+  const newEmojis = new Set(reaction.new_reaction.filter(r => r.emoji).map(r => r.emoji!));
+
+  const added = [...newEmojis].filter(e => !oldEmojis.has(e));
+  const removed = [...oldEmojis].filter(e => !newEmojis.has(e));
+
+  if (added.length === 0 && removed.length === 0) return;
+
+  const parts: string[] = [];
+  if (added.length > 0) parts.push(`reacted ${added.join(' ')}`);
+  if (removed.length > 0) parts.push(`removed ${removed.join(' ')}`);
+
+  const chatId = reaction.chat.id.toString();
+  const text = `[Telegram] ${firstName} ${parts.join(', ')} on a message`;
+
+  // Update reply target
+  _replyChatId = chatId;
+  persistReplyChatId(chatId);
+
+  // Only inject if the session is running (don't wake up just for a reaction)
+  if (sessionExists()) {
+    setChannel('telegram');
+    injectText(text);
+    log.info(`Reaction from ${firstName}: ${parts.join(', ')}`);
+  } else {
+    log.debug(`Reaction from ${firstName} skipped (no session)`);
+  }
+}
+
 async function processIncomingMessage(text: string, senderId: string, replyChatId: string, firstName: string): Promise<void> {
   // Classify the sender by their user ID (works for both DMs and groups)
   const tier: SenderTier = classifySender(senderId, 'telegram');
@@ -508,9 +616,15 @@ export interface TelegramRouter {
 }
 
 export function createTelegramRouter(): TelegramRouter {
+  // Restore persisted reply chat ID from previous daemon run
+  _replyChatId = loadReplyChatId();
+  if (_replyChatId) {
+    log.info(`Restored reply chat ID: ${_replyChatId}`);
+  }
+
   // Register outgoing message handler with channel router.
   // Uses _replyChatId so transcript responses go to the most recent incoming chat
-  // (group or DM). Falls back to Keychain default (primary's DM) on cold start.
+  // (group or DM). Falls back to Keychain default (Dave's DM) on cold start.
   registerTelegramHandler((text) => {
     sendMessage(text, _replyChatId ?? undefined);
   });
@@ -519,6 +633,18 @@ export function createTelegramRouter(): TelegramRouter {
 
   return {
     async handleUpdate(update: TelegramUpdate) {
+      // Deduplicate webhook retries using Telegram's update_id
+      if (update.update_id != null && isDuplicateUpdate(update.update_id)) {
+        log.debug(`Duplicate update_id ${update.update_id}, skipping`);
+        return;
+      }
+
+      // Handle reactions (separate path — no message body)
+      if (update.message_reaction) {
+        handleReaction(update.message_reaction);
+        return;
+      }
+
       const msg = update.message;
       if (!msg) return;
 
@@ -532,6 +658,7 @@ export function createTelegramRouter(): TelegramRouter {
 
       // Track reply target so outgoing messages go to the right chat
       _replyChatId = ctx.replyChatId;
+      persistReplyChatId(ctx.replyChatId);
 
       const { senderId, replyChatId, firstName } = ctx;
 
@@ -586,16 +713,15 @@ export function createTelegramRouter(): TelegramRouter {
       const trimmed = text.trim();
 
       // Echo in Telegram chat
-      const ownerName = 'User';
-      sendMessage(`${ownerName} (via Siri): ${trimmed}`, chatId);
+      sendMessage(`Dave (via Siri): ${trimmed}`, chatId);
 
       // Set channel and start typing
       setChannel('telegram');
       startTypingLoop(chatId);
 
-      // Siri Shortcut always targets primary's DM (senderId = replyChatId = chatId)
+      // Siri Shortcut always targets Dave's DM (senderId = replyChatId = chatId)
       if (!sessionExists()) {
-        _pendingMessages.push({ text: trimmed, senderId: chatId, replyChatId: chatId, firstName: ownerName });
+        _pendingMessages.push({ text: trimmed, senderId: chatId, replyChatId: chatId, firstName: 'Dave' });
         if (!_sessionStarting) {
           _sessionStarting = true;
           startSession();
@@ -607,7 +733,7 @@ export function createTelegramRouter(): TelegramRouter {
           _pendingMessages = [];
         }
       } else {
-        doInject(trimmed, chatId, chatId, ownerName, false);
+        doInject(trimmed, chatId, chatId, 'Dave', false);
       }
 
       return { status: 200, body: { ok: true, message: `Delivered to ${loadConfig().agent.name}` } };
