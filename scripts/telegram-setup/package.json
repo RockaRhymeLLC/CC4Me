@@ -2,10 +2,9 @@
   "name": "telegram-setup",
   "version": "1.0.0",
   "private": true,
-  "description": "Telegram bot setup and gateway scripts for CC4Me assistant integration",
-  "main": "gateway.js",
+  "description": "Telegram bot setup scripts for CC4Me assistant integration",
+  "main": "setup.js",
   "scripts": {
-    "gateway": "node gateway.js",
     "setup": "node setup.js",
     "tunnel": "bash start-tunnel.sh"
   },

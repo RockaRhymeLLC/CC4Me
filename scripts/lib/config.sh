@@ -47,7 +47,7 @@ _yaml_get() {
     fi
 
     # Fallback: grep for simple top-level or one-level-deep keys
-    # Uses POSIX character classes for BSD sed (macOS) compatibility
+    # Converts dotted key like ".tmux.session" to match YAML structure
     local leaf="${key##*.}"
     local val
     val=$(grep -E "^[[:space:]]*${leaf}:" "$CONFIG_FILE" 2>/dev/null | head -1 | sed 's/^[^:]*:[[:space:]]*//' | sed 's/[[:space:]]*#.*//' | sed 's/^["'"'"']//' | sed 's/["'"'"']$//')
