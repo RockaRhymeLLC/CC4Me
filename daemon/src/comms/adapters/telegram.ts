@@ -72,7 +72,7 @@ interface MessageReactionUpdated {
 /**
  * Track the most recent reply chat ID so outgoing transcript messages
  * go to the right place (group or DM). Falls back to Keychain default
- * (Dave's DM) on cold start when no incoming message has been received yet.
+ * (primary's DM) on cold start when no incoming message has been received yet.
  *
  * Persisted to disk so it survives daemon restarts. Restored in
  * createTelegramRouter() (after config is loaded and project dir is set).
@@ -435,7 +435,7 @@ function checkForApprovalResponse(text: string, senderId: string): boolean {
 /**
  * Handle a message_reaction update. Compares old/new reaction lists to
  * determine which emoji were added or removed, then injects a short
- * notification into the Claude session so BMO can see acknowledgments.
+ * notification into the Claude session so the agent can see acknowledgments.
  */
 function handleReaction(reaction: MessageReactionUpdated): void {
   const userId = reaction.user?.id?.toString();
@@ -624,7 +624,7 @@ export function createTelegramRouter(): TelegramRouter {
 
   // Register outgoing message handler with channel router.
   // Uses _replyChatId so transcript responses go to the most recent incoming chat
-  // (group or DM). Falls back to Keychain default (Dave's DM) on cold start.
+  // (group or DM). Falls back to Keychain default (primary's DM) on cold start.
   registerTelegramHandler((text) => {
     sendMessage(text, _replyChatId ?? undefined);
   });
@@ -712,16 +712,16 @@ export function createTelegramRouter(): TelegramRouter {
       const chatId = getTelegramChatId() ?? '';
       const trimmed = text.trim();
 
-      // Echo in Telegram chat
-      sendMessage(`Dave (via Siri): ${trimmed}`, chatId);
+      // Echo in Telegram chat (Siri doesn't identify the caller — label generically)
+      sendMessage(`User (via Siri): ${trimmed}`, chatId);
 
       // Set channel and start typing
       setChannel('telegram');
       startTypingLoop(chatId);
 
-      // Siri Shortcut always targets Dave's DM (senderId = replyChatId = chatId)
+      // Siri Shortcut always targets primary's DM (senderId = replyChatId = chatId)
       if (!sessionExists()) {
-        _pendingMessages.push({ text: trimmed, senderId: chatId, replyChatId: chatId, firstName: 'Dave' });
+        _pendingMessages.push({ text: trimmed, senderId: chatId, replyChatId: chatId, firstName: 'User' });
         if (!_sessionStarting) {
           _sessionStarting = true;
           startSession();
@@ -733,7 +733,7 @@ export function createTelegramRouter(): TelegramRouter {
           _pendingMessages = [];
         }
       } else {
-        doInject(trimmed, chatId, chatId, 'Dave', false);
+        doInject(trimmed, chatId, chatId, 'User', false);
       }
 
       return { status: 200, body: { ok: true, message: `Delivered to ${loadConfig().agent.name}` } };
