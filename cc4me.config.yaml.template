@@ -1,0 +1,66 @@
+# CC4Me v2 Configuration
+# Copy to cc4me.config.yaml and customize for your agent.
+# Each section maps to a feature domain.
+
+# ── Core ──────────────────────────────
+agent:
+  name: "Assistant"
+
+tmux:
+  session: "assistant"
+  # socket: auto-detected from uid
+
+daemon:
+  port: 3847
+  log_level: "info"        # debug | info | warn | error
+  log_dir: "logs"
+  log_rotation:
+    max_size_mb: 10
+    max_files: 5
+
+# ── Communications ────────────────────
+channels:
+  telegram:
+    enabled: false
+    webhook_path: "/telegram"
+    # chat_id and bot token come from Keychain
+  email:
+    enabled: false
+    providers: []
+    # - type: "graph"    # Microsoft 365 via Graph API
+    # - type: "jmap"     # Fastmail via JMAP
+
+# ── Automation ────────────────────────
+scheduler:
+  tasks:
+    - name: "context-watchdog"
+      enabled: true
+      interval: "3m"
+      config:
+        threshold_percent: 35
+    - name: "todo-reminder"
+      enabled: true
+      interval: "30m"
+    - name: "email-check"
+      enabled: false
+      interval: "15m"
+    - name: "nightly-todo"
+      enabled: true
+      cron: "0 22 * * *"
+    - name: "health-check"
+      enabled: true
+      cron: "0 8 * * 1"
+    - name: "memory-consolidation"
+      enabled: true
+      cron: "0 23 * * *"
+    - name: "approval-audit"
+      enabled: true
+      cron: "0 9 1 */6 *"    # 9am on the 1st, every 6 months
+
+# ── Security ──────────────────────────
+security:
+  safe_senders_file: ".claude/state/safe-senders.json"
+  third_party_senders_file: ".claude/state/3rd-party-senders.json"
+  rate_limits:
+    incoming_max_per_minute: 5
+    outgoing_max_per_minute: 10
