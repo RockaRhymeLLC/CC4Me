@@ -11,6 +11,7 @@
 
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { loadConfig, getProjectDir } from './config.js';
 import { createLogger } from './logger.js';
@@ -80,7 +81,7 @@ export function isBusy(): boolean {
   const projectDir = getProjectDir();
   const projectDirMangled = projectDir.replace(/\//g, '-');
   const transcriptDir = path.join(
-    process.env.HOME ?? '',
+    process.env.HOME ?? os.homedir(),
     '.claude',
     'projects',
     projectDirMangled,
@@ -155,7 +156,7 @@ export function getNewestTranscript(): string | null {
   const projectDir = getProjectDir();
   const projectDirMangled = projectDir.replace(/\//g, '-');
   const transcriptDir = path.join(
-    process.env.HOME ?? '',
+    process.env.HOME ?? os.homedir(),
     '.claude',
     'projects',
     projectDirMangled,

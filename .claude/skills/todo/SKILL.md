@@ -43,10 +43,14 @@ To-dos are stored as individual JSON files in `.claude/state/todos/`.
 **Naming Convention**: `{priority}-{status}-{id}-{slug}.json`
 - Priority: 1-critical, 2-high, 3-medium, 4-low
 - Status: open, in-progress, blocked, completed
-- ID: 3-character alphanumeric (e.g., a1b)
+- ID: auto-incrementing integer, zero-padded to 3 digits (e.g., 001, 032)
 - Slug: kebab-case from title (first 30 chars)
 
-**Example**: `2-high-open-a1b-implement-login-flow.json`
+**Example**: `2-high-open-032-implement-login-flow.json`
+
+**Counter file**: `.claude/state/todos/.counter` stores the next available ID number. Read it, use the value as the new ID, then write back the incremented value.
+
+**Legacy IDs**: Older to-dos may use 3-character alphanumeric IDs (e.g., a1b). These are still valid and should be accepted for show/update/complete commands.
 
 See `reference.md` for the full JSON schema.
 
@@ -67,19 +71,19 @@ See `reference.md` for the full JSON schema.
 ```
 ## Open To-Dos (3)
 
-[a1b] HIGH - Implement login flow
-      Due: 2026-02-01 | Created: 2026-01-28
+[32] HIGH - Implement login flow
+     Due: 2026-02-01 | Created: 2026-01-28
 
-[c2d] MEDIUM - Write documentation
-      Blocked: Waiting on API spec
+[33] MEDIUM - Write documentation
+     Blocked: Waiting on API spec
 
-[e3f] LOW - Clean up old files
-      In Progress
+[34] LOW - Clean up old files
+     In Progress
 ```
 
 ### To-Do Detail Output
 ```
-## To-Do [a1b]: Implement login flow
+## To-Do [32]: Implement login flow
 
 Priority: HIGH | Status: open | Due: 2026-02-01
 
@@ -103,7 +107,8 @@ Set up authentication middleware
 
 ## Notes
 
-- IDs are case-insensitive (stored lowercase)
+- New IDs are auto-incrementing integers from `.counter` file
+- Legacy alphanumeric IDs (a1b, z6f, etc.) are still recognized
 - When status or priority changes, the file is renamed to maintain sort order
 - Completed to-dos are kept for history (can be archived manually)
 - The `actions` array provides a full audit trail

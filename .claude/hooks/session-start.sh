@@ -1,9 +1,13 @@
 #!/bin/bash
 #
-# SessionStart Hook
+# SessionStart Hook (v2)
 #
 # Loads state and context when Claude Code starts or resumes.
 # Injects: autonomy mode, identity, pending tasks, calendar, saved state.
+#
+# v2 changes:
+# - No longer starts transcript watcher (daemon handles that now)
+# - Loads memory briefing instead of full memory.md
 #
 # Fires on: startup, resume, clear, compact
 
@@ -11,22 +15,14 @@ set -e
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}"
 STATE_DIR="$PROJECT_DIR/.claude/state"
-LOG_FILE="$PROJECT_DIR/logs/watcher.log"
 
-# Read hook input from stdin
+# Read hook input from stdin (consume stdin so it doesn't block)
 HOOK_INPUT=$(cat)
-TRANSCRIPT_PATH=$(echo "$HOOK_INPUT" | jq -r '.transcript_path // empty' 2>/dev/null)
 
-# Start transcript watcher if we have a transcript path and the script exists
-if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ] && [ -x "$PROJECT_DIR/scripts/transcript-watcher.sh" ]; then
-  # Kill any existing watchers
-  pkill -f "transcript-watcher.sh" 2>/dev/null || true
-  sleep 0.5
-
-  # Start new watcher
-  mkdir -p "$(dirname "$LOG_FILE")"
-  nohup "$PROJECT_DIR/scripts/transcript-watcher.sh" "$TRANSCRIPT_PATH" > /dev/null 2>&1 &
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] Started watcher (PID $!) for: $TRANSCRIPT_PATH" >> "$LOG_FILE"
+# Check if daemon is running
+DAEMON_RUNNING=false
+if curl -s --connect-timeout 1 --max-time 2 "http://localhost:3847/status" > /dev/null 2>&1; then
+  DAEMON_RUNNING=true
 fi
 
 # Output will be added to Claude's context
@@ -132,6 +128,27 @@ if [ -f "$STATE_DIR/assistant-state.md" ]; then
   fi
   echo ""
 fi
+
+# Load memory briefing (v2) or fall back to memory.md (v1)
+if [ -f "$STATE_DIR/memory/briefing.md" ]; then
+  echo "### Memory Briefing"
+  cat "$STATE_DIR/memory/briefing.md"
+  echo ""
+elif [ -f "$STATE_DIR/memory.md" ]; then
+  echo "### Memory"
+  cat "$STATE_DIR/memory.md"
+  echo ""
+fi
+
+# Daemon status
+if [ "$DAEMON_RUNNING" = "true" ]; then
+  echo "### Daemon"
+  echo "CC4Me daemon is running (port 3847). Transcript watching, Telegram, email, and scheduled tasks are managed by the daemon."
+else
+  echo "### Daemon"
+  echo "CC4Me daemon is NOT running. Using fallback v1 transcript watcher. Start daemon: \`launchctl load ~/Library/LaunchAgents/com.assistant.daemon.plist\`"
+fi
+echo ""
 
 # Check for CLAUDE.md reminders
 if [ -f "$PROJECT_DIR/.claude/CLAUDE.md" ]; then

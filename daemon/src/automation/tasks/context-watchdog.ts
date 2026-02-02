@@ -1,7 +1,7 @@
 /**
  * Context Watchdog — monitors context usage, nudges Claude to save + clear.
  *
- * Replaces: context-watchdog.sh + com.assistant.context-watchdog launchd job
+ * Replaces: context-watchdog.sh + legacy launchd job
  *
  * When context drops below the configured threshold (default 35% remaining):
  * - If Claude is idle: injects /save-state + /clear directly

@@ -1,7 +1,7 @@
 /**
  * Health Check task — periodic system health check.
  *
- * Replaces: health-check.sh + com.assistant.health-check launchd job
+ * Replaces: health-check.sh + legacy launchd job
  *
  * Runs the unified health check and injects a summary into Claude's
  * session if there are warnings or errors.
