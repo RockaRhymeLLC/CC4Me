@@ -1,5 +1,24 @@
 #!/usr/bin/env node
 
+/**
+ * Fastmail JMAP Email Client
+ * Sends and reads email via JMAP API for a Fastmail account.
+ *
+ * Prerequisites:
+ *   - Fastmail account with JMAP API token
+ *   - Keychain entries:
+ *     - credential-fastmail-email  (your Fastmail email address)
+ *     - credential-fastmail-token  (JMAP API token from Fastmail settings)
+ *
+ * Usage:
+ *   jmap.js inbox          - Show recent inbox messages
+ *   jmap.js unread         - Show unread messages only
+ *   jmap.js read <id>      - Read a specific email
+ *   jmap.js mark-read <id>  - Mark an email as read
+ *   jmap.js search "query" - Search emails
+ *   jmap.js send "to" "subject" "body" [--cc addr] [--bcc addr] [attachment1] ...
+ */
+
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -85,6 +104,7 @@ async function listInbox(limit = 10, unreadOnly = false) {
 
   const queryResult = data.methodResponses[0][1];
   if (!queryResult.ids || queryResult.ids.length === 0) return [];
+
   const emails = data.methodResponses[1][1].list;
   return emails || [];
 }

@@ -16,6 +16,7 @@
  *   graph.js inbox          - Show recent inbox messages
  *   graph.js unread         - Show unread messages only
  *   graph.js read <id>      - Read a specific email
+ *   graph.js mark-read <id>  - Mark an email as read
  *   graph.js search "query" - Search emails
  *   graph.js send "to" "subject" "body" [--cc addr] [--bcc addr] [attachment1] ...
  *   graph.js mark-read <id>  - Mark an email as read

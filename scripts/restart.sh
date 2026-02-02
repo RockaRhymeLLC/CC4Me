@@ -2,32 +2,36 @@
 
 # CC4Me Restart Script
 #
-# Restarts the BMO tmux session. Can be called:
+# Restarts the CC4Me tmux session. Can be called:
 # - Manually from another terminal
 # - By the restart-watcher launchd service
 # - After saving state (self-restart)
 
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-SESSION_NAME="bmo"
-TMUX="/opt/homebrew/bin/tmux"
-RESTART_FLAG="$PROJECT_DIR/.claude/state/restart-requested"
+# Source shared config
+source "$(dirname "${BASH_SOURCE[0]}")/lib/config.sh"
+
+if [ -z "$TMUX_BIN" ]; then
+    echo "Error: tmux not found. Install with: brew install tmux" >&2
+    exit 1
+fi
+
+RESTART_FLAG="$STATE_DIR/restart-requested"
 
 # Clear restart flag if it exists
 rm -f "$RESTART_FLAG"
 
 # Kill existing session if running
-if $TMUX has-session -t "$SESSION_NAME" 2>/dev/null; then
-    echo "Killing existing session '$SESSION_NAME'..."
-    $TMUX kill-session -t "$SESSION_NAME"
+if session_exists; then
+    cc4me_log "Killing existing session '$SESSION_NAME'..."
+    $TMUX_CMD kill-session -t "$SESSION_NAME"
     sleep 2
 fi
 
 # Start fresh session (detached with auto-prompt)
-echo "Starting fresh session..."
-"$SCRIPT_DIR/start-tmux.sh" --detach
+cc4me_log "Starting fresh session..."
+"$SCRIPTS_DIR/start-tmux.sh" --detach
 
-echo "Restart complete. Session '$SESSION_NAME' is running."
-echo "Attach with: tmux attach -t $SESSION_NAME"
+cc4me_log "Restart complete. Session '$SESSION_NAME' is running."
+echo "Attach with: $TMUX_BIN attach -t $SESSION_NAME"
