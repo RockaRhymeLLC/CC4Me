@@ -64,8 +64,11 @@ export function setChannel(channel: Channel): void {
 /**
  * Route an outgoing message to the active channel.
  * Called by transcript-stream when it detects a new assistant message.
+ *
+ * @param text - The assistant's text output
+ * @param thinking - Optional thinking block content (sent in verbose mode)
  */
-export function routeOutgoingMessage(text: string): void {
+export function routeOutgoingMessage(text: string, thinking?: string): void {
   const channel = getChannel();
 
   switch (channel) {
@@ -75,8 +78,19 @@ export function routeOutgoingMessage(text: string): void {
       return;
 
     case 'telegram':
+      if (_telegramHandler) {
+        _telegramHandler(text);
+      } else {
+        log.warn('Telegram message dropped: no handler registered');
+      }
+      return;
+
     case 'telegram-verbose':
       if (_telegramHandler) {
+        // In verbose mode, prepend thinking blocks if present
+        if (thinking) {
+          _telegramHandler(`💭 ${thinking}`);
+        }
         _telegramHandler(text);
       } else {
         log.warn('Telegram message dropped: no handler registered');

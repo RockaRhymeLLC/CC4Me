@@ -13,7 +13,7 @@ import { runHealthCheck, formatReport } from './health.js';
 import { sessionExists } from './session-bridge.js';
 
 // Comms imports (Phase 2)
-import { startTranscriptStream, stopTranscriptStream } from '../comms/transcript-stream.js';
+import { startTranscriptStream, stopTranscriptStream, onHookNotification } from '../comms/transcript-stream.js';
 import { initChannelRouter } from '../comms/channel-router.js';
 import { createTelegramRouter } from '../comms/adapters/telegram.js';
 
@@ -87,6 +87,25 @@ const server = http.createServer(async (req, res) => {
     }
     res.writeHead(200);
     res.end('ok');
+    return;
+  }
+
+  // Hook notification endpoint (called by PostToolUse + Stop hooks)
+  if (req.method === 'POST' && url.pathname === '/hook/response') {
+    let body = '';
+    req.on('data', (c: Buffer) => { body += c.toString(); });
+    req.on('end', () => {
+      res.writeHead(200);
+      res.end('ok');
+
+      try {
+        const payload = JSON.parse(body);
+        onHookNotification(payload.transcript_path);
+      } catch {
+        // No body or invalid JSON — still trigger a read
+        onHookNotification();
+      }
+    });
     return;
   }
 

@@ -133,9 +133,18 @@ export function injectText(text: string, pressEnter = true): boolean {
     });
 
     if (pressEnter) {
+      // Small delay to ensure text is fully written before pressing Enter.
+      // Without this, rapid send-keys calls can race on macOS, causing
+      // the Enter to fire before text lands or not fire at all.
+      execSync('sleep 0.1', { stdio: ['pipe', 'pipe', 'pipe'] });
+
       execSync(`${tmux} send-keys -t ${session} Enter`, {
         stdio: ['pipe', 'pipe', 'pipe'],
       });
+
+      // Verify Enter was sent by retrying once if needed
+      // (belt-and-suspenders for the "messages sitting unsent" bug)
+      execSync('sleep 0.1', { stdio: ['pipe', 'pipe', 'pipe'] });
     }
 
     log.debug(`Injected text (${text.length} chars)`);

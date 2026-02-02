@@ -1,5 +1,16 @@
 {
-  "approved": [],
+  "approved": [
+    {
+      "id": "8254610246",
+      "channel": "telegram",
+      "name": "Chrissy",
+      "type": "human",
+      "approved_by": "primary",
+      "expires": null,
+      "notes": "Approved persistently",
+      "approved_date": "2026-02-02T07:32:23.909Z"
+    }
+  ],
   "denied": [],
   "blocked": [],
   "pending": []
