@@ -39,18 +39,19 @@ export function registerTask(task: ScheduledTask): void {
 
 /**
  * Execute a task with busy-check guard.
+ * Returns true if the task actually ran, false if skipped.
  */
-async function executeTask(running: RunningTask): Promise<void> {
+async function executeTask(running: RunningTask): Promise<boolean> {
   // Skip if Claude is busy
   if (isBusy()) {
     log.debug(`Skipping ${running.task.name}: Claude is busy`);
-    return;
+    return false;
   }
 
   // Skip if no session (for tasks that need to inject)
   if (!sessionExists()) {
     log.debug(`Skipping ${running.task.name}: no session`);
-    return;
+    return false;
   }
 
   try {
@@ -58,17 +59,21 @@ async function executeTask(running: RunningTask): Promise<void> {
     await running.task.run();
     running.lastRun = Date.now();
     log.info(`Task completed: ${running.task.name}`);
+    return true;
   } catch (err) {
     log.error(`Task failed: ${running.task.name}`, {
       error: err instanceof Error ? err.message : String(err),
     });
+    return true; // Count failures as "ran" so we don't retry in a loop
   }
 }
 
 /**
  * Check all cron-based tasks and run any that are due.
+ * Tasks that are skipped (busy/no session) keep their current nextCronTime
+ * so they retry on the next 30-second check instead of being lost until tomorrow.
  */
-function checkCronTasks(): void {
+async function checkCronTasks(): Promise<void> {
   const now = Date.now();
 
   for (const running of _tasks.values()) {
@@ -76,16 +81,19 @@ function checkCronTasks(): void {
     if (running.nextCronTime === null) continue;
     if (now < running.nextCronTime) continue;
 
-    // Time to run
-    executeTask(running);
+    // Time to run — only advance nextCronTime if the task actually executed
+    const didRun = await executeTask(running);
 
-    // Calculate next run time
-    try {
-      const expr = CronExpressionParser.parse(running.config.cron);
-      running.nextCronTime = expr.next().toDate().getTime();
-    } catch {
-      running.nextCronTime = null;
+    if (didRun) {
+      // Calculate next run time
+      try {
+        const expr = CronExpressionParser.parse(running.config.cron);
+        running.nextCronTime = expr.next().toDate().getTime();
+      } catch {
+        running.nextCronTime = null;
+      }
     }
+    // If skipped, nextCronTime stays in the past so it retries next check
   }
 }
 
