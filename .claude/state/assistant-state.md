@@ -1,49 +1,50 @@
 # Assistant State
 
-**Saved**: 2026-02-02 12:47
-**Trigger**: Manual save before /restart — activating hook-driven transcript stream
+**Saved**: 2026-02-03 17:15:00
+**Session**: GitHub org setup, upstream cleanup, pipeline modernization
 
 ## Current Task
-Restarting Claude Code session to activate PostToolUse + Stop hooks for hook-driven transcript stream (v3).
+Agent-to-agent comms (#044) — spec approved, ready for `/plan`.
 
-## Progress
-
-### This Session
-- [x] Implemented Telegram group chat support (all 7 changes in telegram.ts)
-- [x] Pushed upstream to CC4Me as PR #16 (merged)
-- [x] Emailed plan to R2 at r2d2_hurley@fastmail.com
-- [x] Fixed injection timing (100ms delay in session-bridge.ts)
-- [x] Rewrote transcript-stream.ts to hook-driven approach (v3)
-- [x] Added /hook/response endpoint to main.ts
-- [x] Created notify-response.sh hook script
-- [x] Updated .claude/settings.json with PostToolUse + Stop hooks
-- [x] Updated channel-router.ts for verbose mode (thinking blocks)
-- [x] Built daemon clean, restarted daemon
-- [ ] RESTART CLAUDE CODE SESSION — hooks need session restart to activate!
-- [ ] Mark todo #42 as complete (superseded by hook rewrite)
-- [ ] Verify hook-driven transcript forwarding works
+## Progress (This Session)
+- [x] #048 (LOW): Fixed Telegram status line noise filtering (commit `675f548`)
+  - Added STATUS_LINE_PATTERNS array and isStatusLineNoise() in transcript-stream.ts
+  - Expanded chromePatterns in extractAssistantFromPane()
+  - R2's pattern suggestions incorporated
+- [x] PR #20 closed (had PII), re-submitted clean as PRs #21-#23, all merged to upstream
+  - #21: Memory cascade system
+  - #22: Status line filtering
+  - #23: SETUP.md v2 updates
+  - UPGRADE.md updated for cascade system
+- [x] Cleaned upstream repo: deleted 13 stale remote branches, 8 local branches
+- [x] #050 (HIGH): Repo architecture migration — DONE
+  - Dave created GitHub org: RockaRhymeLLC
+  - Forked CC4Me into org as RockaRhymeLLC/CC4Me-BMO
+  - Updated local origin remote, fork relationship confirmed
+  - Deleted old standalone RockaRhyme/CC4Me-BMO repo
+  - Removed ~/CC4Me-upstream directory (no longer needed)
+  - Rewrote /upstream skill for fork-based PR pipeline
+  - Emailed R2 fork setup instructions
+- [x] Built `upstream-sync` scheduled task (daemon, Monday 8am weekly)
+  - Fetches upstream, reports new commits and fork divergence
+  - Checks open PRs via gh CLI
+  - Registered in daemon, running clean (8 tasks total)
+- [x] #044 spec approved by Dave, open questions resolved, message log promoted to must-have
+- [x] Saved Chrissy (Dave's wife) name + GitHub detail to memory
 
 ## Next Steps
-1. **RESTART Claude Code session** — hooks won't fire until session restarts
-2. Verify hooks work by checking daemon logs for /hook/response hits
-3. Mark todo #42 complete
-4. Let Dave know I'm back up and hooks are live
-5. Start on todo #41 (persist _replyChatId across daemon restarts)
+1. `/plan` the agent-to-agent comms spec → create stories and tests
+2. Email R2 the plan so we can build in sync (she needs same endpoint)
+3. `/build` the plan
+4. First memory cascade consolidation run at 5am tomorrow
+5. First upstream-sync run next Monday 8am
 
 ## Context
-- Channel is `telegram` — Dave expects to see messages in Telegram
-- Dave said "go ahead and restart" and "let me know when you're back up"
-- Daemon is running and healthy on port 3847 with hook-driven code deployed
-- Hooks in settings.json are configured but NOT YET ACTIVE (need session restart)
+- **Remotes**: origin → RockaRhymeLLC/CC4Me-BMO (fork), upstream → RockaRhyme/CC4Me
+- **Daemon**: Running clean, 11/11 health checks, 8 scheduled tasks
+- **Upstream**: Clean — only main branch, all PRs merged, docs updated
+- **Spec**: `specs/20260203-agent-to-agent-comms.spec.md` (approved)
+- **Key commits**: `675f548` (status line fix), `057c4a1` (memory cascade)
 
-## Open Todos
-- #39 (medium): Add Telegram webhook deduplication
-- #40 (medium): Add Telegram reaction support (Dave is excited about this)
-- #41 (high): Persist _replyChatId across daemon restarts
-- #42 (high): Fix transcript stream — SUPERSEDED by hook rewrite, mark complete
-
-## Key Dave Preferences
-- Don't skip bot messages from peers — bots should talk to each other in group
-- NO monologue filtering — prefer inner dialogue leaking over missed messages
-- Don't use isBusy() as a gate — queue things, let BMO manage workload
-- Reaction support is important to Dave
+## Blockers
+None — clean slate, ready to plan and build #044.

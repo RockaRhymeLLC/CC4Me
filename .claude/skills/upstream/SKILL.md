@@ -1,267 +1,182 @@
 ---
 name: upstream
-description: Upstream local enhancements back to the original CC4Me repo. Use when contributing fork improvements to the shared upstream project.
-argument-hint: [audit | genericize | analyze | pr | status]
+description: Contribute fork enhancements back to upstream CC4Me via the GitHub fork + PR pipeline.
+argument-hint: [sync | prepare <description> | pr | status | audit]
 disable-model-invocation: true
 ---
 
-# Upstream Enhancements
+# Upstream Contributions
 
-Contribute enhancements from your local fork back to the original CC4Me repository. This is a multi-phase workflow that audits, genericizes, analyzes, and prepares clean PRs.
+Contribute enhancements from your fork back to upstream CC4Me using the GitHub fork pipeline.
+
+## Architecture
+
+```
+Upstream (RockaRhyme/CC4Me)          Your Fork (RockaRhymeLLC/CC4Me-BMO)
++-------------------+               +-------------------+
+|  Generic, clean   |  <── PR ───   | feature/my-change |
+|  code for anyone  |               | (branched from    |
+|                   |               |  upstream/main)   |
++-------------------+               +-------------------+
+        |                                    ^
+        |          git fetch upstream        |
+        +------------------------------------+
+```
+
+**Key principle**: Feature branches for upstream PRs are always based on `upstream/main`, not your fork's `main`. Your fork's main has instance-specific code that should never reach upstream.
+
+## Remotes
+
+| Remote | Points To | Purpose |
+|--------|-----------|---------|
+| `origin` | `RockaRhymeLLC/CC4Me-BMO` | Your fork in the org |
+| `upstream` | `RockaRhyme/CC4Me` | The upstream project |
 
 ## Usage
 
-- `/upstream` or `/upstream status` - Show current upstream progress
-- `/upstream audit` - Run the full audit + genericize + analyze pipeline
-- `/upstream genericize <pr-group>` - Genericize files for a specific PR group
-- `/upstream analyze` - Generate or update the analysis document
-- `/upstream pr <pr-group>` - Create a PR for a specific group (after review/approval)
+- `/upstream` or `/upstream status` — Show open PRs, sync status, pending work
+- `/upstream sync` — Fetch latest upstream/main
+- `/upstream prepare "description"` — Start a new contribution (creates branch from upstream/main)
+- `/upstream pr` — Create a PR from the current feature branch against upstream
+- `/upstream audit` — Audit current branch for genericization issues before PR
 
-## Overview
+## Workflow
 
-```
-Fork (your repo)                     Upstream (CC4Me)
-+--------------+                     +--------------+
-| Fork-specific|   /upstream audit   |   Generic    |
-|  code with   | ------------------- |  code ready  |
-| enhancements |   copy + strip      |  for anyone  |
-+--------------+                     +--------------+
-       |                                   |
-       |         Analysis Doc              |
-       |    (tech debt, findings)          |
-       |              |                    |
-       v              v                    v
-   Don't touch    Review with        Create PRs
-                    owner            after approval
-```
-
-## Key Directories
-
-| Path | Purpose |
-|------|---------|
-| Fork repo directory | Your fork -- live assistant code. **NEVER modify for upstream work.** |
-| Upstream working copy | Working copy of upstream repo. All genericization happens here. |
-| `.claude/state/research/upstream-analysis.md` | Analysis document (tech debt, findings, recommendations) |
-
-## Phase 1: Setup Working Copy
+### 1. Sync with upstream
 
 ```bash
-# First time only -- clone the upstream repo
-git clone <upstream-repo-url> ~/CC4Me-upstream
-cd ~/CC4Me-upstream
-
-# Subsequent runs -- pull latest
-cd ~/CC4Me-upstream
-git checkout main
-git pull origin main
+git fetch upstream
 ```
 
-Verify the clone is clean and matches the upstream repo before starting.
+Always sync before starting new work.
 
-## Phase 2: Audit & Genericize
-
-### PR Groups
-
-Work through these groups in order. Each becomes a branch and eventually a PR.
-
-#### Group 1: Session Persistence & Lifecycle Hooks
-**Branch**: `feature/session-persistence`
-**Files to copy from fork**:
-- `scripts/start-tmux.sh`
-- `scripts/attach.sh`
-- `scripts/restart.sh`
-- `scripts/restart-watcher.sh`
-- `.claude/hooks/session-start.sh`
-- `.claude/hooks/pre-compact.sh`
-- `.claude/hooks/set-channel.sh`
-- `.claude/settings.json` (hook configuration only)
-- `.claude/skills/restart/SKILL.md`
-- `scripts/start.sh` (updates)
-
-#### Group 2: Email Integration
-**Branch**: `feature/email-integration`
-**Files to copy from fork**:
-- `.claude/skills/email/SKILL.md`
-- `scripts/email/jmap.js` (Fastmail)
-- `scripts/email/graph.js` (M365)
-- `scripts/email-reminder.sh`
-- `.claude/knowledge/integrations/fastmail.md`
-- `.claude/knowledge/integrations/microsoft-graph.md`
-- `.claude/knowledge/integrations/keychain.md`
-
-#### Group 3: Telegram Integration
-**Branch**: `feature/telegram-integration`
-**Files to copy from fork**:
-- `.claude/skills/telegram/SKILL.md`
-- `scripts/telegram-send.sh`
-- `scripts/transcript-watcher.sh`
-- `scripts/telegram-setup/*` (entire directory)
-- `.claude/knowledge/integrations/telegram.md`
-
-#### Group 4: Scheduled Jobs & Monitoring
-**Branch**: `feature/scheduled-jobs`
-**Files to copy from fork**:
-- `scripts/todo-reminder.sh`
-- `scripts/context-watchdog.sh`
-- `scripts/context-monitor-statusline.sh`
-- `launchd/` (updated templates)
-
-#### Group 5: Documentation & Setup Updates
-**Branch**: `feature/documentation-update`
-**Files to copy from fork**:
-- `.claude/CLAUDE.md` (rewritten for generic assistant)
-- `README.md` (comprehensive update)
-- `SETUP.md` (updated with integration steps)
-- `.claude/skills/setup/SKILL.md` (updated wizard)
-- `scripts/init.sh` (updated with new prereqs)
-
-### Genericization Rules
-
-When copying files from the fork to upstream, apply these transformations:
-
-1. **Remove personal data**: Strip all references to specific people, emails, phone numbers, chat IDs
-   - Search for personal names, usernames, phone numbers, domain names
-   - Replace with template variables, Keychain lookups, or remove entirely
-
-2. **Remove hardcoded paths**: Replace absolute user paths with relative paths or `$PROJECT_DIR`
-   - `start.sh`: Replace hardcoded claude path with `command -v claude` fallback
-   - All scripts: Use `$BASE_DIR` or `$(dirname "$0")/..` patterns
-
-3. **Parameterize credentials**: Ensure all secrets come from Keychain lookups, never hardcoded
-   - Verify `security find-generic-password` calls use generic credential names
-   - Document required Keychain entries in each skill/script
-
-4. **Remove branded content**: App bundles, custom names, personality references
-   - Keep templates generic (e.g., `{{NAME}}` not a specific name)
-
-5. **Preserve functionality**: The genericized code must work identically -- just without fork-specific assumptions
-
-### Audit Checklist (Per File)
-
-For each file being copied upstream, evaluate and document:
-
-- [ ] **Hardcoded values**: Any personal data, paths, or credentials?
-- [ ] **Code quality**: Clean, readable, well-structured?
-- [ ] **Error handling**: Appropriate error handling for the context?
-- [ ] **Dependencies**: Are all dependencies documented? Any unnecessary ones?
-- [ ] **Security**: Any credential leaks, injection risks, or unsafe patterns?
-- [ ] **Portability**: Will this work on a fresh macOS install with different username?
-- [ ] **Documentation**: Are comments adequate? Is usage clear?
-- [ ] **Tech debt**: Anything that works but should be improved?
-- [ ] **Dead code**: Unused variables, unreachable branches, commented-out code?
-- [ ] **Consistency**: Does it follow the same patterns as other scripts/skills?
-
-## Phase 3: Analysis Document
-
-Generate `upstream-analysis.md` in `.claude/state/research/` with this structure:
-
-```markdown
-# CC4Me Upstream Analysis
-
-## Summary
-[Overall assessment, total files reviewed, key findings count]
-
-## Findings by Severity
-
-### Critical (Must Fix Before PR)
-[Security issues, broken functionality, data leaks]
-
-### Important (Should Fix)
-[Tech debt, poor patterns, missing error handling]
-
-### Minor (Nice to Have)
-[Style issues, documentation gaps, minor improvements]
-
-### Notes (Informational)
-[Observations, architectural notes, future considerations]
-
-## Findings by PR Group
-
-### Group 1: Session Persistence
-[Findings specific to these files]
-
-### Group 2: Email Integration
-[Findings specific to these files]
-
-... (repeat for each group)
-
-## Recommendations
-[Prioritized list of what to address before vs. after PRs]
-```
-
-### What to Look For
-
-- **Tech debt**: Patterns that work but are fragile, hacky, or hard to maintain
-- **Old code**: Approaches that made sense early on but should be updated now
-- **Bad patterns**: Anti-patterns, security risks, race conditions
-- **Missing features**: Error handling, logging, or validation that should exist
-- **Inconsistencies**: Different patterns used for the same thing across files
-- **Dependencies**: Unnecessary or outdated dependencies
-- **Portability issues**: Anything that assumes a specific environment
-
-## Phase 4: Review with Owner
-
-**STOP here and present findings before proceeding.**
-
-1. Save analysis to `.claude/state/research/upstream-analysis.md`
-2. Share the analysis with the owner for review
-3. Discuss findings -- owner decides what to fix now vs. later
-4. Get explicit approval before creating any commits or PRs
-
-## Phase 5: Create PRs (After Approval)
-
-For each approved PR group:
+### 2. Create a feature branch from upstream/main
 
 ```bash
-cd ~/CC4Me-upstream
-git checkout main
-git pull origin main
-git checkout -b feature/<branch-name>
+git checkout -b feature/my-change upstream/main
+```
 
-# Copy and genericize files (already done in Phase 2)
-# Stage changes
+**This is critical.** Branching from `upstream/main` ensures your PR only contains the changes you intend — not your entire fork's divergence.
+
+### 3. Make changes
+
+Write or port the enhancement. If porting code from your fork's main branch, copy the relevant changes — don't merge or cherry-pick (those can pull in unwanted history).
+
+**Apply genericization rules** (see below) to every file you touch.
+
+### 4. Audit before committing
+
+Run through the audit checklist for each file. Fix any issues found.
+
+### 5. Commit and push
+
+```bash
 git add <files>
-git commit -m "Add <feature description>"
-
-# Push and create PR
-git push -u origin feature/<branch-name>
-gh pr create --title "<PR title>" --body "<description>"
+git commit -m "Add feature description"
+git push -u origin feature/my-change
 ```
 
-### PR Standards
-- One logical group per PR
-- Clean commit messages describing the "why"
-- PR description includes: summary, files changed, testing notes
-- No personal data in any committed file
+### 6. Create PR against upstream
 
-## Phase 6: Merge & Verify
+```bash
+gh pr create \
+  --repo RockaRhyme/CC4Me \
+  --head RockaRhymeLLC:feature/my-change \
+  --base main \
+  --title "PR title" \
+  --body "Description"
+```
 
-After owner reviews each PR:
+### 7. Review and merge
 
-1. Merge on GitHub (or via `gh pr merge`)
-2. Pull merged changes: `git checkout main && git pull`
-3. Verify: Clone fresh to a temp directory, run `init.sh` and `/setup`, confirm everything works
-4. Move to next PR group
+PRs are reviewed by the owner and/or other agents (R2). After merge:
 
-## Status Tracking
+```bash
+git fetch upstream
+# Optionally clean up the feature branch
+git branch -d feature/my-change
+git push origin --delete feature/my-change
+```
 
-Track progress in the analysis document's summary section:
+## Genericization Rules
 
-```markdown
-## Progress
-| Group | Audit | Genericize | Analysis | Review | PR | Merged |
-|-------|-------|------------|----------|--------|----|--------|
-| 1. Session Persistence | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] |
-| 2. Email Integration   | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] |
-| 3. Telegram Integration| [ ] | [ ] | [ ] | [ ] | [ ] | [ ] |
-| 4. Scheduled Jobs      | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] |
-| 5. Documentation       | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] |
+When contributing code upstream, it must work for any CC4Me instance — not just yours.
+
+### 1. Remove personal data
+- Strip all references to specific people, emails, phone numbers, chat IDs
+- Replace names with generic terms: "the user", "the agent", "the assistant"
+- Search for: personal names, usernames, phone numbers, domain names, addresses
+
+### 2. Remove hardcoded paths
+- Replace absolute user paths with relative paths or `$PROJECT_DIR`
+- Scripts: use `$BASE_DIR` or `$(dirname "$0")/..` patterns
+- Config: use template variables (`__PROJECT_DIR__`, `__HOME_DIR__`)
+
+### 3. Parameterize credentials
+- All secrets must come from Keychain lookups, never hardcoded
+- Verify `security find-generic-password` calls use generic credential names
+- Document required Keychain entries
+
+### 4. Remove branded content
+- No instance-specific names, personalities, or identity references
+- Use template placeholders where names appear in config/prompts
+- Keep default values generic (e.g., session name "cc4me", not an agent name)
+
+### 5. Preserve functionality
+- Genericized code must work identically — just without instance-specific assumptions
+- Test mentally: "Would this work on a fresh clone with a different agent name?"
+
+## Audit Checklist (Per File)
+
+Before committing any file for upstream, verify:
+
+- [ ] **No personal data**: Names, emails, phone numbers, chat IDs, addresses?
+- [ ] **No hardcoded paths**: Absolute paths to a specific user's home directory?
+- [ ] **No credentials**: API keys, tokens, or secrets in the code?
+- [ ] **Portable**: Works on a fresh macOS install with a different username?
+- [ ] **Code quality**: Clean, readable, well-structured?
+- [ ] **Error handling**: Appropriate for the context?
+- [ ] **Dependencies**: All documented? Any unnecessary ones?
+- [ ] **Dead code**: Unused variables, unreachable branches, commented-out code?
+- [ ] **Consistent patterns**: Follows the same conventions as existing upstream code?
+
+## Common Pitfalls
+
+### Don't branch from your fork's main
+Your fork's `main` has instance-specific commits. Always branch from `upstream/main`.
+
+### Don't merge or rebase from your fork's main
+If you need code from your fork, copy the relevant changes manually. Git merge/rebase will bring in your entire fork history.
+
+### Watch for diverged files
+Your fork's version of a file may differ significantly from upstream's. When porting a fix, apply only the targeted change to the upstream version — don't wholesale replace the file.
+
+### PII in git history
+Even if you scrub PII from files, it persists in git history. If PII gets committed:
+1. Don't just fix it in a new commit
+2. Delete the branch from the remote (`git push origin --delete branch-name`)
+3. Start fresh with a new branch
+
+## Status Check
+
+To see current state:
+
+```bash
+# Open PRs from your fork against upstream
+gh pr list --repo RockaRhyme/CC4Me --author @me
+
+# How far behind upstream you are
+git fetch upstream
+git log --oneline HEAD..upstream/main | head -20
+
+# Current feature branches
+git branch | grep feature/
 ```
 
 ## Notes
 
-- **Never modify the fork** during upstream work
-- **Always work in** the upstream working copy
-- **Analysis doc is the source of truth** for what needs attention
-- **Owner approval required** before any commits or PRs
-- This skill is reusable -- any fork can use `/upstream` to contribute enhancements back
+- **Owner approval required** before creating PRs — present changes for review first
+- **One logical change per PR** — don't bundle unrelated changes
+- **PR description** should include: summary, files changed, testing notes
+- **Clean commit messages** — describe the "why", not just the "what"
+- This skill is generic — any CC4Me fork can use `/upstream` to contribute back

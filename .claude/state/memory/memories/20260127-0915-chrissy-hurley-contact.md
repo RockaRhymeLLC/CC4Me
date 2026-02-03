@@ -13,3 +13,4 @@ tags: [family, contact, wife]
 - **iMessage**: +17246811112
 - **Email (primary)**: chrissyhurley@outlook.com
 - **Email (secondary)**: chrissyh22@gmail.com
+- **GitHub**: Has an account that R2 (her assistant) uses
