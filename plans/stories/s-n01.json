@@ -1,0 +1,36 @@
+{
+  "id": "s-n01",
+  "title": "Config, types, and auth",
+  "description": "Add the agent-comms configuration section to the daemon config system, define TypeScript interfaces for agent messages, and implement bearer token auth validation using Keychain.",
+  "planRef": "plans/20260203-agent-to-agent-comms.plan.md",
+  "todoRef": "044",
+  "status": "completed",
+  "priority": 1,
+  "tests": ["t-018", "t-019"],
+  "blockedBy": [],
+  "created": "2026-02-03T22:30:00Z",
+  "updated": "2026-02-04T00:05:00Z",
+  "notes": [
+    {
+      "timestamp": "2026-02-04T00:00:00Z",
+      "content": "Starting implementation — adding types to config.ts and agent-comms section to yaml"
+    },
+    {
+      "timestamp": "2026-02-04T00:05:00Z",
+      "content": "Complete: AgentCommsConfig, AgentMessage, AgentMessageResponse types in config.ts. AgentCommsPeerConfig for peers. validateAgentCommsAuth() in keychain.ts. agent-comms section in config.yaml with R2 peer. Shared secret generated and stored in Keychain. Daemon builds clean."
+    }
+  ],
+  "files": [
+    "daemon/src/core/config.ts",
+    "daemon/src/core/keychain.ts",
+    "cc4me.config.yaml"
+  ],
+  "acceptanceCriteria": [
+    "AgentCommsConfig type defined with enabled, secret (keychain ref), and peers array",
+    "AgentMessage and AgentMessageResponse interfaces defined",
+    "Config parser loads agent-comms section from yaml",
+    "Peer config includes name, host, and port fields",
+    "Auth helper validates bearer token against Keychain-stored secret",
+    "cc4me.config.yaml has agent-comms section with R2 as a peer"
+  ]
+}

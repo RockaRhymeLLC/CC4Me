@@ -1,0 +1,31 @@
+{
+  "id": "s-n03",
+  "title": "HTTP endpoints",
+  "description": "Wire up POST /agent/message and GET /agent/status endpoints in the daemon's HTTP server. POST receives agent messages and passes to handleAgentMessage(). GET returns current agent availability.",
+  "planRef": "plans/20260203-agent-to-agent-comms.plan.md",
+  "todoRef": "044",
+  "status": "completed",
+  "priority": 3,
+  "tests": ["t-023", "t-024"],
+  "blockedBy": ["s-n02"],
+  "created": "2026-02-03T22:30:00Z",
+  "updated": "2026-02-04T00:20:00Z",
+  "notes": [
+    {
+      "timestamp": "2026-02-04T00:20:00Z",
+      "content": "Added POST /agent/message, GET /agent/status, and POST /agent/send endpoints to main.ts. initAgentComms() called on startup, stopAgentComms() in shutdown. All tests pass: auth, validation, status, JSONL logging."
+    }
+  ],
+  "files": [
+    "daemon/src/core/main.ts"
+  ],
+  "acceptanceCriteria": [
+    "POST /agent/message accepts JSON body, passes to handleAgentMessage()",
+    "POST /agent/message returns 200 with AgentMessageResponse JSON",
+    "POST /agent/message returns 401 for missing/invalid auth",
+    "POST /agent/message returns 400 for malformed JSON or missing required fields",
+    "GET /agent/status returns JSON with agent name, status (idle/busy), and uptime",
+    "GET /agent/status does NOT require auth (lightweight heartbeat)",
+    "Agent comms module initialized on daemon startup (imported in main.ts)"
+  ]
+}

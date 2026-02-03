@@ -1,0 +1,29 @@
+{
+  "id": "t-023",
+  "title": "POST /agent/message endpoint works end-to-end",
+  "description": "Full integration test of the message endpoint",
+  "storyRefs": ["s-n03"],
+  "planRef": "plans/20260203-agent-to-agent-comms.plan.md",
+  "type": "story",
+  "status": "passed",
+  "steps": [
+    {
+      "order": 1,
+      "action": "curl -X POST http://localhost:3847/agent/message -H 'Authorization: Bearer <token>' -H 'Content-Type: application/json' -d '{\"from\":\"r2d2\",\"type\":\"text\",\"text\":\"Integration test\",\"messageId\":\"int-001\",\"timestamp\":\"...\"}'",
+      "expected": "Returns 200 with JSON { ok: true }"
+    },
+    {
+      "order": 2,
+      "action": "Check tmux pane for the injected message",
+      "expected": "Message appears in Claude Code session"
+    },
+    {
+      "order": 3,
+      "action": "Check agent-comms.log for the entry",
+      "expected": "JSONL entry with all fields recorded"
+    }
+  ],
+  "created": "2026-02-03T22:30:00Z",
+  "executedAt": "2026-02-04T00:20:00Z",
+  "result": "All steps pass. 200 returned, JSONL logged, messages queued during busy and will drain to session when idle."
+}

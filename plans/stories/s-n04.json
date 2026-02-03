@@ -1,0 +1,30 @@
+{
+  "id": "s-n04",
+  "title": "Queue drain mechanism",
+  "description": "Implement periodic queue drain that delivers queued messages when the agent becomes idle. Uses setInterval when queue has items, stops when empty.",
+  "planRef": "plans/20260203-agent-to-agent-comms.plan.md",
+  "todoRef": "044",
+  "status": "completed",
+  "priority": 4,
+  "tests": ["t-025"],
+  "blockedBy": ["s-n02"],
+  "created": "2026-02-03T22:30:00Z",
+  "updated": "2026-02-04T00:25:00Z",
+  "notes": [
+    {
+      "timestamp": "2026-02-04T00:25:00Z",
+      "content": "Queue drain was implemented as part of s-n02 (agent-comms.ts). 3-second interval, FIFO delivery, stops when empty, logs queued_duration_ms. Verified: 4 messages queued during build, drain active."
+    }
+  ],
+  "files": [
+    "daemon/src/comms/agent-comms.ts"
+  ],
+  "acceptanceCriteria": [
+    "When a message is queued, a drain interval starts (every 3 seconds)",
+    "Drain checks isBusy() — if idle, delivers next message from queue via injectText()",
+    "Messages delivered in FIFO order",
+    "Drain interval stops when queue is empty",
+    "Multiple messages can be delivered in a single drain cycle if agent stays idle",
+    "Drain logs each delivery to agent-comms.log with queued_duration_ms"
+  ]
+}

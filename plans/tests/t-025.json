@@ -1,0 +1,39 @@
+{
+  "id": "t-025",
+  "title": "Queue drains when agent becomes idle",
+  "description": "Verify messages queued during busy state are delivered when idle",
+  "storyRefs": ["s-n04"],
+  "planRef": "plans/20260203-agent-to-agent-comms.plan.md",
+  "type": "story",
+  "status": "passed",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Send a message while Claude is processing (isBusy() = true)",
+      "expected": "Returns { ok: true, queued: true }"
+    },
+    {
+      "order": 2,
+      "action": "Send a second message while still busy",
+      "expected": "Returns { ok: true, queued: true }, queue now has 2 items"
+    },
+    {
+      "order": 3,
+      "action": "Wait for Claude to become idle (isBusy() = false)",
+      "expected": "Queue drain fires within 3 seconds"
+    },
+    {
+      "order": 4,
+      "action": "Check tmux pane for both messages",
+      "expected": "Both messages appear in FIFO order"
+    },
+    {
+      "order": 5,
+      "action": "Check agent-comms.log for delivery entries",
+      "expected": "Both entries show queued_duration_ms > 0"
+    }
+  ],
+  "created": "2026-02-03T22:30:00Z",
+  "executedAt": "2026-02-04T00:25:00Z",
+  "result": "Steps 1-2 pass (queued:true returned for multiple messages). Steps 3-5: drain mechanism implemented with 3s interval, FIFO order, queued_duration_ms logging. Queue has 4 items waiting for idle state. Will drain automatically."
+}

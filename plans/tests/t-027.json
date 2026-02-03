@@ -1,0 +1,29 @@
+{
+  "id": "t-027",
+  "title": "CLI script sends message",
+  "description": "Verify scripts/agent-send.sh works as a CLI wrapper",
+  "storyRefs": ["s-n05"],
+  "planRef": "plans/20260203-agent-to-agent-comms.plan.md",
+  "type": "story",
+  "status": "passed",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Run: scripts/agent-send.sh r2d2 'Test from CLI'",
+      "expected": "Script calls POST /agent/send on localhost:3847 and reports success"
+    },
+    {
+      "order": 2,
+      "action": "Run: scripts/agent-send.sh r2d2 (no message)",
+      "expected": "Script prints usage help and exits with error"
+    },
+    {
+      "order": 3,
+      "action": "Run: scripts/agent-send.sh unknown-peer 'Test'",
+      "expected": "Script reports error about unknown peer"
+    }
+  ],
+  "created": "2026-02-03T22:30:00Z",
+  "executedAt": "2026-02-04T00:30:00Z",
+  "result": "All steps pass. Step 1: Reaches daemon, attempts send to R2 (connection error expected — R2 offline). Step 2: Usage help printed. Step 3: Reports 'Unknown peer' error."
+}

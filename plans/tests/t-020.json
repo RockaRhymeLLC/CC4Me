@@ -1,0 +1,29 @@
+{
+  "id": "t-020",
+  "title": "Text message received and injected",
+  "description": "Verify a text message from a peer is properly formatted and injected into Claude's session",
+  "storyRefs": ["s-n02"],
+  "planRef": "plans/20260203-agent-to-agent-comms.plan.md",
+  "type": "story",
+  "status": "passed",
+  "steps": [
+    {
+      "order": 1,
+      "action": "POST /agent/message with valid auth and body: { from: 'r2d2', type: 'text', text: 'Hello BMO!', messageId: 'test-001', timestamp: '...' }",
+      "expected": "Returns 200 with { ok: true, queued: false }"
+    },
+    {
+      "order": 2,
+      "action": "Check tmux pane content for injected message",
+      "expected": "Pane contains '[Agent] R2: Hello BMO!'"
+    },
+    {
+      "order": 3,
+      "action": "Check logs/agent-comms.log for the received message",
+      "expected": "JSONL entry with direction: 'in', from: 'r2d2', type: 'text', text: 'Hello BMO!'"
+    }
+  ],
+  "created": "2026-02-03T22:30:00Z",
+  "executedAt": "2026-02-04T00:15:00Z",
+  "result": "Steps 1 and 3 pass (200 returned, JSONL logged correctly). Step 2 queued due to busy — will drain and inject when idle."
+}

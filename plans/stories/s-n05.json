@@ -1,0 +1,34 @@
+{
+  "id": "s-n05",
+  "title": "Send function and CLI script",
+  "description": "Implement sendAgentMessage() for outgoing messages to peers, and create a scripts/agent-send.sh wrapper so Claude can send messages from the session.",
+  "planRef": "plans/20260203-agent-to-agent-comms.plan.md",
+  "todoRef": "044",
+  "status": "completed",
+  "priority": 5,
+  "tests": ["t-026", "t-027"],
+  "blockedBy": ["s-n01"],
+  "created": "2026-02-03T22:30:00Z",
+  "updated": "2026-02-04T00:30:00Z",
+  "notes": [
+    {
+      "timestamp": "2026-02-04T00:30:00Z",
+      "content": "sendAgentMessage() implemented in agent-comms.ts (peer lookup, bearer auth, UUID generation, JSONL logging). POST /agent/send endpoint in main.ts. scripts/agent-send.sh uses python3 urllib for macOS portability. All tests pass."
+    }
+  ],
+  "files": [
+    "daemon/src/comms/agent-comms.ts",
+    "daemon/src/core/main.ts",
+    "scripts/agent-send.sh"
+  ],
+  "acceptanceCriteria": [
+    "sendAgentMessage(peerName, type, text) looks up peer config and POSTs to their /agent/message",
+    "Includes bearer token from Keychain in Authorization header",
+    "Generates messageId (UUID) and timestamp automatically",
+    "Returns AgentMessageResponse from peer or error object on failure",
+    "Outgoing messages logged to agent-comms.log",
+    "scripts/agent-send.sh accepts: agent-send.sh <peer> <message>",
+    "Script calls daemon endpoint to trigger send (POST /agent/send)",
+    "POST /agent/send endpoint added to main.ts (local-only, no auth needed)"
+  ]
+}

@@ -1,7 +1,7 @@
 # Agent-to-Agent Communication
 
 **Created**: 2026-02-03
-**Status**: Draft
+**Status**: Approved
 **Related**: Todo #044, R2 email proposal (2026-02-02)
 
 ## Overview
@@ -30,14 +30,16 @@ Enable direct, low-latency communication between CC4Me agents on the same local 
    - `status` — Availability/presence ping (`{ type: 'status', status: 'idle' | 'busy' | 'offline' }`)
    - `coordination` — Work coordination (`{ type: 'coordination', action: 'claim' | 'release', task: '...' }`)
 
+7. **Message Log**: All sent and received messages logged to `logs/agent-comms.log` (JSONL format) with timestamps, sender, type, and content. Gives the owner visibility into agent comms for troubleshooting.
+8. **FIFO Queue**: Messages received while busy are delivered in order (first-in, first-out) when idle
+
 ### Nice to Have
 
-7. **Callback Support**: Optional `callbackUrl` field — receiver can POST a response back when ready
-8. **PR Review Requests**: Structured message for requesting code review (`{ type: 'pr-review', repo, branch, pr }`)
-9. **Memory Sync**: Share individual memory files between agents
-10. **Context Handoff**: When one agent hits context limits, hand off the current task to the other
-11. **Heartbeat**: Periodic presence check (lightweight GET endpoint)
-12. **Message History**: Log of sent/received messages for debugging
+9. **Callback Support**: Optional `callbackUrl` field — receiver can POST a response back when ready
+10. **PR Review Requests**: Structured message for requesting code review (`{ type: 'pr-review', repo, branch, pr }`)
+11. **Memory Sync**: Share individual memory files between agents
+12. **Context Handoff**: When one agent hits context limits, hand off the current task to the other
+13. **Heartbeat**: Periodic presence check (lightweight GET endpoint)
 
 ### Won't Do (This Phase)
 
@@ -106,15 +108,19 @@ agent-comms:
 6. Messages appear in Claude Code session with clear [Agent] prefix
 7. Status pings work for presence detection
 
-## Open Questions
+## Resolved Questions
 
-1. Should we use the agent's daemon port (3847) or a separate port for agent comms?
-2. How should we handle message ordering if multiple messages arrive while agent is busy?
-3. Should coordination claims be persisted to disk or kept in memory?
-4. Do we need rate limiting between agents?
+1. **Same port or separate?** Same port (3847). The daemon already has an HTTP server — adding routes is simpler than managing a second listener. Agent comms routes are namespaced under `/agent/*` and excluded from Cloudflare tunnel routing.
+
+2. **Message ordering when busy?** FIFO queue. Messages are delivered in the order received once the agent becomes idle. Queue is in-memory (lost on daemon restart, which is acceptable for v1).
+
+3. **Coordination claims — persist or in-memory?** In-memory for v1. Claims are ephemeral — if the daemon restarts, agents re-coordinate. Persistence adds complexity without much benefit when agents can just re-ping.
+
+4. **Rate limiting between agents?** Not for v1. Agents are trusted peers on the local network. If we see issues, we can add it later.
 
 ## History
 
 | Date | Change |
 |------|--------|
 | 2026-02-03 | Initial spec created from R2's email proposal + BMO's additions |
+| 2026-02-03 | Dave approved. Promoted message log to must-have. Resolved open questions. |

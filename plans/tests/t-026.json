@@ -1,0 +1,29 @@
+{
+  "id": "t-026",
+  "title": "Send message to peer via daemon",
+  "description": "Verify outgoing message sending works through the daemon",
+  "storyRefs": ["s-n05"],
+  "planRef": "plans/20260203-agent-to-agent-comms.plan.md",
+  "type": "story",
+  "status": "passed",
+  "steps": [
+    {
+      "order": 1,
+      "action": "POST /agent/send with body: { peer: 'r2d2', type: 'text', text: 'Hello R2!' }",
+      "expected": "Daemon looks up r2d2 peer config and POSTs to their /agent/message"
+    },
+    {
+      "order": 2,
+      "action": "Check agent-comms.log for outgoing message",
+      "expected": "JSONL entry with direction: 'out', to: 'r2d2', type: 'text'"
+    },
+    {
+      "order": 3,
+      "action": "POST /agent/send with unknown peer name",
+      "expected": "Returns 400 with error about unknown peer"
+    }
+  ],
+  "created": "2026-02-03T22:30:00Z",
+  "executedAt": "2026-02-04T00:30:00Z",
+  "result": "All steps pass. Step 1: Correctly looks up peer config, POSTs to r2d2 (fails to connect since R2 isn't on network — expected). Step 2: JSONL logged with direction:out, UUID messageId, error noted. Step 3: Returns 'Unknown peer' error."
+}

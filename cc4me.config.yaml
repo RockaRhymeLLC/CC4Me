@@ -27,6 +27,15 @@ channels:
       - type: "graph"
       - type: "jmap"
 
+# ── Agent-to-Agent Comms ──────────────
+agent-comms:
+  enabled: true
+  secret: "keychain:credential-agent-comms-secret"
+  peers:
+    - name: "r2d2"
+      host: "chrissys-mac-mini.local"
+      port: 3847
+
 # ── Automation ────────────────────────
 scheduler:
   tasks:
@@ -53,6 +62,9 @@ scheduler:
     - name: "approval-audit"
       enabled: true
       cron: "0 9 1 */6 *"    # 9am on the 1st, every 6 months
+    - name: "upstream-sync"
+      enabled: true
+      cron: "0 8 * * 1"      # Monday 8am — alongside health check
 
 # ── Security ──────────────────────────
 security:

@@ -1,0 +1,32 @@
+{
+  "id": "s-n02",
+  "title": "Agent comms module — receive, queue, inject",
+  "description": "Create the core agent-comms module that handles incoming messages: validate structure, check auth, queue if busy or inject immediately, format with [Agent] prefix, and log all messages to JSONL.",
+  "planRef": "plans/20260203-agent-to-agent-comms.plan.md",
+  "todoRef": "044",
+  "status": "completed",
+  "priority": 2,
+  "tests": ["t-020", "t-021", "t-022"],
+  "blockedBy": ["s-n01"],
+  "created": "2026-02-03T22:30:00Z",
+  "updated": "2026-02-04T00:15:00Z",
+  "notes": [
+    {
+      "timestamp": "2026-02-04T00:10:00Z",
+      "content": "Created agent-comms.ts with: handleAgentMessage (validate, auth, queue/inject), formatMessage (text, status, coordination, pr-review), logCommsEntry (JSONL), queue drain (setInterval), sendAgentMessage, getAgentStatus, initAgentComms. Clean build."
+    }
+  ],
+  "files": [
+    "daemon/src/comms/agent-comms.ts"
+  ],
+  "acceptanceCriteria": [
+    "handleAgentMessage() validates message structure (from, type, messageId, timestamp required)",
+    "Rejects messages with invalid or missing bearer token (returns 401)",
+    "Text messages formatted as '[Agent] Name: text' and injected via injectText()",
+    "Status messages formatted as '[Agent] Name: [Status: idle/busy/offline]'",
+    "Coordination messages formatted as '[Agent] Name: [Coordination: claimed/released \"task\"]'",
+    "Messages queued in FIFO array when isBusy() returns true",
+    "All sent and received messages logged to logs/agent-comms.log as JSONL",
+    "Log entries include direction (in/out), timestamp, from, type, text, and queued status"
+  ]
+}

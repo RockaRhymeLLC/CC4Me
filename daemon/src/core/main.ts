@@ -17,6 +17,9 @@ import { startTranscriptStream, stopTranscriptStream, onHookNotification } from 
 import { initChannelRouter } from '../comms/channel-router.js';
 import { createTelegramRouter } from '../comms/adapters/telegram.js';
 
+// Agent comms imports
+import { initAgentComms, stopAgentComms, handleAgentMessage, getAgentStatus, sendAgentMessage } from '../comms/agent-comms.js';
+
 // Automation imports (Phase 3)
 import { startScheduler, stopScheduler } from '../automation/scheduler.js';
 
@@ -28,6 +31,7 @@ import '../automation/tasks/nightly-todo.js';
 import '../automation/tasks/health-check.js';
 import '../automation/tasks/memory-consolidation.js';
 import '../automation/tasks/approval-audit.js';
+import '../automation/tasks/upstream-sync.js';
 
 // ── Bootstrap ────────────────────────────────────────────────
 
@@ -160,6 +164,71 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Agent comms: POST /agent/message — receive message from peer
+  if (req.method === 'POST' && url.pathname === '/agent/message') {
+    if (!config['agent-comms'].enabled) {
+      res.writeHead(404);
+      res.end('Agent comms not enabled');
+      return;
+    }
+
+    let body = '';
+    req.on('data', (c: Buffer) => { body += c.toString(); });
+    req.on('end', () => {
+      // Extract bearer token
+      const authHeader = req.headers.authorization ?? '';
+      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+        return;
+      }
+
+      const result = handleAgentMessage(token, parsed);
+      res.writeHead(result.status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result.body));
+    });
+    return;
+  }
+
+  // Agent comms: GET /agent/status — lightweight presence check (no auth required)
+  if (req.method === 'GET' && url.pathname === '/agent/status') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(getAgentStatus()));
+    return;
+  }
+
+  // Agent comms: POST /agent/send — trigger outgoing message (local-only, no auth)
+  if (req.method === 'POST' && url.pathname === '/agent/send') {
+    let body = '';
+    req.on('data', (c: Buffer) => { body += c.toString(); });
+    req.on('end', async () => {
+      try {
+        const data = JSON.parse(body) as { peer: string; type?: string; text?: string };
+        if (!data.peer || !data.text) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: "'peer' and 'text' are required" }));
+          return;
+        }
+        const result = await sendAgentMessage(
+          data.peer,
+          (data.type as 'text') ?? 'text',
+          data.text,
+        );
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } catch {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid request' }));
+      }
+    });
+    return;
+  }
+
   // 404
   res.writeHead(404);
   res.end('Not found');
@@ -177,6 +246,9 @@ server.listen(config.daemon.port, () => {
     log.info('Communications module started');
   }
 
+  // Agent-to-Agent Comms
+  initAgentComms();
+
   // Phase 3: Automation
   startScheduler();
   log.info('Scheduler started');
@@ -187,6 +259,7 @@ server.listen(config.daemon.port, () => {
 function shutdown(signal: string) {
   log.info(`Shutting down (${signal})`);
   stopTranscriptStream();
+  stopAgentComms();
   stopScheduler();
   server.close(() => {
     log.info('Daemon stopped');

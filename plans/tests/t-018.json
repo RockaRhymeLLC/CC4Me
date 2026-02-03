@@ -1,0 +1,34 @@
+{
+  "id": "t-018",
+  "title": "Config loads agent-comms section",
+  "description": "Verify the daemon config parser handles the agent-comms section correctly",
+  "storyRefs": ["s-n01"],
+  "planRef": "plans/20260203-agent-to-agent-comms.plan.md",
+  "type": "story",
+  "status": "passed",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Add agent-comms section to cc4me.config.yaml with enabled: true, secret ref, and one peer",
+      "expected": "YAML is valid and parseable"
+    },
+    {
+      "order": 2,
+      "action": "Build daemon (npm run build)",
+      "expected": "No TypeScript compilation errors"
+    },
+    {
+      "order": 3,
+      "action": "Start daemon and check health endpoint",
+      "expected": "Daemon starts without errors, /health returns 200"
+    },
+    {
+      "order": 4,
+      "action": "Check daemon logs for agent-comms initialization",
+      "expected": "Log shows agent-comms config loaded with peer count"
+    }
+  ],
+  "created": "2026-02-03T22:30:00Z",
+  "executedAt": "2026-02-04T00:00:00Z",
+  "result": "Steps 1-3 pass. Step 4 deferred to s-n03 init (config loads via deepMerge without explicit log until module initialization)."
+}

@@ -1,0 +1,34 @@
+{
+  "id": "t-022",
+  "title": "Invalid messages rejected with 400",
+  "description": "Verify malformed or incomplete messages are rejected",
+  "storyRefs": ["s-n02"],
+  "planRef": "plans/20260203-agent-to-agent-comms.plan.md",
+  "type": "story",
+  "status": "passed",
+  "steps": [
+    {
+      "order": 1,
+      "action": "POST /agent/message with valid auth but empty body",
+      "expected": "Returns 400 with error describing missing fields"
+    },
+    {
+      "order": 2,
+      "action": "POST /agent/message with missing 'from' field",
+      "expected": "Returns 400 with error mentioning 'from' is required"
+    },
+    {
+      "order": 3,
+      "action": "POST /agent/message with invalid 'type' value",
+      "expected": "Returns 400 with error about invalid message type"
+    },
+    {
+      "order": 4,
+      "action": "POST /agent/message with missing 'messageId'",
+      "expected": "Returns 400 with error mentioning 'messageId' is required"
+    }
+  ],
+  "created": "2026-02-03T22:30:00Z",
+  "executedAt": "2026-02-04T00:15:00Z",
+  "result": "All 4 steps pass. Each returns 400 with descriptive error message."
+}
