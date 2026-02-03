@@ -1,7 +1,7 @@
 /**
  * Nightly Todo — prompts Claude to self-assign one creative todo each night.
  *
- * Replaces: nightly-todo.sh + com.bmo.nightly-todo launchd job
+ * Replaces: nightly-todo.sh + legacy launchd job
  */
 
 import { injectText } from '../../core/session-bridge.js';
@@ -17,8 +17,8 @@ const PROMPT = [
   '(3) Should be achievable in a single session.',
   '(4) Variety — try something different from recent self-todos.',
   '(5) Ideas: explore new tools/tech, improve your own skills or scripts,',
-  'do something nice for Dave or family, research an interesting topic,',
-  'creative projects, system maintenance, or just BMO time.',
+  'do something nice for your human or their family, research an interesting topic,',
+  'creative projects, system maintenance, or just your own fun time.',
   'Be creative and have fun with it!',
 ].join(' ');
 

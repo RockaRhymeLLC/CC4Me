@@ -1,7 +1,7 @@
 /**
  * Todo Reminder — prompts Claude to work on pending todos.
  *
- * Replaces: todo-reminder.sh + com.bmo.todo-reminder launchd job
+ * Replaces: todo-reminder.sh + legacy launchd job
  */
 
 import fs from 'node:fs';

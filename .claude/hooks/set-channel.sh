@@ -4,7 +4,7 @@
 # Sets channel to "telegram" if message has [Telegram] prefix, otherwise "terminal"
 # Preserves "-verbose" suffix if already set (e.g., telegram-verbose stays verbose)
 
-BASE_DIR="/Users/bmo/CC4Me-BMO"
+BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CHANNEL_FILE="$BASE_DIR/.claude/state/channel.txt"
 
 # Read current channel to check for verbose mode

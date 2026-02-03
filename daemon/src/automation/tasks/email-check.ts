@@ -1,7 +1,7 @@
 /**
  * Email Check — checks for unread emails and prompts Claude to reply.
  *
- * Replaces: email-reminder.sh + com.bmo.email-reminder launchd job
+ * Replaces: email-reminder.sh + legacy launchd job
  *
  * Uses the unified email providers instead of shelling out to graph.js/jmap.js.
  */
