@@ -18,6 +18,20 @@ import { createLogger } from './logger.js';
 
 const log = createLogger('session-bridge');
 
+/**
+ * Get the Claude Code transcript directory for a project path.
+ * Claude Code mangles the path by replacing both `/` and `_` with `-`.
+ */
+function getTranscriptDir(projectDir: string): string {
+  const projectDirMangled = projectDir.replace(/[/_]/g, '-');
+  return path.join(
+    os.homedir(),
+    '.claude',
+    'projects',
+    projectDirMangled,
+  );
+}
+
 function getTmuxCmd(): string {
   const config = loadConfig();
   const socket = config.tmux.socket ?? `/private/tmp/tmux-${process.getuid?.() ?? 502}/default`;
@@ -79,13 +93,7 @@ export function isBusy(): boolean {
 
   // Check if transcript was modified in the last 10 seconds
   const projectDir = getProjectDir();
-  const projectDirMangled = projectDir.replace(/\//g, '-');
-  const transcriptDir = path.join(
-    os.homedir(),
-    '.claude',
-    'projects',
-    projectDirMangled,
-  );
+  const transcriptDir = getTranscriptDir(projectDir);
 
   try {
     const files = fs.readdirSync(transcriptDir)
@@ -163,13 +171,7 @@ export function injectText(text: string, pressEnter = true): boolean {
  */
 export function getNewestTranscript(): string | null {
   const projectDir = getProjectDir();
-  const projectDirMangled = projectDir.replace(/\//g, '-');
-  const transcriptDir = path.join(
-    os.homedir(),
-    '.claude',
-    'projects',
-    projectDirMangled,
-  );
+  const transcriptDir = getTranscriptDir(projectDir);
 
   try {
     const files = fs.readdirSync(transcriptDir)
