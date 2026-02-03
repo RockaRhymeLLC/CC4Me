@@ -32,6 +32,38 @@ interface TranscriptMessage {
   };
 }
 
+// ── Status line noise detection ──────────────────────────────
+
+/**
+ * Patterns matching Claude Code UI chrome that should never be forwarded
+ * to Telegram. Used in both pane capture (per-line) and JSONL handler
+ * (full message, as safety net).
+ */
+const STATUS_LINE_PATTERNS: RegExp[] = [
+  /^\[.*\]\s*Context:\s*\d+%/,         // [Opus 4.5] Context: 69% used
+  /^[⏵▸]+\s*(accept|reject)/,          // ⏵⏵ accept edits on ...
+  /^─{3,}/,                             // ──────── separator lines
+  /shift\+tab to cycle/,               // keyboard hints
+  /^\d+\s+files?\s+[+\-]\d+/,          // 3 files +16 -39
+  /^\[cost:/i,                          // [cost: $0.xx]
+  /^Press Enter/i,                      // acceptance prompts
+  /^[│┌┐└┘├┤┬┴┼]+$/,                   // pure box-drawing lines
+  /^\s*\d+\s*[│|]\s/,                   // line-number gutters
+  /^(Plan|Auto|Manual)\s+mode/i,        // mode indicators
+];
+
+/**
+ * Check if a message is purely status line noise.
+ * For multi-line text, returns true only if ALL lines are noise or empty.
+ */
+function isStatusLineNoise(text: string): boolean {
+  const lines = text.split('\n');
+  return lines.every(line => {
+    const trimmed = line.trim();
+    return trimmed === '' || STATUS_LINE_PATTERNS.some(p => p.test(trimmed));
+  });
+}
+
 // ── Dedup ────────────────────────────────────────────────────
 
 const DEDUP_TTL_MS = 5 * 60 * 1000; // 5 minutes
@@ -253,6 +285,12 @@ function handleAssistantMessage(msg: TranscriptMessage): boolean {
 
   // Skip empty or placeholder messages
   if (!text || text === 'null' || text === '(no content)') return false;
+
+  // Skip status line noise (safety net — primary filter is in pane capture)
+  if (isStatusLineNoise(text)) {
+    log.debug(`Skipping status line noise (${text.length} chars): ${text.substring(0, 80)}`);
+    return false;
+  }
 
   const hash = contentHash(text);
 
@@ -498,7 +536,7 @@ function logRetryExhausted(elapsed: number, paneCaptureResult: string, len: numb
 function extractAssistantFromPane(pane: string): string | null {
   const lines = pane.split('\n');
 
-  // UI chrome patterns to skip
+  // UI chrome patterns to skip (base + status line patterns)
   const chromePatterns = [
     /esc to interrupt/i,
     /^[✶✷✸✹✺✻✼✽✾✿❀❁❂❃⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/,
@@ -506,6 +544,7 @@ function extractAssistantFromPane(pane: string): string | null {
     /^❯/,          // Prompt character
     /^\$/,         // Shell prompt
     /^\s*$/,       // Empty lines (handled below)
+    ...STATUS_LINE_PATTERNS,
   ];
 
   // Find the last substantial block of text that isn't UI chrome.
