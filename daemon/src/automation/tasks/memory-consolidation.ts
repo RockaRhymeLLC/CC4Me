@@ -1,227 +1,119 @@
 /**
- * Memory Consolidation — generates briefing, writes daily summaries, applies decay.
+ * Memory Consolidation — cascading state log summarization.
  *
- * Part of the Memory v2 architecture (Phase 3).
- * Runs nightly to maintain the structured memory system.
+ * Checks if consolidation is needed (24hr.md has entries older than 24h,
+ * or 30day.md has entries older than 30 days) and injects a prompt for
+ * Claude to do the actual summarization work.
+ *
+ * Claude handles: reviewing entries, extracting memories, writing summaries,
+ * cleaning up processed entries. The daemon just schedules and checks.
+ *
+ * If Claude isn't idle when the job fires, defers until next run.
  */
 
 import fs from 'node:fs';
-import path from 'node:path';
 import { resolveProjectPath } from '../../core/config.js';
+import { isBusy, injectText } from '../../core/session-bridge.js';
 import { createLogger } from '../../core/logger.js';
 import { registerTask } from '../scheduler.js';
 
 const log = createLogger('memory-consolidation');
 
-interface MemoryFrontmatter {
-  date: string;
-  category: string;
-  importance: string;
-  tags: string[];
-  confidence: number;
-  source: string;
-}
-
-interface ParsedMemory {
-  filename: string;
-  frontmatter: MemoryFrontmatter;
-  content: string;
-}
-
-const MEMORY_DIR = '.claude/state/memory';
-const MEMORIES_DIR = '.claude/state/memory/memories';
 const SUMMARIES_DIR = '.claude/state/memory/summaries';
 
 /**
- * Parse a memory file with YAML frontmatter.
+ * Parse timestamped entries from a cascade file.
+ * Entries are separated by `---` and start with `### YYYY-MM-DD HH:MM`.
  */
-function parseMemoryFile(filePath: string): ParsedMemory | null {
-  try {
-    const raw = fs.readFileSync(filePath, 'utf8');
-    const match = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
-    if (!match) {
-      return {
-        filename: path.basename(filePath),
-        frontmatter: {
-          date: new Date().toISOString(),
-          category: 'unknown',
-          importance: 'medium',
-          tags: [],
-          confidence: 1.0,
-          source: 'unknown',
-        },
-        content: raw.trim(),
-      };
-    }
+function parseEntryDates(filePath: string): Date[] {
+  if (!fs.existsSync(filePath)) return [];
 
-    // Simple YAML parsing for the frontmatter we need
-    const yamlBlock = match[1]!;
-    const fm: Record<string, unknown> = {};
-    for (const line of yamlBlock.split('\n')) {
-      const kv = line.match(/^(\w+):\s*(.+)$/);
-      if (kv) {
-        const [, key, value] = kv;
-        if (value!.startsWith('[')) {
-          fm[key!] = value!.replace(/[\[\]]/g, '').split(',').map(s => s.trim());
-        } else if (value!.match(/^\d+(\.\d+)?$/)) {
-          fm[key!] = parseFloat(value!);
-        } else {
-          fm[key!] = value!.replace(/^["']|["']$/g, '');
-        }
-      }
-    }
+  const content = fs.readFileSync(filePath, 'utf8');
+  const dates: Date[] = [];
 
-    return {
-      filename: path.basename(filePath),
-      frontmatter: {
-        date: (fm.date as string) ?? new Date().toISOString(),
-        category: (fm.category as string) ?? 'unknown',
-        importance: (fm.importance as string) ?? 'medium',
-        tags: (fm.tags as string[]) ?? [],
-        confidence: (fm.confidence as number) ?? 1.0,
-        source: (fm.source as string) ?? 'unknown',
-      },
-      content: match[2]!.trim(),
-    };
-  } catch {
-    return null;
+  // Match entry headers: ### 2026-02-03 09:15 — reason
+  const headerPattern = /^### (\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2})?)/gm;
+  let match;
+  while ((match = headerPattern.exec(content)) !== null) {
+    const parsed = new Date(match[1]!);
+    if (!isNaN(parsed.getTime())) {
+      dates.push(parsed);
+    }
   }
+
+  return dates;
 }
 
 /**
- * Generate the briefing.md file from high-importance memories and recent activity.
+ * Check if any entries in a file are older than the given age in milliseconds.
  */
-function generateBriefing(memories: ParsedMemory[]): string {
-  const lines: string[] = [];
-  lines.push('# Memory Briefing');
-  lines.push(`_Auto-generated: ${new Date().toISOString()}_`);
-  lines.push('');
+function hasStaleEntries(filePath: string, maxAgeMs: number): boolean {
+  const dates = parseEntryDates(filePath);
+  if (dates.length === 0) return false;
 
-  // Critical and high importance memories (always included)
-  const important = memories.filter(m =>
-    m.frontmatter.importance === 'critical' || m.frontmatter.importance === 'high',
-  );
-
-  if (important.length > 0) {
-    lines.push('## Key Facts');
-    // Group by category
-    const grouped = new Map<string, ParsedMemory[]>();
-    for (const m of important) {
-      const cat = m.frontmatter.category;
-      if (!grouped.has(cat)) grouped.set(cat, []);
-      grouped.get(cat)!.push(m);
-    }
-
-    for (const [category, mems] of grouped) {
-      lines.push(`\n### ${category.charAt(0).toUpperCase() + category.slice(1)}`);
-      for (const m of mems) {
-        lines.push(`- ${m.content}`);
-      }
-    }
-    lines.push('');
-  }
-
-  // Recent memories (last 24 hours, medium importance)
-  const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
-  const recent = memories.filter(m => {
-    const mDate = new Date(m.frontmatter.date).getTime();
-    return mDate > oneDayAgo && m.frontmatter.importance === 'medium';
-  });
-
-  if (recent.length > 0) {
-    lines.push('## Recent (24h)');
-    for (const m of recent) {
-      lines.push(`- ${m.content}`);
-    }
-    lines.push('');
-  }
-
-  // Latest daily summary
-  const dailyDir = resolveProjectPath(SUMMARIES_DIR, 'daily');
-  if (fs.existsSync(dailyDir)) {
-    const dailies = fs.readdirSync(dailyDir).sort().reverse();
-    if (dailies.length > 0) {
-      lines.push('## Latest Daily Summary');
-      const latest = fs.readFileSync(path.join(dailyDir, dailies[0]!), 'utf8');
-      lines.push(latest.trim());
-      lines.push('');
-    }
-  }
-
-  return lines.join('\n');
-}
-
-/**
- * Apply confidence decay to memories that should decay over time.
- * Events and context memories decay; preferences and people don't.
- */
-function applyDecay(memories: ParsedMemory[]): void {
-  const decayCategories = new Set(['event', 'decision']);
-  const decayRate = 0.01; // 1% per day
-
-  for (const m of memories) {
-    if (!decayCategories.has(m.frontmatter.category)) continue;
-    if (m.frontmatter.confidence <= 0.3) continue; // Don't decay below 0.3
-
-    const age = (Date.now() - new Date(m.frontmatter.date).getTime()) / (24 * 60 * 60 * 1000);
-    const newConfidence = Math.max(0.3, m.frontmatter.confidence - (age * decayRate));
-
-    if (newConfidence !== m.frontmatter.confidence) {
-      m.frontmatter.confidence = Math.round(newConfidence * 100) / 100;
-
-      // Rewrite the file with updated confidence
-      const filePath = resolveProjectPath(MEMORIES_DIR, m.filename);
-      const content = [
-        '---',
-        `date: ${m.frontmatter.date}`,
-        `category: ${m.frontmatter.category}`,
-        `importance: ${m.frontmatter.importance}`,
-        `tags: [${m.frontmatter.tags.join(', ')}]`,
-        `confidence: ${m.frontmatter.confidence}`,
-        `source: ${m.frontmatter.source}`,
-        '---',
-        m.content,
-      ].join('\n');
-      fs.writeFileSync(filePath, content);
-    }
-  }
+  const cutoff = Date.now() - maxAgeMs;
+  return dates.some(d => d.getTime() < cutoff);
 }
 
 async function run(): Promise<void> {
-  // Ensure directories exist
-  const dirs = [
-    resolveProjectPath(MEMORY_DIR),
-    resolveProjectPath(MEMORIES_DIR),
-    resolveProjectPath(SUMMARIES_DIR, 'daily'),
-    resolveProjectPath(SUMMARIES_DIR, 'weekly'),
-    resolveProjectPath(SUMMARIES_DIR, 'monthly'),
+  const hr24Path = resolveProjectPath(SUMMARIES_DIR, '24hr.md');
+  const day30Path = resolveProjectPath(SUMMARIES_DIR, '30day.md');
+
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const MONTH_MS = 30 * DAY_MS;
+
+  const needs24hConsolidation = hasStaleEntries(hr24Path, DAY_MS);
+  const needs30dConsolidation = hasStaleEntries(day30Path, MONTH_MS);
+
+  if (!needs24hConsolidation && !needs30dConsolidation) {
+    log.debug('No consolidation needed — all entries are fresh');
+    return;
+  }
+
+  log.info(`Consolidation needed: 24h=${needs24hConsolidation}, 30d=${needs30dConsolidation}`);
+
+  if (isBusy()) {
+    log.info('Claude is busy — deferring consolidation to next run');
+    return;
+  }
+
+  // Build the consolidation prompt based on what needs processing
+  const parts: string[] = [
+    '[System] Nightly memory consolidation is due. Please process the following:',
   ];
-  for (const dir of dirs) {
-    fs.mkdirSync(dir, { recursive: true });
+
+  if (needs24hConsolidation) {
+    parts.push(
+      '',
+      '1. Review `.claude/state/memory/summaries/24hr.md` for entries older than 24 hours:',
+      '   - Summarize each day\'s entries into 2-4 sentences in `30day.md` (highlights, decisions, accomplishments — skip routine ops)',
+      '   - Include snapshot count in header: e.g., "### 2026-02-03 (from 8 snapshots)"',
+      '   - Extract any important new facts (people, decisions, tools, preferences) as individual memory files in `memories/`',
+      '   - Add back-references: `[mem:YYYYMMDD-HHMM-slug]` in summaries, `source:` field in memory frontmatter',
+      '   - Remove the processed entries from `24hr.md` (keep the file header and any entries from the last 24 hours)',
+    );
   }
 
-  // Load all memory files
-  const memoriesDir = resolveProjectPath(MEMORIES_DIR);
-  const files = fs.existsSync(memoriesDir)
-    ? fs.readdirSync(memoriesDir).filter(f => f.endsWith('.md'))
-    : [];
-
-  const memories: ParsedMemory[] = [];
-  for (const file of files) {
-    const parsed = parseMemoryFile(path.join(memoriesDir, file));
-    if (parsed) memories.push(parsed);
+  if (needs30dConsolidation) {
+    parts.push(
+      '',
+      `${needs24hConsolidation ? '2' : '1'}. Review \`.claude/state/memory/summaries/30day.md\` for entries older than 30 days:`,
+      '   - Summarize each month\'s entries into 3-5 sentences in the yearly file (e.g., `2026.md`)',
+      '   - Focus on themes, milestones, and significant changes',
+      '   - Reference key memory files',
+      '   - Remove the processed entries from `30day.md`',
+    );
   }
 
-  log.info(`Processing ${memories.length} memory files`);
+  parts.push(
+    '',
+    'This is a high-priority maintenance task. Complete it before moving to other work.',
+  );
 
-  // Apply confidence decay
-  applyDecay(memories);
+  const prompt = parts.join('\n');
 
-  // Generate briefing
-  const briefing = generateBriefing(memories.filter(m => m.frontmatter.confidence >= 0.5));
-  const briefingPath = resolveProjectPath(MEMORY_DIR, 'briefing.md');
-  fs.writeFileSync(briefingPath, briefing);
-  log.info('Briefing regenerated');
+  log.info('Injecting consolidation prompt');
+  injectText(prompt);
 }
 
 registerTask({ name: 'memory-consolidation', run });

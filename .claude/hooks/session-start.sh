@@ -78,7 +78,7 @@ if [ -d "$TODOS_DIR" ]; then
     echo "### Pending To-Dos"
 
     # List critical to-dos
-    for f in "$TODOS_DIR"/1-*-open-*.json "$TODOS_DIR"/1-*-in-progress-*.json 2>/dev/null; do
+    for f in "$TODOS_DIR"/1-*-open-*.json "$TODOS_DIR"/1-*-in-progress-*.json; do
       if [ -f "$f" ]; then
         TITLE=$(cat "$f" | grep -o '"title"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*:.*"\([^"]*\)".*/\1/')
         ID=$(cat "$f" | grep -o '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*:.*"\([^"]*\)".*/\1/')
@@ -87,7 +87,7 @@ if [ -d "$TODOS_DIR" ]; then
     done
 
     # List high priority to-dos
-    for f in "$TODOS_DIR"/2-*-open-*.json "$TODOS_DIR"/2-*-in-progress-*.json 2>/dev/null; do
+    for f in "$TODOS_DIR"/2-*-open-*.json "$TODOS_DIR"/2-*-in-progress-*.json; do
       if [ -f "$f" ]; then
         TITLE=$(cat "$f" | grep -o '"title"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*:.*"\([^"]*\)".*/\1/')
         ID=$(cat "$f" | grep -o '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*:.*"\([^"]*\)".*/\1/')
@@ -117,26 +117,31 @@ if [ -f "$STATE_DIR/assistant-state.md" ]; then
   echo "### Saved State"
   echo "Previous state saved. Run \`/save-state\` or check .claude/state/assistant-state.md for details."
 
-  # Extract just the Current Task and Next Steps sections
+  # Load Current Task (full section, not truncated — losing context here causes confusion)
   if grep -q "## Current Task" "$STATE_DIR/assistant-state.md"; then
-    awk '/## Current Task/{found=1} /## Progress/{found=0} found{print}' "$STATE_DIR/assistant-state.md" | head -5
+    awk '/## Current Task/{found=1} /## Progress/{found=0} found{print}' "$STATE_DIR/assistant-state.md"
   fi
+
+  # Load Next Steps (full section)
   if grep -q "## Next Steps" "$STATE_DIR/assistant-state.md"; then
     echo ""
     echo "**Next Steps:**"
-    awk '/## Next Steps/{found=1; next} /^##/{found=0} found && /^[0-9]/{print}' "$STATE_DIR/assistant-state.md" | head -3
+    awk '/## Next Steps/{found=1; next} /^##/{found=0} found{print}' "$STATE_DIR/assistant-state.md"
   fi
-  echo ""
-fi
 
-# Load memory briefing (v2) or fall back to memory.md (v1)
-if [ -f "$STATE_DIR/memory/briefing.md" ]; then
-  echo "### Memory Briefing"
-  cat "$STATE_DIR/memory/briefing.md"
-  echo ""
-elif [ -f "$STATE_DIR/memory.md" ]; then
-  echo "### Memory"
-  cat "$STATE_DIR/memory.md"
+  # Load Context section if present (key files, decisions, blockers)
+  if grep -q "## Context" "$STATE_DIR/assistant-state.md"; then
+    echo ""
+    echo "**Context:**"
+    awk '/## Context/{found=1; next} /^##/{found=0} found{print}' "$STATE_DIR/assistant-state.md"
+  fi
+
+  # Load Blockers if present
+  if grep -q "## Blockers" "$STATE_DIR/assistant-state.md"; then
+    echo ""
+    echo "**Blockers:**"
+    awk '/## Blockers/{found=1; next} /^##/{found=0} found{print}' "$STATE_DIR/assistant-state.md"
+  fi
   echo ""
 fi
 
