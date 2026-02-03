@@ -35,6 +35,7 @@ if [ -f "$SYSTEM_PROMPT_FILE" ]; then
     ARGS+=("--append-system-prompt" "$(cat "$SYSTEM_PROMPT_FILE")")
 fi
 
+
 # Add any additional arguments passed to this script
 ARGS+=("$@")
 
