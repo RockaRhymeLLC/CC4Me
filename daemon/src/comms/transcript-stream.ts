@@ -15,7 +15,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { getNewestTranscript, capturePane } from '../core/session-bridge.js';
-import { routeOutgoingMessage, signalResponseComplete } from './channel-router.js';
+import { routeOutgoingMessage, signalResponseComplete, getChannel } from './channel-router.js';
+import { getProjectDir } from '../core/config.js';
 import { createLogger } from '../core/logger.js';
 
 const log = createLogger('transcript-stream');
@@ -54,6 +55,72 @@ function isDuplicate(text: string): boolean {
   return false;
 }
 
+// ── Delivery log ─────────────────────────────────────────────
+
+type DeliveryEvent = 'delivered' | 'dedup' | 'retry-exhausted';
+type DeliveryLayer = 'stop-hook' | 'retry' | 'background-check' | 'pane-capture';
+
+interface DeliveryLogEntry {
+  ts: string;
+  event: DeliveryEvent;
+  layer: DeliveryLayer;
+  hookEvent: string | null;
+  elapsed: number | null;
+  retryAttempt: number | null;
+  chatId: string | null;
+  len: number;
+  hash: string;
+}
+
+const DELIVERY_LOG_MAX = 100;
+const DELIVERY_LOG_TRIM = 75;
+
+function getDeliveryLogPath(): string {
+  return path.join(getProjectDir(), 'logs', 'delivery.jsonl');
+}
+
+function logDelivery(entry: DeliveryLogEntry): void {
+  try {
+    const logPath = getDeliveryLogPath();
+    const line = JSON.stringify(entry) + '\n';
+    fs.appendFileSync(logPath, line);
+
+    // Trim if over cap
+    const content = fs.readFileSync(logPath, 'utf8');
+    const lines = content.split('\n').filter(l => l.trim());
+    if (lines.length > DELIVERY_LOG_MAX) {
+      const trimmed = lines.slice(lines.length - DELIVERY_LOG_TRIM);
+      fs.writeFileSync(logPath, trimmed.join('\n') + '\n');
+    }
+  } catch (err) {
+    log.error('Failed to write delivery log', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/**
+ * Get the current chat ID for logging. Reads from the channel router's
+ * reply-chat-id state file (set by the Telegram adapter on incoming messages).
+ */
+function getCurrentChatId(): string | null {
+  const channel = getChannel();
+  if (channel === 'terminal' || channel === 'silent') return null;
+  try {
+    const chatIdFile = path.join(getProjectDir(), '.claude', 'state', 'reply-chat-id.txt');
+    return fs.readFileSync(chatIdFile, 'utf8').trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+// Tracking state for the current delivery cycle
+let _currentHookEvent: string | null = null;
+let _retryStartTime: number | null = null;
+let _retryAttemptCount = 0;
+let _lastDeliveredLen = 0;
+let _lastDeliveredHash = '';
+
 // ── State ────────────────────────────────────────────────────
 
 let _currentFile: string | null = null;
@@ -74,6 +141,8 @@ let _running = false;
  * @param hookEvent - Optional hook event name (e.g., 'Stop', 'SubagentStop').
  */
 export function onHookNotification(transcriptPath?: string, hookEvent?: string): void {
+  _currentHookEvent = hookEvent ?? null;
+
   // If the hook provides a transcript path, use it (handles rotation)
   if (transcriptPath && transcriptPath !== _currentFile) {
     switchToFile(transcriptPath);
@@ -93,6 +162,18 @@ export function onHookNotification(transcriptPath?: string, hookEvent?: string):
   const found = readNewMessages(_currentFile!);
 
   if (found) {
+    // Delivered on first read from hook — log as stop-hook layer
+    logDelivery({
+      ts: new Date().toISOString(),
+      event: 'delivered',
+      layer: 'stop-hook',
+      hookEvent: _currentHookEvent,
+      elapsed: 0,
+      retryAttempt: null,
+      chatId: getCurrentChatId(),
+      len: _lastDeliveredLen,
+      hash: _lastDeliveredHash,
+    });
     signalResponseComplete();
     return;
   }
@@ -175,13 +256,30 @@ function handleAssistantMessage(msg: TranscriptMessage): boolean {
   // Skip empty or placeholder messages
   if (!text || text === 'null' || text === '(no content)') return false;
 
+  const hash = contentHash(text);
+
   // Dedup check — skip if we've already sent this content
   if (isDuplicate(text)) {
-    log.info(`Dedup: skipping already-sent message (${text.length} chars, hash=${contentHash(text)})`);
+    log.info(`Dedup: skipping already-sent message (${text.length} chars, hash=${hash})`);
+    logDelivery({
+      ts: new Date().toISOString(),
+      event: 'dedup',
+      layer: _pollTimer ? 'retry' : _currentHookEvent ? 'stop-hook' : 'background-check',
+      hookEvent: _currentHookEvent,
+      elapsed: _retryStartTime ? Date.now() - _retryStartTime : null,
+      retryAttempt: _retryAttemptCount || null,
+      chatId: getCurrentChatId(),
+      len: text.length,
+      hash,
+    });
     return false;
   }
 
   log.debug(`New assistant message (${text.length} chars)`);
+
+  // Track for delivery logging (caller reads these after readNewMessages returns)
+  _lastDeliveredLen = text.length;
+  _lastDeliveredHash = hash;
 
   // Extract thinking blocks for verbose mode
   const thinkingParts = content
@@ -221,8 +319,8 @@ function startRetryLoop(): void {
   // Cancel any existing retry loop
   cancelRetryLoop();
 
-  const startTime = Date.now();
-  let attempt = 0;
+  _retryStartTime = Date.now();
+  _retryAttemptCount = 0;
 
   function poll(): void {
     if (!_currentFile) {
@@ -231,27 +329,40 @@ function startRetryLoop(): void {
       return;
     }
 
-    attempt++;
+    _retryAttemptCount++;
     const found = readNewMessages(_currentFile!);
 
     if (found) {
-      const elapsed = Date.now() - startTime;
-      log.info(`Retry loop: delivered after ${elapsed}ms (attempt ${attempt})`);
+      const elapsed = Date.now() - _retryStartTime!;
+      log.info(`Retry loop: delivered after ${elapsed}ms (attempt ${_retryAttemptCount})`);
+      logDelivery({
+        ts: new Date().toISOString(),
+        event: 'delivered',
+        layer: 'retry',
+        hookEvent: _currentHookEvent,
+        elapsed,
+        retryAttempt: _retryAttemptCount,
+        chatId: getCurrentChatId(),
+        len: _lastDeliveredLen,
+        hash: _lastDeliveredHash,
+      });
       cancelRetryLoop();
+      _retryStartTime = null;
+      _retryAttemptCount = 0;
       signalResponseComplete();
       return;
     }
 
-    const elapsed = Date.now() - startTime;
+    const elapsed = Date.now() - _retryStartTime!;
     if (elapsed >= 60_000) {
-      log.warn(`Retry loop: exhausted after ${attempt} attempts (${elapsed}ms), falling back to pane capture`);
+      log.warn(`Retry loop: exhausted after ${_retryAttemptCount} attempts (${elapsed}ms), falling back to pane capture`);
       cancelRetryLoop();
       onRetryExhausted();
       return;
     }
 
     // Fast burst for first 3 attempts (200ms), then slow poll (1s)
-    const delay = attempt <= 3 ? 200 : 1000;
+    const delay = _retryAttemptCount <= 3 ? 200 : 1000;
     _pollTimer = setTimeout(poll, delay);
   }
 
@@ -283,9 +394,21 @@ function backgroundCheck(): void {
 
   // Also read new messages if no retry loop is active
   if (!_pollTimer && _currentFile) {
+    _currentHookEvent = null; // Background check, no hook
     const found = readNewMessages(_currentFile);
     if (found) {
       log.info('Background check: found and delivered missed message(s)');
+      logDelivery({
+        ts: new Date().toISOString(),
+        event: 'delivered',
+        layer: 'background-check',
+        hookEvent: null,
+        elapsed: null,
+        retryAttempt: null,
+        chatId: getCurrentChatId(),
+        len: _lastDeliveredLen,
+        hash: _lastDeliveredHash,
+      });
       signalResponseComplete();
     }
   }
@@ -299,11 +422,16 @@ function backgroundCheck(): void {
  * attempts to extract the assistant's response.
  */
 function onRetryExhausted(): void {
+  const elapsed = _retryStartTime ? Date.now() - _retryStartTime : 60_000;
+  let paneCaptureResult: 'delivered' | 'empty' | 'duplicate' | 'failed' = 'failed';
+
   try {
     const pane = capturePane();
     if (!pane) {
       log.warn('Pane capture: empty pane content');
+      paneCaptureResult = 'empty';
       signalResponseComplete();
+      logRetryExhausted(elapsed, paneCaptureResult, 0, '');
       return;
     }
 
@@ -311,16 +439,49 @@ function onRetryExhausted(): void {
     if (text && !isDuplicate(text)) {
       log.info(`Pane capture: extracted response (${text.length} chars), delivering`);
       routeOutgoingMessage(text);
+      paneCaptureResult = 'delivered';
+      logDelivery({
+        ts: new Date().toISOString(),
+        event: 'delivered',
+        layer: 'pane-capture',
+        hookEvent: _currentHookEvent,
+        elapsed,
+        retryAttempt: _retryAttemptCount,
+        chatId: getCurrentChatId(),
+        len: text.length,
+        hash: contentHash(text),
+      });
     } else if (text) {
       log.info('Pane capture: extracted text was a duplicate, skipping');
+      paneCaptureResult = 'duplicate';
+      logRetryExhausted(elapsed, paneCaptureResult, text.length, contentHash(text));
     } else {
       log.warn('Pane capture: could not extract assistant response from pane');
+      paneCaptureResult = 'failed';
+      logRetryExhausted(elapsed, paneCaptureResult, 0, '');
     }
   } catch (err) {
     log.error('Pane capture error', { error: err instanceof Error ? err.message : String(err) });
+    logRetryExhausted(elapsed, 'failed', 0, '');
   }
 
+  _retryStartTime = null;
+  _retryAttemptCount = 0;
   signalResponseComplete();
+}
+
+function logRetryExhausted(elapsed: number, paneCaptureResult: string, len: number, hash: string): void {
+  logDelivery({
+    ts: new Date().toISOString(),
+    event: 'retry-exhausted',
+    layer: 'pane-capture',
+    hookEvent: _currentHookEvent,
+    elapsed,
+    retryAttempt: _retryAttemptCount,
+    chatId: getCurrentChatId(),
+    len,
+    hash,
+  });
 }
 
 /**
