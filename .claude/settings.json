@@ -1,8 +1,8 @@
 {
-  "statusLine": {
-    "type": "command",
-    "command": "/Users/bmo/CC4Me-BMO/scripts/context-monitor-statusline.sh",
-    "padding": 0
+  "permissions": {
+    "allow": [".*"],
+    "deny": [],
+    "defaultMode": "bypassPermissions"
   },
   "hooks": {
     "SessionStart": [
