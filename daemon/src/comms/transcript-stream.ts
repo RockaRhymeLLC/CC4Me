@@ -30,6 +30,37 @@ interface TranscriptMessage {
   };
 }
 
+// ── Status line noise detection ──────────────────────────────
+
+/**
+ * Patterns matching Claude Code UI chrome that should never be forwarded.
+ * Covers status bar elements, edit prompts, and other terminal UI.
+ */
+const STATUS_LINE_PATTERNS: RegExp[] = [
+  /^\[.*\]\s*Context:\s*\d+%/,         // [Opus 4.5] Context: 69% used
+  /^[⏵▸]+\s*(accept|reject)/,          // ⏵⏵ accept edits on ...
+  /^─{3,}/,                             // ──────── separator lines
+  /shift\+tab to cycle/,               // keyboard hints
+  /^\d+\s+files?\s+[+\-]\d+/,          // 3 files +16 -39
+  /^\[cost:/i,                          // [cost: $0.xx]
+  /^Press Enter/i,                      // acceptance prompts
+  /^[│┌┐└┘├┤┬┴┼]+$/,                   // pure box-drawing lines
+  /^\s*\d+\s*[│|]\s/,                   // line-number gutters
+  /^(Plan|Auto|Manual)\s+mode/i,        // mode indicators
+];
+
+/**
+ * Check if a message is purely status line noise.
+ * For multi-line text, returns true only if ALL lines are noise or empty.
+ */
+function isStatusLineNoise(text: string): boolean {
+  const lines = text.split('\n');
+  return lines.every(line => {
+    const trimmed = line.trim();
+    return trimmed === '' || STATUS_LINE_PATTERNS.some(p => p.test(trimmed));
+  });
+}
+
 let _currentFile: string | null = null;
 let _fileOffset = 0;  // byte offset of where we've read to
 let _checkInterval: ReturnType<typeof setInterval> | null = null;
@@ -128,6 +159,12 @@ function handleAssistantMessage(msg: TranscriptMessage): void {
 
   // Skip empty or placeholder messages
   if (!text || text === 'null' || text === '(no content)') return;
+
+  // Skip status line noise (Claude Code UI chrome)
+  if (isStatusLineNoise(text)) {
+    log.debug(`Skipping status line noise (${text.length} chars): ${text.substring(0, 80)}`);
+    return;
+  }
 
   log.debug(`New assistant message (${text.length} chars)`);
 
