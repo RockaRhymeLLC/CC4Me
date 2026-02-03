@@ -34,7 +34,12 @@ Thumbs.db
 !.claude/state/.gitkeep
 .claude/state/todos/*.json
 !.claude/state/todos/.gitkeep
-.claude/state/memory/
+# Memory data (not templates or directory structure)
+.claude/state/memory/memories/*.md
+.claude/state/memory/summaries/*.md
+!.claude/state/memory/memories/.gitkeep
+!.claude/state/memory/summaries/.gitkeep
+!.claude/state/memory/summaries/*.template
 .claude/state/research/
 .claude/state/telegram-media/
 

@@ -1,11 +1,15 @@
 #!/bin/bash
 #
-# PreCompact Hook (v2)
+# PreCompact Hook (v2.1)
 #
 # Key insight: Claude has the context, this hook doesn't.
 # Instead of writing a generic placeholder, we output an instruction
 # that tells Claude to save its own state — which will be much more
 # useful since Claude knows what it was working on.
+#
+# v2.1: Also creates a timestamped backup of any existing assistant-state.md
+# so we never lose a previous save even if Claude doesn't write a new one
+# before compaction completes.
 #
 # Fires on: manual (/compact), auto (context full)
 
@@ -16,6 +20,22 @@ STATE_DIR="$PROJECT_DIR/.claude/state"
 
 # Read input from stdin
 INPUT=$(cat)
+
+# Backup current assistant-state.md if it exists
+# This ensures we don't lose the previous save if Claude doesn't
+# write a new one before compaction proceeds
+if [ -f "$STATE_DIR/assistant-state.md" ]; then
+  BACKUP_DIR="$STATE_DIR/assistant-state-backups"
+  mkdir -p "$BACKUP_DIR"
+  TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+  cp "$STATE_DIR/assistant-state.md" "$BACKUP_DIR/assistant-state-$TIMESTAMP.md"
+
+  # Keep only the 5 most recent backups
+  ls -t "$BACKUP_DIR"/assistant-state-*.md 2>/dev/null | tail -n +6 | xargs rm -f 2>/dev/null
+
+  # Append current state to 24hr cascade log (force — always log before compact)
+  "$PROJECT_DIR/scripts/append-state-log.sh" --force "Pre-compact backup"
+fi
 
 # Output instruction to Claude (this appears in Claude's context)
 cat << 'EOF'
