@@ -7,7 +7,7 @@
  */
 
 import fs from 'node:fs';
-import http from 'node:http';
+import { execFile } from 'node:child_process';
 import crypto from 'node:crypto';
 import { loadConfig, resolveProjectPath } from '../core/config.js';
 import type { AgentMessage, AgentMessageResponse, AgentCommsPeerConfig } from '../core/config.js';
@@ -339,102 +339,76 @@ export async function sendAgentMessage(
     ...extra,
   };
 
+  const payload = JSON.stringify(msg);
+  const url = `http://${peer.host}:${peer.port}/agent/message`;
+
+  // Use curl via child_process instead of Node.js http.request.
+  // Node.js on macOS cannot make outbound TCP connections to LAN IPs
+  // (EHOSTUNREACH) due to missing local network entitlements.
+  // curl is not affected by this restriction.
   return new Promise<AgentMessageResponse>((resolve) => {
-    const payload = JSON.stringify(msg);
+    const args = [
+      '-s', '--connect-timeout', '5',
+      '-X', 'POST', url,
+      '-H', 'Content-Type: application/json',
+      '-H', `Authorization: Bearer ${secret}`,
+      '--data-raw', payload,
+    ];
 
-    const req = http.request(
-      {
-        hostname: peer.host,
-        port: peer.port,
-        path: '/agent/message',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${secret}`,
-          'Content-Length': Buffer.byteLength(payload),
-        },
-        timeout: 5000,
-      },
-      (res) => {
-        let body = '';
-        res.on('data', (chunk: Buffer) => { body += chunk.toString(); });
-        res.on('end', () => {
-          try {
-            const response = JSON.parse(body) as AgentMessageResponse;
-            logCommsEntry({
-              ts: new Date().toISOString(),
-              direction: 'out',
-              from: config.agent.name.toLowerCase(),
-              type: msg.type,
-              text: msg.text,
-              messageId: msg.messageId,
-              queued: response.queued ?? false,
-            });
-            resolve(response);
-          } catch {
-            const errorResponse: AgentMessageResponse = {
-              ok: false,
-              queued: false,
-              error: `Invalid response from peer: ${body.slice(0, 200)}`,
-            };
-            logCommsEntry({
-              ts: new Date().toISOString(),
-              direction: 'out',
-              from: config.agent.name.toLowerCase(),
-              type: msg.type,
-              text: msg.text,
-              messageId: msg.messageId,
-              queued: false,
-              error: errorResponse.error,
-            });
-            resolve(errorResponse);
-          }
+    execFile('curl', args, { timeout: 10000 }, (err, stdout, stderr) => {
+      if (err) {
+        const detail = stderr?.trim() || err.message || 'unknown error';
+        const errorResponse: AgentMessageResponse = {
+          ok: false,
+          queued: false,
+          error: `Failed to reach peer ${peerName} (${peer.host}:${peer.port}): ${detail}`,
+        };
+        logCommsEntry({
+          ts: new Date().toISOString(),
+          direction: 'out',
+          from: config.agent.name.toLowerCase(),
+          type: msg.type,
+          text: msg.text,
+          messageId: msg.messageId,
+          queued: false,
+          error: errorResponse.error,
         });
-      },
-    );
+        log.error(`Failed to send message to ${peerName}`, { error: detail, host: peer.host, port: peer.port });
+        resolve(errorResponse);
+        return;
+      }
 
-    req.on('error', (err: Error) => {
-      const errorResponse: AgentMessageResponse = {
-        ok: false,
-        queued: false,
-        error: `Failed to reach peer ${peerName}: ${err.message}`,
-      };
-      logCommsEntry({
-        ts: new Date().toISOString(),
-        direction: 'out',
-        from: config.agent.name.toLowerCase(),
-        type: msg.type,
-        text: msg.text,
-        messageId: msg.messageId,
-        queued: false,
-        error: errorResponse.error,
-      });
-      log.error(`Failed to send message to ${peerName}`, { error: err.message });
-      resolve(errorResponse);
+      try {
+        const response = JSON.parse(stdout) as AgentMessageResponse;
+        logCommsEntry({
+          ts: new Date().toISOString(),
+          direction: 'out',
+          from: config.agent.name.toLowerCase(),
+          type: msg.type,
+          text: msg.text,
+          messageId: msg.messageId,
+          queued: response.queued ?? false,
+        });
+        resolve(response);
+      } catch {
+        const errorResponse: AgentMessageResponse = {
+          ok: false,
+          queued: false,
+          error: `Invalid response from peer: ${stdout.slice(0, 200)}`,
+        };
+        logCommsEntry({
+          ts: new Date().toISOString(),
+          direction: 'out',
+          from: config.agent.name.toLowerCase(),
+          type: msg.type,
+          text: msg.text,
+          messageId: msg.messageId,
+          queued: false,
+          error: errorResponse.error,
+        });
+        resolve(errorResponse);
+      }
     });
-
-    req.on('timeout', () => {
-      req.destroy();
-      const errorResponse: AgentMessageResponse = {
-        ok: false,
-        queued: false,
-        error: `Timeout reaching peer ${peerName}`,
-      };
-      logCommsEntry({
-        ts: new Date().toISOString(),
-        direction: 'out',
-        from: config.agent.name.toLowerCase(),
-        type: msg.type,
-        text: msg.text,
-        messageId: msg.messageId,
-        queued: false,
-        error: errorResponse.error,
-      });
-      resolve(errorResponse);
-    });
-
-    req.write(payload);
-    req.end();
   });
 }
 
