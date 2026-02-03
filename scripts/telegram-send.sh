@@ -13,7 +13,8 @@
 
 set -e
 
-BASE_DIR="/Users/bmo/CC4Me-BMO"
+# Resolve project directory (parent of scripts/)
+BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 STATE_DIR="$BASE_DIR/.claude/state"
 PENDING_FILE="$STATE_DIR/telegram-pending.json"
 

@@ -78,7 +78,7 @@ if [ -d "$TODOS_DIR" ]; then
     echo "### Pending To-Dos"
 
     # List critical to-dos
-    for f in "$TODOS_DIR"/1-*-open-*.json "$TODOS_DIR"/1-*-in-progress-*.json 2>/dev/null; do
+    for f in "$TODOS_DIR"/1-*-open-*.json "$TODOS_DIR"/1-*-in-progress-*.json; do
       if [ -f "$f" ]; then
         TITLE=$(cat "$f" | grep -o '"title"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*:.*"\([^"]*\)".*/\1/')
         ID=$(cat "$f" | grep -o '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*:.*"\([^"]*\)".*/\1/')
@@ -87,7 +87,7 @@ if [ -d "$TODOS_DIR" ]; then
     done
 
     # List high priority to-dos
-    for f in "$TODOS_DIR"/2-*-open-*.json "$TODOS_DIR"/2-*-in-progress-*.json 2>/dev/null; do
+    for f in "$TODOS_DIR"/2-*-open-*.json "$TODOS_DIR"/2-*-in-progress-*.json; do
       if [ -f "$f" ]; then
         TITLE=$(cat "$f" | grep -o '"title"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*:.*"\([^"]*\)".*/\1/')
         ID=$(cat "$f" | grep -o '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*:.*"\([^"]*\)".*/\1/')
@@ -146,7 +146,7 @@ if [ "$DAEMON_RUNNING" = "true" ]; then
   echo "CC4Me daemon is running (port 3847). Transcript watching, Telegram, email, and scheduled tasks are managed by the daemon."
 else
   echo "### Daemon"
-  echo "CC4Me daemon is NOT running. Using fallback v1 transcript watcher. Start daemon: \`launchctl load ~/Library/LaunchAgents/com.bmo.daemon.plist\`"
+  echo "CC4Me daemon is NOT running. Using fallback v1 transcript watcher. Start daemon: \`launchctl load ~/Library/LaunchAgents/com.assistant.daemon.plist\`"
 fi
 echo ""
 

@@ -11,8 +11,15 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
-# Claude binary - use absolute path for launchd compatibility
-CLAUDE="/Users/bmo/.local/bin/claude"
+# Find claude binary - check common locations, fall back to PATH
+if command -v claude >/dev/null 2>&1; then
+    CLAUDE="$(command -v claude)"
+elif [ -x "$HOME/.local/bin/claude" ]; then
+    CLAUDE="$HOME/.local/bin/claude"
+else
+    echo "Error: claude not found. Install Claude Code first." >&2
+    exit 1
+fi
 
 # Change to project directory
 cd "$PROJECT_DIR"
