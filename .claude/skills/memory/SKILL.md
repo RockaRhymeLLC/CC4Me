@@ -36,7 +36,7 @@ Examples:
 - `/memory add "Wife's name is Sarah" category:person importance:high tags:family`
 
 ### List
-- `list` - Show all memory entries (from briefing.md)
+- `list` - Show all memory entries
 - `list category:work` - Show entries matching category
 
 ### Search
@@ -106,14 +106,13 @@ Filename: 20260203-0445-r2-agent-comms-proposal.md
 ```
 
 ### Looking Up
-1. First check `.claude/state/memory/briefing.md` (auto-generated summary)
-2. If more detail needed, use Grep to search `.claude/state/memory/memories/` by keyword
-3. Search both file content and frontmatter (tags, category, subject)
-4. Return matching facts with their source file
-5. If nothing found, say so (don't guess)
+1. Use Grep to search `.claude/state/memory/memories/` by keyword
+2. Search both file content and frontmatter (tags, category, subject)
+3. Return matching facts with their source file
+4. If nothing found, say so (don't guess)
 
 ### Listing
-1. Read `.claude/state/memory/briefing.md` for the overview
+1. Glob all `.md` files in `memories/` directory
 2. If filtering by category, use Grep on frontmatter `category:` field
 3. Display grouped by category
 
@@ -122,15 +121,17 @@ Filename: 20260203-0445-r2-agent-comms-proposal.md
 2. Return matching lines with file context
 3. Include frontmatter metadata (category, importance) in results
 
-## Memory Consolidation
+## Memory Cascade
 
-The daemon runs a nightly consolidation task (11pm) that:
-- Reads all memory files from `memories/`
-- Applies confidence decay to `event` and `decision` categories (1%/day, floor 0.3)
-- Generates `briefing.md` from critical/high importance facts + recent medium-importance facts
-- Writes daily summaries to `summaries/daily/`
+State snapshots are appended to `summaries/24hr.md` on every save-state, compact, and restart. A nightly consolidation task (5am) cascades old entries:
 
-**briefing.md** is the quick-reference summary loaded at session start. Individual memory files are the source of truth.
+- **24hr.md**: Rolling state log — detailed snapshots from the past day
+- **30day.md**: Condensed daily summaries (2-4 sentences each, highlights only)
+- **2026.md** (yearly): Monthly summaries (3-5 sentences, themes and milestones)
+
+The nightly job also extracts new memories from the 24hr log — new people, decisions, tools, preferences — and creates individual memory files with back-references.
+
+Individual memory files in `memories/` are the source of truth for persistent facts.
 
 ## Output Format
 
@@ -177,7 +178,7 @@ Added to memory:
 - One fact or closely related group of facts per file
 - Use descriptive subjects for easy scanning
 - Tag generously — tags are searchable
-- Set importance appropriately (critical/high = always in briefing, medium = recent only)
+- Set importance appropriately (critical/high for permanent facts, medium for context-dependent)
 - Use `source: user` when the user stated it directly
 
 ## Migration Note

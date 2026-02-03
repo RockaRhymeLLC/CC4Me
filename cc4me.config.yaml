@@ -49,7 +49,7 @@ scheduler:
       cron: "0 8 * * 1"
     - name: "memory-consolidation"
       enabled: true
-      cron: "0 23 * * *"
+      cron: "0 5 * * *"    # 5am daily — cascade 24hr→30day→yearly
     - name: "approval-audit"
       enabled: true
       cron: "0 9 1 */6 *"    # 9am on the 1st, every 6 months

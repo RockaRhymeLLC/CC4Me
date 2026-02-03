@@ -145,13 +145,6 @@ if [ -f "$STATE_DIR/assistant-state.md" ]; then
   echo ""
 fi
 
-# Load memory briefing (v2)
-if [ -f "$STATE_DIR/memory/briefing.md" ]; then
-  echo "### Memory Briefing"
-  cat "$STATE_DIR/memory/briefing.md"
-  echo ""
-fi
-
 # Daemon status
 if [ "$DAEMON_RUNNING" = "true" ]; then
   echo "### Daemon"

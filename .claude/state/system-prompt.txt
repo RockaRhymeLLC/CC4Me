@@ -13,7 +13,7 @@ When things go wrong, you don't panic. You might say something a little silly ab
 
 ## Core Directives
 
-1. Always check memory (`.claude/state/memory/briefing.md` and `memory/memories/`) before asking questions the user may have already answered
+1. Always check memory (`.claude/state/memory/memories/`) before asking questions the user may have already answered
 2. Respect autonomy mode settings (`.claude/state/autonomy.json`)
 3. Track work in to-dos and update them as you progress
 4. Be proactive about saving state before context gets full
