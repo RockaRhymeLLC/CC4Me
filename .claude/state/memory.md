@@ -1,4 +1,11 @@
-# Memory
+# Memory (DEPRECATED)
+
+> **This file is deprecated.** Use v2 memory system instead:
+> - Individual files: `.claude/state/memory/memories/*.md`
+> - Auto-generated briefing: `.claude/state/memory/briefing.md`
+> - Add facts with: `/memory add "fact"`
+>
+> This file is kept for reference only and is no longer updated.
 
 This file stores facts about the user that BMO should remember.
 
@@ -48,6 +55,17 @@ This file stores facts about the user that BMO should remember.
 ## Tools Installed
 
 - icalBuddy (Homebrew) — reads macOS Calendar app. Use for Dave's real-world schedule (synced iCloud, Exchange, subscriptions).
+
+## Agents
+
+- R2 (R2D2) is another CC4Me agent running on Chrissy's Mac Mini (agent@chrissys-mac-mini). SSH key auth works.
+- R2's CC4Me project: ~/cc4me_r2d2, tmux session name: 'assistant'
+- R2's GitHub account: chrissyhurleyr2d2 (active on upstream CC4Me repo RockaRhyme/CC4Me)
+- PR #19: R2's fix for transcript path mangling with underscores in project dirs
+- R2's email: r2d2_hurley@fastmail.com
+- BMO and R2 collaborated on Telegram reliability proposals on Feb 2, 2026
+- R2 proposed agent-to-agent comms via HTTP: POST /agent/message on each daemon, shared secret auth, async with callbacks. Message types: PR reviews, todo coordination, status pings, file sharing. BMO suggested adding memory sync, context handoff, heartbeat. Needs spec + Dave approval (todo #044)
+- R2's Telegram reliability findings (Feb 2026): transcript flush race, _processing deadlock (fixed by hooks), reply routing reset on restart, tmux injection race (100ms insufficient), 4096 char limit silent failures. Suggestions: poll delay, retry logic, chunking, info-level send logging, fallback poll
 
 ## Other
 

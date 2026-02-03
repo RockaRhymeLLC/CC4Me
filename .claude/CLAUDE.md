@@ -89,7 +89,7 @@ Your persistent state lives in `.claude/state/`. Know this directory well — it
 |------|---------|---------------|
 | `memory/briefing.md` | Auto-generated memory summary (loaded at session start) | Loaded automatically by session-start hook |
 | `memory/memories/*.md` | Individual memory files with YAML frontmatter | Use Grep to search by keyword/tag/category |
-| `memory.md` | Legacy v1 memory file (still functional, v2 uses memory/ dir) | Fallback if briefing.md doesn't exist |
+| `memory.md` | Deprecated v1 memory file (kept for reference, no longer updated) | Do not use — use memory/memories/ instead |
 | `calendar.md` | Scheduled events, reminders, to-do due dates (linked via `[todo:id]`) | At session start and when scheduling |
 | `assistant-state.md` | Saved work context from before compaction/restart | At session start to resume work |
 | `autonomy.json` | Current autonomy mode (yolo/confident/cautious/supervised) | Before taking actions that need permission |
@@ -151,7 +151,6 @@ Only use `telegram-send.sh` directly when the channel is `silent` and you need t
 **Before asking the user for information**, check memory:
 1. First check `.claude/state/memory/briefing.md` (loaded at session start, contains high-importance facts)
 2. If you need more detail, use Grep to search `.claude/state/memory/memories/` by keyword, tag, or category
-3. Fallback: check `.claude/state/memory.md` (legacy v1 format)
 
 If the information isn't there, ask and then store it with `/memory add "fact"`.
 
@@ -299,7 +298,7 @@ Each skill has detailed instructions in `.claude/skills/{name}/SKILL.md`.
 | Skill | Purpose |
 |-------|---------|
 | `/todo` | Manage persistent to-dos (auto-incrementing IDs, JSON files) |
-| `/memory` | Store and lookup facts in `memory.md` |
+| `/memory` | Store and lookup facts in `memory/memories/` (v2) |
 | `/calendar` | Manage schedule and reminders |
 | `/mode` | View/change autonomy level |
 | `/save-state` | Save context before compaction |

@@ -202,7 +202,7 @@ security find-generic-password -s "credential-telegram-bot" -w
 ```
 
 ## Dave's Chat ID
-`7629737488` (also in memory.md and safe-senders.json)
+`7629737488` (also in memory/briefing.md and safe-senders.json)
 
 ## Testing
 

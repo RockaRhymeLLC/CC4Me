@@ -111,10 +111,11 @@ Ask user's preferred notification channel:
 Write choice to `.claude/state/channel.txt`
 
 ### 5. Memory Initialization
-- Copy memory template
-- Add initial facts about user (name, preferences mentioned during setup)
+- Create v2 memory directory structure (`memory/memories/`, `memory/summaries/`)
+- Add initial facts about user as individual memory files (name, preferences mentioned during setup)
+- Each fact gets its own file with YAML frontmatter (date, category, importance, tags)
 
-Creates: `.claude/state/memory.md`
+Creates: `.claude/state/memory/memories/*.md`
 
 ### 6. Calendar Initialization
 - Copy calendar template
@@ -167,7 +168,7 @@ Creates: `.claude/state/calendar.md`
    - Write to channel.txt
 
 9. **Initialize State Files**
-   - Copy memory.md.template to memory.md
+   - Create v2 memory directory structure and initial memory files
    - Copy calendar.md.template to calendar.md
 
 10. **Summary**
@@ -221,7 +222,7 @@ The setup process copies from `.template` files:
 - `autonomy.json.template` > `autonomy.json`
 - `identity.json.template` > `identity.json`
 - `safe-senders.json.template` > `safe-senders.json`
-- `memory.md.template` > `memory.md`
+- `memory/` > v2 memory directory structure (memories/, summaries/)
 - `calendar.md.template` > `calendar.md`
 - `system-prompt.txt.template` > `system-prompt.txt` (with {{NAME}} and {{PERSONALITY}} replaced)
 

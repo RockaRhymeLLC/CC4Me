@@ -4,9 +4,9 @@ description: Look up and add facts to persistent memory. Use before asking the u
 argument-hint: [lookup "query" | add "fact" | list | search "term"]
 ---
 
-# Memory Management
+# Memory Management (v2)
 
-Store and retrieve persistent facts about the user and their preferences in `.claude/state/memory.md`.
+Store and retrieve persistent facts using the v2 memory system: individual files in `.claude/state/memory/memories/` with YAML frontmatter.
 
 ## Philosophy
 
@@ -17,7 +17,7 @@ Store and retrieve persistent facts about the user and their preferences in `.cl
 Parse $ARGUMENTS to determine the action:
 
 ### Lookup
-- `lookup "query"` - Search memory for matching facts
+- `lookup "query"` - Search memory files for matching facts
 - `"query"` - If argument looks like a search query, treat as lookup
 
 Examples:
@@ -26,82 +26,135 @@ Examples:
 
 ### Add
 - `add "fact"` - Add a new fact to memory
-- `add "fact" category:preferences` - Add with category tag
+- `add "fact" category:preferences` - Add with category
+- `add "fact" importance:high` - Add with importance level
+- `add "fact" tags:tag1,tag2` - Add with tags
+- Options can be combined: `add "fact" category:person importance:high tags:family,contact`
 
 Examples:
 - `/memory add "Prefers dark mode in all applications"`
-- `/memory add "Wife's name is Sarah" category:family`
+- `/memory add "Wife's name is Sarah" category:person importance:high tags:family`
 
 ### List
-- `list` - Show all memory entries
-- `list category:work` - Show entries in category
+- `list` - Show all memory entries (from briefing.md)
+- `list category:work` - Show entries matching category
 
 ### Search
-- `search "term"` - Full-text search across all entries
+- `search "term"` - Full-text search across all memory files
 
-## File Format
+## File Format (v2)
 
-Memory is stored in `.claude/state/memory.md` as a simple markdown file:
+Memories are stored as individual markdown files in `.claude/state/memory/memories/`.
 
+**Naming Convention**: `YYYYMMDD-HHMM-slug.md`
+
+**File Structure**:
 ```markdown
-# Memory
+---
+date: 2026-01-27T09:00:00
+category: person
+importance: high
+subject: Dave Hurley
+tags: [owner, identity, telegram]
+confidence: 1.0
+source: user
+---
 
-## Preferences
-- Prefers dark mode in all applications
-- Likes concise responses, not verbose
-- Time zone: America/Los_Angeles
+# Dave Hurley — Identity
 
-## Personal
-- Wife's name is Sarah
-- Has two dogs: Max (golden retriever) and Luna (beagle)
-- Birthday: March 15
-
-## Work
-- Works at Acme Corp as Senior Engineer
-- Manager is James Chen
-- Team uses Slack for communication
-
-## Technical
-- Primary language: TypeScript
-- Editor: VS Code with Vim keybindings
-- Shell: zsh with oh-my-zsh
-
-## Accounts
-- GitHub: @username
-- Preferred email for notifications: work@example.com
+- **Name**: Dave Hurley
+- **Role**: BMO's owner/operator
+- **Telegram chat ID**: 7629737488
 ```
+
+### Frontmatter Fields
+
+| Field | Required | Values | Default |
+|-------|----------|--------|---------|
+| `date` | Yes | ISO 8601 timestamp | Current time |
+| `category` | Yes | person, preference, technical, account, event, decision, other | other |
+| `importance` | Yes | critical, high, medium, low | medium |
+| `subject` | Yes | Brief subject line | Derived from fact |
+| `tags` | No | Array of searchable tags | [] |
+| `confidence` | No | 0.0 to 1.0 | 1.0 |
+| `source` | No | user, observation, system | observation |
+
+### Categories
+- `person` — People, contacts, relationships
+- `preference` — How the user likes things
+- `technical` — Dev environment, tools, architecture
+- `account` — Usernames, services, non-secret identifiers
+- `event` — Things that happened (decays over time)
+- `decision` — Decisions made (decays over time)
+- `other` — Anything else
 
 ## Workflow
 
 ### Adding a Fact
-1. Read current memory.md
-2. Determine appropriate category (or create new one)
-3. Append fact under category
-4. Write updated file
-5. Confirm what was added
+1. Determine category, importance, tags from the fact and any explicit options
+2. Generate a slug from the subject (kebab-case, max 40 chars)
+3. Generate timestamp: `YYYYMMDD-HHMM`
+4. Create the file at `.claude/state/memory/memories/YYYYMMDD-HHMM-slug.md`
+5. Write YAML frontmatter + markdown content
+6. Confirm what was added
+
+**Generating the filename**:
+```
+Date: 2026-02-03 04:45 → 20260203-0445
+Subject: "R2 agent comms proposal" → r2-agent-comms-proposal
+Filename: 20260203-0445-r2-agent-comms-proposal.md
+```
 
 ### Looking Up
-1. Read memory.md
-2. Search for matching text (case-insensitive)
-3. Return matching lines with context
-4. If nothing found, say so (don't guess)
+1. First check `.claude/state/memory/briefing.md` (auto-generated summary)
+2. If more detail needed, use Grep to search `.claude/state/memory/memories/` by keyword
+3. Search both file content and frontmatter (tags, category, subject)
+4. Return matching facts with their source file
+5. If nothing found, say so (don't guess)
 
-## Integration with CLAUDE.md
+### Listing
+1. Read `.claude/state/memory/briefing.md` for the overview
+2. If filtering by category, use Grep on frontmatter `category:` field
+3. Display grouped by category
 
-CLAUDE.md should include an instruction like:
+### Searching
+1. Use Grep to search `.claude/state/memory/memories/` for the search term
+2. Return matching lines with file context
+3. Include frontmatter metadata (category, importance) in results
 
-```markdown
-## Memory
+## Memory Consolidation
 
-Before asking the user for information they may have provided before,
-check `.claude/state/memory.md`:
-- User preferences
-- Names of people they mention often
-- Account information
-- Technical preferences
+The daemon runs a nightly consolidation task (11pm) that:
+- Reads all memory files from `memories/`
+- Applies confidence decay to `event` and `decision` categories (1%/day, floor 0.3)
+- Generates `briefing.md` from critical/high importance facts + recent medium-importance facts
+- Writes daily summaries to `summaries/daily/`
 
-Use grep or read the file directly. If the information isn't there,
-ask the user and then add it to memory for next time.
+**briefing.md** is the quick-reference summary loaded at session start. Individual memory files are the source of truth.
+
+## Output Format
+
+### Lookup Result
+```
+## Memory Lookup: "email"
+
+Found 2 matches:
+
+**20260127-1000-bmo-email-accounts.md** (account, high)
+- BMO preferred email: bmo@bmobot.ai (M365, primary)
+- BMO email (Fastmail): bmo_hurley@fastmail.com (secondary)
+
+**20260127-0905-dave-emails.md** (person, critical)
+- Work email: dhurley@servos.io
+- Personal email: daveh@outlook.com
+```
+
+### Add Confirmation
+```
+Added to memory:
+  File: 20260203-0445-prefers-dark-mode.md
+  Category: preference | Importance: medium
+  "Prefers dark mode in all applications"
 ```
 
 ## Best Practices
@@ -120,39 +173,13 @@ ask the user and then add it to memory for next time.
 - One-time context
 - Sensitive data without permission
 
-### Categories
-Keep categories simple and intuitive:
-- `Preferences` - How they like things
-- `Personal` - Family, pets, hobbies
-- `Work` - Job, colleagues, projects
-- `Technical` - Dev environment, tools
-- `Accounts` - Usernames, non-secret identifiers
-- Custom categories as needed
+### Writing Good Memory Files
+- One fact or closely related group of facts per file
+- Use descriptive subjects for easy scanning
+- Tag generously — tags are searchable
+- Set importance appropriately (critical/high = always in briefing, medium = recent only)
+- Use `source: user` when the user stated it directly
 
-## Output Format
+## Migration Note
 
-### Lookup Result
-```
-## Memory Lookup: "email"
-
-Found 2 entries:
-
-**Accounts**
-- Preferred email for notifications: work@example.com
-
-**Work**
-- Team uses email for formal communication, Slack for quick questions
-```
-
-### Add Confirmation
-```
-Added to memory (Preferences):
-"Prefers morning standup at 9am"
-```
-
-## Notes
-
-- Memory file is human-readable and editable
-- User can modify directly via text editor
-- Keep entries concise - one fact per line
-- Use consistent formatting for easy grep
+The legacy `.claude/state/memory.md` file is deprecated. All new facts should be written to individual files in `memory/memories/`. The legacy file is kept for reference but is no longer updated.

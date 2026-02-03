@@ -19,7 +19,7 @@ import { registerTask } from '../scheduler.js';
 
 const log = createLogger('context-watchdog');
 
-const STALE_SECONDS = 300; // Ignore data older than 5 minutes
+const STALE_SECONDS = 600; // Ignore data older than 10 minutes
 
 let reminderSentForSession: string | null = null;
 
@@ -51,8 +51,10 @@ async function run(): Promise<void> {
   const threshold = (taskConfig?.config?.threshold_percent as number) ?? 35;
 
   if (remaining >= threshold) {
-    // Context is healthy — reset reminder tracking if session changed or context recovered
-    if (reminderSentForSession !== null && reminderSentForSession !== sessionId) {
+    // Context is healthy — reset reminder tracking.
+    // Reset on session change OR context recovery (e.g. after /clear brought usage back down).
+    if (reminderSentForSession !== null) {
+      log.debug('Context healthy again — resetting reminder tracking');
       reminderSentForSession = null;
     }
     return;
@@ -80,13 +82,29 @@ async function run(): Promise<void> {
   log.info('Triggering /save-state');
   injectText(`/save-state "Auto-save: context at ${used}% used"`);
 
-  // Wait for save-state to complete
-  await new Promise(resolve => setTimeout(resolve, 15_000));
+  // Poll for save-state completion instead of fixed wait.
+  // Check every 5s for up to 60s — save-state involves Claude writing a file,
+  // so duration varies with context size.
+  const MAX_WAIT_MS = 60_000;
+  const POLL_INTERVAL_MS = 5_000;
+  const startTime = Date.now();
 
-  // Re-check busy
+  // Initial delay to let save-state begin processing
+  await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+
+  while (isBusy() && (Date.now() - startTime) < MAX_WAIT_MS) {
+    log.debug(`Save-state still running, waiting... (${Math.round((Date.now() - startTime) / 1000)}s elapsed)`);
+    await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+  }
+
   if (isBusy()) {
-    log.info('Save-state still running, waiting...');
-    await new Promise(resolve => setTimeout(resolve, 15_000));
+    log.warn(`Save-state still busy after ${MAX_WAIT_MS / 1000}s — sending reminder instead of /clear`);
+    injectText(
+      `[System] Context is at ${used}% used (${remaining}% remaining). ` +
+      `Save-state may still be running. Please /clear when ready.`,
+    );
+    reminderSentForSession = sessionId;
+    return;
   }
 
   // Send /clear

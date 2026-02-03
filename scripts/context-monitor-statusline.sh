@@ -26,8 +26,9 @@ WINDOW_SIZE=$(/usr/bin/jq -r '.context_window.context_window_size // 0' <<< "$in
 SESSION_ID=$(/usr/bin/jq -r '.session_id // "unknown"' <<< "$input" 2>/dev/null)
 MODEL=$(/usr/bin/jq -r '.model.display_name // "unknown"' <<< "$input" 2>/dev/null)
 
-# Write context data to shared file for the watchdog
-cat > "$STATE_FILE" << EOF
+# Write context data to shared file for the watchdog (atomic: write temp then move)
+TMPFILE="$STATE_FILE.tmp.$$"
+cat > "$TMPFILE" << EOF
 {
   "used_percentage": $USED,
   "remaining_percentage": $REMAINING,
@@ -37,6 +38,7 @@ cat > "$STATE_FILE" << EOF
   "timestamp": $(date +%s)
 }
 EOF
+mv -f "$TMPFILE" "$STATE_FILE"
 
 # Output status line text (shown at bottom of Claude Code UI)
 echo "[$MODEL] Context: ${USED}% used"
