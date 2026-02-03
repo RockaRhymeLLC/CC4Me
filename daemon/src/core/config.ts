@@ -66,6 +66,42 @@ export interface RateLimitsConfig {
   outgoing_max_per_minute: number;
 }
 
+export interface AgentCommsPeerConfig {
+  name: string;
+  host: string;
+  port: number;
+}
+
+export interface AgentCommsConfig {
+  enabled: boolean;
+  secret: string;          // Keychain reference, e.g. "keychain:credential-agent-comms-secret"
+  peers: AgentCommsPeerConfig[];
+}
+
+// ── Agent message types ───────────────────────────────────────
+
+export interface AgentMessage {
+  from: string;            // Agent name (e.g., 'r2d2', 'bmo')
+  type: 'text' | 'status' | 'coordination' | 'pr-review';
+  text?: string;           // For text messages
+  status?: 'idle' | 'busy' | 'offline';           // For status messages
+  action?: 'claim' | 'release';                    // For coordination messages
+  task?: string;           // For coordination messages
+  context?: string;        // Optional context/metadata
+  callbackUrl?: string;    // Optional URL to POST response to
+  timestamp: string;       // ISO 8601
+  messageId: string;       // UUID for dedup/tracking
+  repo?: string;           // For pr-review messages
+  branch?: string;         // For pr-review messages
+  pr?: number;             // For pr-review messages
+}
+
+export interface AgentMessageResponse {
+  ok: boolean;
+  queued: boolean;         // true if agent is busy and message was queued
+  error?: string;
+}
+
 export interface SecurityConfig {
   safe_senders_file: string;
   third_party_senders_file: string;
@@ -77,6 +113,7 @@ export interface CC4MeConfig {
   tmux: TmuxConfig;
   daemon: DaemonConfig;
   channels: ChannelsConfig;
+  'agent-comms': AgentCommsConfig;
   scheduler: SchedulerConfig;
   security: SecurityConfig;
 }
@@ -95,6 +132,11 @@ const DEFAULTS: CC4MeConfig = {
   channels: {
     telegram: { enabled: false, webhook_path: '/telegram' },
     email: { enabled: false, providers: [] },
+  },
+  'agent-comms': {
+    enabled: false,
+    secret: '',
+    peers: [],
   },
   scheduler: { tasks: [] },
   security: {
