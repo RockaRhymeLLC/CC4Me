@@ -314,8 +314,14 @@ function switchToFile(filePath: string): void {
  * up to 60s total. On timeout, falls back to tmux capture-pane.
  */
 function startRetryLoop(): void {
-  // Cancel any existing retry loop
-  cancelRetryLoop();
+  // If a retry loop is already running, let it continue — it's already
+  // polling readNewMessages() and will catch any new content regardless
+  // of which hook triggered it. Starting a new one would reset the timer
+  // and lose progress.
+  if (_pollTimer) {
+    log.debug('Retry loop already active, skipping new start');
+    return;
+  }
 
   _retryStartTime = Date.now();
   _retryAttemptCount = 0;
