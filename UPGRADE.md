@@ -21,7 +21,7 @@ This guide walks CC4Me agents through migrating from the v1 shell-based architec
 | **3rd party access** | Not available | Full access control with capability boundaries |
 | **Rate limiting** | Not available | Configurable per-minute limits |
 | **Approval audit** | Not available | Scheduled audit of 3rd party approvals |
-| **Memory consolidation** | Not available | Auto-briefings, summaries, decay |
+| **Memory consolidation** | Not available | Cascading summaries (24hr → 30day → yearly) |
 | **Health monitoring** | Manual | HTTP endpoints (`/health`, `/status`) |
 | **Logging** | Mixed stdout/file | Structured logging with rotation |
 
@@ -293,12 +293,13 @@ The daemon enforces per-minute limits on incoming and outgoing messages. Configu
 
 The `approval-audit` scheduled task periodically reviews 3rd party approvals, ensuring stale or unused approvals get flagged for review.
 
-### Memory Consolidation
+### Memory Cascade
 
-The `memory-consolidation` task runs nightly to:
-- Generate a briefing from high-importance memories
-- Write daily/weekly/monthly summaries
-- Apply decay to low-importance memories
+The `memory-consolidation` task runs nightly (5am by default) to maintain a three-tier memory system:
+- **24hr log** — Rolling state snapshots appended on save/compact/restart
+- **30-day summaries** — Daily highlights condensed from the 24hr log
+- **Yearly archive** — Monthly summaries for long-term reference
+- Extracts new individual memories from the daily log automatically
 
 ### Health Endpoints
 
