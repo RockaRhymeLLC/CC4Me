@@ -28,4 +28,11 @@ else
   echo "terminal" > "$CHANNEL_FILE"
 fi
 
+# Opportunistic backup notification — the previous turn's response
+# should be in the transcript by now. Background so it doesn't block.
+curl -s -X POST "http://localhost:3847/hook/response" \
+  -H "Content-Type: application/json" \
+  -d '{"hook_event":"UserPromptSubmit"}' \
+  --max-time 2 >/dev/null 2>&1 &
+
 exit 0

@@ -252,6 +252,60 @@ async function downloadTelegramFile(fileId: string, filename: string): Promise<s
   }
 }
 
+// ── Message splitting ────────────────────────────────────────
+
+/**
+ * Split a message into chunks that fit within Telegram's 4096 char limit.
+ * Prefers splitting at paragraph breaks > newlines > spaces > hard cut.
+ */
+function splitMessage(text: string, maxLen = 4000): string[] {
+  if (text.length <= maxLen) return [text];
+
+  const chunks: string[] = [];
+  let remaining = text;
+
+  while (remaining.length > 0) {
+    if (remaining.length <= maxLen) {
+      chunks.push(remaining);
+      break;
+    }
+
+    let splitAt = -1;
+
+    // Try paragraph break (double newline)
+    const paraIdx = remaining.lastIndexOf('\n\n', maxLen);
+    if (paraIdx > maxLen * 0.3) {
+      splitAt = paraIdx + 2; // Include the double newline in the first chunk
+    }
+
+    // Try single newline
+    if (splitAt === -1) {
+      const nlIdx = remaining.lastIndexOf('\n', maxLen);
+      if (nlIdx > maxLen * 0.3) {
+        splitAt = nlIdx + 1;
+      }
+    }
+
+    // Try space
+    if (splitAt === -1) {
+      const spIdx = remaining.lastIndexOf(' ', maxLen);
+      if (spIdx > maxLen * 0.3) {
+        splitAt = spIdx + 1;
+      }
+    }
+
+    // Hard cut
+    if (splitAt === -1) {
+      splitAt = maxLen;
+    }
+
+    chunks.push(remaining.substring(0, splitAt));
+    remaining = remaining.substring(splitAt);
+  }
+
+  return chunks;
+}
+
 // ── Send message ────────────────────────────────────────────
 
 function sendMessage(text: string, chatId?: string): void {
@@ -262,10 +316,18 @@ function sendMessage(text: string, chatId?: string): void {
     return;
   }
 
-  // Truncate if too long (Telegram limit is 4096)
-  const truncated = text.length > 4000 ? text.substring(0, 4000) + '...' : text;
+  const chunks = splitMessage(text);
+  if (chunks.length > 1) {
+    log.info(`Splitting message into ${chunks.length} chunks`);
+  }
 
-  const data = JSON.stringify({ chat_id: targetChatId, text: truncated });
+  for (const chunk of chunks) {
+    sendChunk(chunk, targetChatId, token);
+  }
+}
+
+function sendChunk(text: string, chatId: string, token: string): void {
+  const data = JSON.stringify({ chat_id: chatId, text });
 
   const req = https.request({
     hostname: 'api.telegram.org',
@@ -279,16 +341,13 @@ function sendMessage(text: string, chatId?: string): void {
       try {
         const result = JSON.parse(body);
         if (result.ok) {
-          log.debug(`Sent to Telegram (${truncated.length} chars) msg_id=${result.result?.message_id}`);
+          log.info(`Sent to Telegram (${text.length} chars) msg_id=${result.result?.message_id}`);
         } else {
           log.error(`Telegram send failed`, { response: body });
         }
       } catch {
         log.error('Telegram send: unparseable response');
       }
-
-      // Stop typing indicator after message is sent
-      stopTypingLoop();
     });
   });
 
@@ -625,9 +684,11 @@ export function createTelegramRouter(): TelegramRouter {
   // Register outgoing message handler with channel router.
   // Uses _replyChatId so transcript responses go to the most recent incoming chat
   // (group or DM). Falls back to Keychain default (primary's DM) on cold start.
-  registerTelegramHandler((text) => {
-    sendMessage(text, _replyChatId ?? undefined);
-  });
+  // Typing lifecycle is decoupled — signalResponseComplete() calls stopTypingLoop.
+  registerTelegramHandler(
+    (text) => sendMessage(text, _replyChatId ?? undefined),
+    () => stopTypingLoop(),
+  );
 
   log.info('Telegram adapter initialized');
 

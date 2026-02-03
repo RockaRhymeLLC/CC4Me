@@ -100,7 +100,7 @@ const server = http.createServer(async (req, res) => {
 
       try {
         const payload = JSON.parse(body);
-        onHookNotification(payload.transcript_path);
+        onHookNotification(payload.transcript_path, payload.hook_event);
       } catch {
         // No body or invalid JSON — still trigger a read
         onHookNotification();
