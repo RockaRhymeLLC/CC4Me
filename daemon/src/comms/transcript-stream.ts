@@ -104,8 +104,6 @@ function logDelivery(entry: DeliveryLogEntry): void {
  * reply-chat-id state file (set by the Telegram adapter on incoming messages).
  */
 function getCurrentChatId(): string | null {
-  const channel = getChannel();
-  if (channel === 'terminal' || channel === 'silent') return null;
   try {
     const chatIdFile = path.join(getProjectDir(), '.claude', 'state', 'reply-chat-id.txt');
     return fs.readFileSync(chatIdFile, 'utf8').trim() || null;
