@@ -68,7 +68,39 @@ This will:
 - Create required directories (`logs/`, `.claude/state/todos/`, etc.)
 - Install Telegram gateway dependencies (if present)
 
-### Step 3: Start Claude Code
+### Step 3: Configure the Daemon
+
+Copy and customize the daemon config:
+
+```bash
+cp cc4me.config.yaml.template cc4me.config.yaml
+```
+
+Edit `cc4me.config.yaml` and set:
+- `agent.name` — Your assistant's name (e.g., "buddy")
+- `tmux.session` — tmux session name (default: "cc4me")
+- `channels.telegram.enabled` — Set `true` if using Telegram
+- `channels.email.enabled` — Set `true` if using email
+- Other settings can use defaults
+
+Install and start the daemon:
+
+```bash
+# Copy plist template
+cp launchd/com.assistant.daemon.plist.template ~/Library/LaunchAgents/com.assistant.daemon.plist
+
+# Edit the plist: replace __PROJECT_DIR__ and __HOME_DIR__ with actual paths
+# Then load it:
+launchctl load ~/Library/LaunchAgents/com.assistant.daemon.plist
+```
+
+Verify the daemon started:
+
+```bash
+curl http://localhost:3847/health
+```
+
+### Step 4: Start Claude Code
 
 ```bash
 ./scripts/start.sh
@@ -76,7 +108,7 @@ This will:
 
 This starts Claude Code with the custom system prompt loaded.
 
-### Step 4: Run the Setup Wizard
+### Step 5: Run the Setup Wizard
 
 Inside Claude Code:
 ```
@@ -90,7 +122,7 @@ The wizard configures:
 4. **Integrations** - Telegram bot, email providers
 5. **State files** - Memory, calendar, todos initialized
 
-### Step 5: Start Persistent Session
+### Step 6: Start Persistent Session
 
 ```bash
 # Start in background
@@ -134,12 +166,7 @@ The wizard configures:
    ```
    This guides you through tunnel creation and webhook registration.
 
-6. **Start the gateway**:
-   ```bash
-   node scripts/telegram-setup/gateway.js
-   ```
-
-7. **Test**: Send a message to your bot on Telegram.
+6. **Test**: Send a message to your bot on Telegram. The daemon handles message forwarding automatically.
 
 ### Email (Fastmail)
 
@@ -178,31 +205,27 @@ The wizard configures:
 
 See `.claude/knowledge/integrations/microsoft-graph.md` for detailed Azure setup instructions.
 
-### Scheduled Jobs (launchd)
+### Background Daemon
 
-Install background jobs for automatic monitoring:
+The v2 daemon handles all background services in a single process. If you set it up in Step 3, it's already running. It manages:
+
+- **Telegram** — webhook receiver, message forwarding, typing indicators
+- **Email checks** — periodic inbox monitoring (every 15 minutes)
+- **Todo reminders** — nudge to work on open tasks (every 30 minutes)
+- **Context watchdog** — auto-save when context window is filling up (every 3 minutes)
+- **Memory consolidation** — nightly cascade summarization (5am daily)
+- **Health checks** — system status monitoring (weekly)
+
+All task schedules are configured in `cc4me.config.yaml` under `scheduler.tasks`.
 
 ```bash
-# Copy templates to LaunchAgents
-cp launchd/com.assistant.*.plist.template ~/Library/LaunchAgents/
+# Check daemon status
+curl http://localhost:3847/health
 
-# Edit each file: replace YOUR_USERNAME and paths
-# Then load them:
-launchctl load ~/Library/LaunchAgents/com.assistant.harness.plist
-launchctl load ~/Library/LaunchAgents/com.assistant.gateway.plist
-launchctl load ~/Library/LaunchAgents/com.assistant.email-reminder.plist
-launchctl load ~/Library/LaunchAgents/com.assistant.todo-reminder.plist
-launchctl load ~/Library/LaunchAgents/com.assistant.context-watchdog.plist
+# Restart daemon after config changes
+launchctl unload ~/Library/LaunchAgents/com.assistant.daemon.plist
+launchctl load ~/Library/LaunchAgents/com.assistant.daemon.plist
 ```
-
-Available jobs:
-- **harness** - Keeps Claude Code running, auto-restart on crash
-- **gateway** - Telegram webhook receiver
-- **email-reminder** - Periodic inbox check (every 15 minutes)
-- **todo-reminder** - Check for overdue/high-priority todos (every 30 minutes)
-- **context-watchdog** - Monitor context usage, auto-save before limits
-
-See `launchd/README.md` for details on each template.
 
 ## Verification
 
