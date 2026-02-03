@@ -81,7 +81,13 @@ Needs to work without JavaScript for accessibility.
    - Write to `.claude/state/assistant-state.md`
    - Overwrites previous state (it's current state, not history)
 
-4. **Confirm Save**
+4. **Append to 24hr Log**
+   - Run: `./scripts/append-state-log.sh "reason"` (use the save reason or auto-generate one)
+   - This appends a timestamped copy of the state to `.claude/state/memory/summaries/24hr.md`
+   - Throttled: skips if last append was < 15 minutes ago (unless called with `--force`)
+   - The 24hr log feeds the nightly consolidation cascade
+
+5. **Confirm Save**
    - Report what was saved
    - Note any active tasks
 
@@ -132,6 +138,6 @@ Reference active tasks by ID so they can be resolved on load.
 ## Notes
 
 - Only one state file exists (current state)
-- History is in git if needed
-- PreCompact auto-saves, so manual save is optional
+- State history is preserved in the 24hr cascade log (summaries/24hr.md)
+- PreCompact auto-saves and auto-appends, so manual save is optional
 - State is loaded at session start automatically

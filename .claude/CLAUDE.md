@@ -59,7 +59,7 @@ The daemon scheduler runs these tasks automatically (configured in `cc4me.config
 | `email-check` | Every 15m | Check for unread emails |
 | `nightly-todo` | 10pm daily | Self-assigned creative todo |
 | `health-check` | Mon 8am | System health check |
-| `memory-consolidation` | 11pm daily | Generate briefing, write summaries, apply decay |
+| `memory-consolidation` | 5am daily | Cascade 24hr→30day→yearly summaries, extract memories |
 
 ### Environment Knowledge
 
@@ -87,9 +87,10 @@ Your persistent state lives in `.claude/state/`. Know this directory well — it
 
 | File | Purpose | When to Check |
 |------|---------|---------------|
-| `memory/briefing.md` | Auto-generated memory summary (loaded at session start) | Loaded automatically by session-start hook |
 | `memory/memories/*.md` | Individual memory files with YAML frontmatter | Use Grep to search by keyword/tag/category |
-| `memory.md` | Legacy v1 memory file (still functional, v2 uses memory/ dir) | Fallback if briefing.md doesn't exist |
+| `memory/summaries/24hr.md` | Rolling 24-hour state log (appended on save-state, compact, restart) | For recent history — "what was I doing earlier?" |
+| `memory/summaries/30day.md` | Condensed daily summaries from nightly consolidation | For recent weeks — "what did we do last Tuesday?" |
+| `memory/summaries/2026.md` | Yearly archive with monthly summaries | For long-term reference — "when did we set up X?" |
 | `calendar.md` | Scheduled events, reminders, to-do due dates (linked via `[todo:id]`) | At session start and when scheduling |
 | `assistant-state.md` | Saved work context from before compaction/restart | At session start to resume work |
 | `autonomy.json` | Current autonomy mode (yolo/confident/cautious/supervised) | Before taking actions that need permission |
@@ -111,7 +112,7 @@ Your persistent state lives in `.claude/state/`. Know this directory well — it
 |-----------|---------|
 | `todos/` | Individual to-do JSON files. Naming: `{priority}-{status}-{id}-{slug}.json`. Counter in `.counter` file. See `/todo` skill for details |
 | `memory/memories/` | Individual memory files. Naming: `YYYYMMDD-HHMM-slug.md` with YAML frontmatter |
-| `memory/summaries/` | Cascading time-based summaries: `daily/`, `weekly/`, `monthly/` |
+| `memory/summaries/` | Cascading time-based summaries: `24hr.md`, `30day.md`, yearly (`2026.md`, etc.) |
 | `research/` | Research documents and deliverables (`.md` and `.docx`). Long-form analysis, reports, and generated documents that persist across sessions |
 | `telegram-media/` | Photos and documents received via Telegram. Files named by Telegram's file ID |
 
@@ -149,9 +150,8 @@ Only use `telegram-send.sh` directly when the channel is `silent` and you need t
 ### Check Memory First
 
 **Before asking the user for information**, check memory:
-1. First check `.claude/state/memory/briefing.md` (loaded at session start, contains high-importance facts)
-2. If you need more detail, use Grep to search `.claude/state/memory/memories/` by keyword, tag, or category
-3. Fallback: check `.claude/state/memory.md` (legacy v1 format)
+1. Use Grep to search `.claude/state/memory/memories/` by keyword, tag, or category
+2. For recent history, check `.claude/state/memory/summaries/24hr.md` or `30day.md`
 
 If the information isn't there, ask and then store it with `/memory add "fact"`.
 
@@ -279,7 +279,7 @@ Log all 3rd party interactions to memory using the memory system:
 - Who contacted you (name, channel)
 - What they asked about
 - What you shared (and what you declined)
-- Any notable context (e.g., "Will mentioned he's setting up CC4Me for his team")
+- Any notable context (e.g., "Alex mentioned he's setting up CC4Me for his team")
 
 Use `/memory add` to store these facts for future reference.
 
@@ -299,7 +299,7 @@ Each skill has detailed instructions in `.claude/skills/{name}/SKILL.md`.
 | Skill | Purpose |
 |-------|---------|
 | `/todo` | Manage persistent to-dos (auto-incrementing IDs, JSON files) |
-| `/memory` | Store and lookup facts in `memory.md` |
+| `/memory` | Store and lookup facts in `memory/memories/` (v2) |
 | `/calendar` | Manage schedule and reminders |
 | `/mode` | View/change autonomy level |
 | `/save-state` | Save context before compaction |

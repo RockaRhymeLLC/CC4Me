@@ -55,6 +55,37 @@ function isDuplicate(text: string): boolean {
   return false;
 }
 
+// ── Status line noise detection ──────────────────────────────
+
+/**
+ * Patterns matching Claude Code UI chrome that should never be forwarded.
+ * Covers status bar elements, edit prompts, and other terminal UI.
+ */
+const STATUS_LINE_PATTERNS: RegExp[] = [
+  /^\[.*\]\s*Context:\s*\d+%/,         // [Opus 4.5] Context: 69% used
+  /^[⏵▸]+\s*(accept|reject)/,          // ⏵⏵ accept edits on ...
+  /^─{3,}/,                             // ──────── separator lines
+  /shift\+tab to cycle/,               // keyboard hints
+  /^\d+\s+files?\s+[+\-]\d+/,          // 3 files +16 -39
+  /^\[cost:/i,                          // [cost: $0.xx]
+  /^Press Enter/i,                      // acceptance prompts
+  /^[│┌┐└┘├┤┬┴┼]+$/,                   // pure box-drawing lines
+  /^\s*\d+\s*[│|]\s/,                   // line-number gutters
+  /^(Plan|Auto|Manual)\s+mode/i,        // mode indicators
+];
+
+/**
+ * Check if a message is purely status line noise.
+ * For multi-line text, returns true only if ALL lines are noise or empty.
+ */
+function isStatusLineNoise(text: string): boolean {
+  const lines = text.split('\n');
+  return lines.every(line => {
+    const trimmed = line.trim();
+    return trimmed === '' || STATUS_LINE_PATTERNS.some(p => p.test(trimmed));
+  });
+}
+
 // ── Delivery log ─────────────────────────────────────────────
 
 type DeliveryEvent = 'delivered' | 'dedup' | 'retry-exhausted';
@@ -270,6 +301,12 @@ function handleAssistantMessage(msg: TranscriptMessage): boolean {
       len: text.length,
       hash,
     });
+    return false;
+  }
+
+  // Skip status line noise (Claude Code UI chrome)
+  if (isStatusLineNoise(text)) {
+    log.debug(`Skipping status line noise (${text.length} chars): ${text.substring(0, 80)}`);
     return false;
   }
 

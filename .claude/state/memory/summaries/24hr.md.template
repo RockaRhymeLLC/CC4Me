@@ -1,0 +1,6 @@
+# 24-Hour State Log
+
+Rolling log of state snapshots. Entries older than 24 hours are summarized
+to 30day.md during nightly consolidation.
+
+---
