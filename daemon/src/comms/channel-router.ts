@@ -19,6 +19,7 @@ export type Channel = 'terminal' | 'telegram' | 'telegram-verbose' | 'silent';
 type MessageHandler = (text: string) => void;
 
 let _telegramHandler: MessageHandler | null = null;
+let _stopTypingHandler: (() => void) | null = null;
 
 /**
  * Initialize the channel router.
@@ -30,10 +31,26 @@ export function initChannelRouter(): void {
 /**
  * Register the Telegram send handler.
  * Called by the Telegram adapter when it initializes.
+ *
+ * @param handler - Function to send a message via Telegram
+ * @param stopTyping - Optional function to stop the typing indicator
  */
-export function registerTelegramHandler(handler: MessageHandler): void {
+export function registerTelegramHandler(handler: MessageHandler, stopTyping?: () => void): void {
   _telegramHandler = handler;
+  _stopTypingHandler = stopTyping ?? null;
   log.debug('Telegram handler registered');
+}
+
+/**
+ * Signal that a response has been fully delivered.
+ * Stops the typing indicator if one is active.
+ * Called by transcript-stream after successful delivery or retry exhaustion.
+ */
+export function signalResponseComplete(): void {
+  if (_stopTypingHandler) {
+    _stopTypingHandler();
+    log.debug('Response complete — typing stopped');
+  }
 }
 
 /**
@@ -79,7 +96,11 @@ export function routeOutgoingMessage(text: string, thinking?: string): void {
 
     case 'telegram':
       if (_telegramHandler) {
-        _telegramHandler(text);
+        try {
+          _telegramHandler(text);
+        } catch (err) {
+          log.error('Telegram handler error', { error: err instanceof Error ? err.message : String(err) });
+        }
       } else {
         log.warn('Telegram message dropped: no handler registered');
       }
@@ -87,11 +108,15 @@ export function routeOutgoingMessage(text: string, thinking?: string): void {
 
     case 'telegram-verbose':
       if (_telegramHandler) {
-        // In verbose mode, prepend thinking blocks if present
-        if (thinking) {
-          _telegramHandler(`💭 ${thinking}`);
+        try {
+          // In verbose mode, prepend thinking blocks if present
+          if (thinking) {
+            _telegramHandler(`💭 ${thinking}`);
+          }
+          _telegramHandler(text);
+        } catch (err) {
+          log.error('Telegram handler error (verbose)', { error: err instanceof Error ? err.message : String(err) });
         }
-        _telegramHandler(text);
       } else {
         log.warn('Telegram message dropped: no handler registered');
       }
