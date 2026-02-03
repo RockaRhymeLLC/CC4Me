@@ -98,3 +98,23 @@ export function getFastmailCredentials() {
 export function getShortcutAuthToken(): string | null {
   return getCredential('credential-shortcut-auth');
 }
+
+export function getAgentCommsSecret(): string | null {
+  return getCredential('credential-agent-comms-secret');
+}
+
+/**
+ * Validate a bearer token against the stored agent-comms secret.
+ * Resolves the secret from Keychain on first call (cached after that).
+ *
+ * @param token - The bearer token from the Authorization header
+ * @returns true if the token matches the stored secret
+ */
+export function validateAgentCommsAuth(token: string): boolean {
+  const secret = getAgentCommsSecret();
+  if (!secret) {
+    log.warn('Agent comms secret not found in Keychain (credential-agent-comms-secret)');
+    return false;
+  }
+  return token === secret;
+}
