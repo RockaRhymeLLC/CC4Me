@@ -12,7 +12,7 @@ import crypto from 'node:crypto';
 import { loadConfig, resolveProjectPath } from '../core/config.js';
 import type { AgentMessage, AgentMessageResponse, AgentCommsPeerConfig } from '../core/config.js';
 import { validateAgentCommsAuth, getAgentCommsSecret } from '../core/keychain.js';
-import { isBusy, injectText } from '../core/session-bridge.js';
+import { isBusy, isActivelyProcessing, injectText } from '../core/session-bridge.js';
 import { createLogger } from '../core/logger.js';
 
 const log = createLogger('agent-comms');
@@ -48,13 +48,14 @@ const VALID_TYPES = ['text', 'status', 'coordination', 'pr-review'] as const;
 
 /**
  * Map agent IDs to display names for injection.
- * Falls back to the raw agent ID if no peer config provides a display name.
- * Capitalizes first letter as a sensible default.
+ * "r2d2" → "R2", "bmo" → "BMO", etc.
  */
 function getDisplayName(agentId: string): string {
-  // Capitalize first letter as a reasonable default
-  if (!agentId) return 'Unknown';
-  return agentId.charAt(0).toUpperCase() + agentId.slice(1);
+  const names: Record<string, string> = {
+    r2d2: 'R2',
+    bmo: 'BMO',
+  };
+  return names[agentId.toLowerCase()] ?? agentId;
 }
 
 // ── Message Formatting ────────────────────────────────────────
@@ -160,13 +161,13 @@ function startDrain(): void {
       return;
     }
 
-    if (isBusy()) {
-      log.debug(`Agent busy, ${messageQueue.length} messages waiting`);
+    if (isActivelyProcessing()) {
+      log.debug(`Agent actively processing, ${messageQueue.length} messages waiting`);
       return;
     }
 
-    // Deliver all pending messages while idle
-    while (messageQueue.length > 0 && !isBusy()) {
+    // Deliver all pending messages while not actively processing
+    while (messageQueue.length > 0 && !isActivelyProcessing()) {
       const queued = messageQueue.shift()!;
       const formatted = formatMessage(queued.message);
       const durationMs = Date.now() - queued.receivedAt;
@@ -241,8 +242,8 @@ export function handleAgentMessage(
 
   const msg = body as AgentMessage;
 
-  // Check if agent is busy → queue or inject
-  const busy = isBusy();
+  // Check if agent is actively processing → queue or inject
+  const busy = isActivelyProcessing();
 
   if (busy) {
     messageQueue.push({ message: msg, receivedAt: Date.now() });
