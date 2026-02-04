@@ -7,6 +7,9 @@ yarn.lock
 dist/
 *.tsbuildinfo
 
+# Agent-specific config (each agent has their own)
+cc4me.config.yaml
+
 # Environment variables
 .env
 .env.local
