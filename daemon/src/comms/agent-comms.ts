@@ -1,9 +1,10 @@
 /**
- * Agent-to-Agent Communication — receive, validate, queue, inject, send, log.
+ * Agent-to-Agent Communication — receive, validate, inject, send, log.
  *
  * Single module handling both inbound and outbound inter-agent messaging.
- * Messages are injected into the Claude Code session with [Agent] prefix,
- * queued when busy, and logged to agent-comms.log as JSONL.
+ * Messages are injected directly into the Claude Code session with [Agent]
+ * prefix (same as Telegram — tmux buffers input natively) and logged to
+ * agent-comms.log as JSONL.
  */
 
 import fs from 'node:fs';
@@ -12,17 +13,12 @@ import crypto from 'node:crypto';
 import { loadConfig, resolveProjectPath } from '../core/config.js';
 import type { AgentMessage, AgentMessageResponse, AgentCommsPeerConfig } from '../core/config.js';
 import { validateAgentCommsAuth, getAgentCommsSecret } from '../core/keychain.js';
-import { isBusy, isActivelyProcessing, injectText } from '../core/session-bridge.js';
+import { isBusy, injectText } from '../core/session-bridge.js';
 import { createLogger } from '../core/logger.js';
 
 const log = createLogger('agent-comms');
 
 // ── Types ─────────────────────────────────────────────────────
-
-interface QueuedMessage {
-  message: AgentMessage;
-  receivedAt: number;
-}
 
 interface CommsLogEntry {
   ts: string;
@@ -31,16 +27,8 @@ interface CommsLogEntry {
   type: string;
   text?: string;
   messageId: string;
-  queued: boolean;
-  queued_duration_ms?: number;
   error?: string;
 }
-
-// ── State ─────────────────────────────────────────────────────
-
-const messageQueue: QueuedMessage[] = [];
-let drainInterval: ReturnType<typeof setInterval> | null = null;
-const DRAIN_INTERVAL_MS = 3000;
 
 const VALID_TYPES = ['text', 'status', 'coordination', 'pr-review'] as const;
 
@@ -148,66 +136,13 @@ function validateMessage(body: unknown): ValidationResult {
   return { valid: true };
 }
 
-// ── Queue Drain ───────────────────────────────────────────────
-
-function startDrain(): void {
-  if (drainInterval) return; // Already running
-
-  log.debug(`Queue drain started (${messageQueue.length} messages pending)`);
-
-  drainInterval = setInterval(() => {
-    if (messageQueue.length === 0) {
-      stopDrain();
-      return;
-    }
-
-    if (isActivelyProcessing()) {
-      log.debug(`Agent actively processing, ${messageQueue.length} messages waiting`);
-      return;
-    }
-
-    // Deliver all pending messages while not actively processing
-    while (messageQueue.length > 0 && !isActivelyProcessing()) {
-      const queued = messageQueue.shift()!;
-      const formatted = formatMessage(queued.message);
-      const durationMs = Date.now() - queued.receivedAt;
-
-      injectText(formatted);
-      log.info(`Delivered queued message from ${queued.message.from}`, {
-        messageId: queued.message.messageId,
-        queuedMs: durationMs,
-      });
-
-      logCommsEntry({
-        ts: new Date().toISOString(),
-        direction: 'in',
-        from: queued.message.from,
-        type: queued.message.type,
-        text: queued.message.text,
-        messageId: queued.message.messageId,
-        queued: true,
-        queued_duration_ms: durationMs,
-      });
-    }
-
-    if (messageQueue.length === 0) {
-      stopDrain();
-    }
-  }, DRAIN_INTERVAL_MS);
-}
-
-function stopDrain(): void {
-  if (drainInterval) {
-    clearInterval(drainInterval);
-    drainInterval = null;
-    log.debug('Queue drain stopped (queue empty)');
-  }
-}
-
 // ── Handle Incoming Message ───────────────────────────────────
 
 /**
  * Handle an incoming agent message. Called by the HTTP endpoint.
+ *
+ * Injects directly into the tmux session — same as Telegram.
+ * tmux buffers input natively, so no queue/drain needed.
  *
  * @param authToken - Bearer token from Authorization header
  * @param body - Parsed JSON body
@@ -242,36 +177,7 @@ export function handleAgentMessage(
 
   const msg = body as AgentMessage;
 
-  // Check if agent is actively processing → queue or inject
-  const busy = isActivelyProcessing();
-
-  if (busy) {
-    messageQueue.push({ message: msg, receivedAt: Date.now() });
-    startDrain();
-
-    log.info(`Queued message from ${msg.from}`, {
-      messageId: msg.messageId,
-      type: msg.type,
-      queueLength: messageQueue.length,
-    });
-
-    logCommsEntry({
-      ts: new Date().toISOString(),
-      direction: 'in',
-      from: msg.from,
-      type: msg.type,
-      text: msg.text,
-      messageId: msg.messageId,
-      queued: true,
-    });
-
-    return {
-      status: 200,
-      body: { ok: true, queued: true },
-    };
-  }
-
-  // Inject immediately
+  // Inject directly — tmux handles buffering if Claude is mid-response
   const formatted = formatMessage(msg);
   injectText(formatted);
 
@@ -287,7 +193,6 @@ export function handleAgentMessage(
     type: msg.type,
     text: msg.text,
     messageId: msg.messageId,
-    queued: false,
   });
 
   return {
@@ -371,7 +276,6 @@ export async function sendAgentMessage(
           type: msg.type,
           text: msg.text,
           messageId: msg.messageId,
-          queued: false,
           error: errorResponse.error,
         });
         log.error(`Failed to send message to ${peerName}`, { error: detail, host: peer.host, port: peer.port });
@@ -388,7 +292,6 @@ export async function sendAgentMessage(
           type: msg.type,
           text: msg.text,
           messageId: msg.messageId,
-          queued: response.queued ?? false,
         });
         resolve(response);
       } catch {
@@ -404,7 +307,6 @@ export async function sendAgentMessage(
           type: msg.type,
           text: msg.text,
           messageId: msg.messageId,
-          queued: false,
           error: errorResponse.error,
         });
         resolve(errorResponse);
@@ -418,13 +320,12 @@ export async function sendAgentMessage(
 /**
  * Get this agent's current status for the /agent/status endpoint.
  */
-export function getAgentStatus(): { agent: string; status: 'idle' | 'busy'; uptime: number; queueLength: number } {
+export function getAgentStatus(): { agent: string; status: 'idle' | 'busy'; uptime: number } {
   const config = loadConfig();
   return {
     agent: config.agent.name,
     status: isBusy() ? 'busy' : 'idle',
     uptime: process.uptime(),
-    queueLength: messageQueue.length,
   };
 }
 
@@ -449,9 +350,8 @@ export function initAgentComms(): void {
 }
 
 /**
- * Clean shutdown — stop the drain interval.
+ * Clean shutdown.
  */
 export function stopAgentComms(): void {
-  stopDrain();
   log.info('Agent comms stopped');
 }

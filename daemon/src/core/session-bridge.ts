@@ -73,8 +73,8 @@ export function capturePane(): string {
 /**
  * Check if Claude is actively generating a response (pane indicators only).
  * Looks for spinner characters and "esc to interrupt" text.
- * Use this for agent-comms queue drain — it only checks if Claude is
- * mid-response, not whether there was recent activity.
+ * Used by the scheduler to avoid interrupting mid-response.
+ * Only checks pane indicators, not recent activity.
  */
 export function isActivelyProcessing(): boolean {
   if (!sessionExists()) return false;
