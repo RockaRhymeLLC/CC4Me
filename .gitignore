@@ -26,22 +26,13 @@ Thumbs.db
 # User-specific Claude Code settings
 .claude/settings.local.json
 
-# Assistant state files (runtime, not templates)
-.claude/state/*.json
-.claude/state/*.md
-.claude/state/*.txt
-!.claude/state/*.template
-!.claude/state/.gitkeep
-.claude/state/todos/*.json
-!.claude/state/todos/.gitkeep
-# Memory data (not templates or directory structure)
-.claude/state/memory/memories/*.md
-.claude/state/memory/summaries/*.md
-!.claude/state/memory/memories/.gitkeep
-!.claude/state/memory/summaries/.gitkeep
-!.claude/state/memory/summaries/*.template
-.claude/state/research/
-.claude/state/telegram-media/
+# Assistant state — ALL runtime data (protected from branch operations)
+# The running daemon reads these files live. Git operations must never touch them.
+# Directory structure preserved via .gitkeep files. Templates tracked separately.
+.claude/state/**
+!.claude/state/**/
+!.claude/state/**/.gitkeep
+!.claude/state/**/*.template
 
 # Assistant history (if used)
 .claude/history/
