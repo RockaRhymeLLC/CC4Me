@@ -71,25 +71,39 @@ export function capturePane(): string {
 }
 
 /**
- * Check if Claude is actively generating a response.
- * Looks for: spinner characters, "esc to interrupt" text, recent transcript modification.
+ * Check if Claude is actively generating a response (pane indicators only).
+ * Looks for spinner characters and "esc to interrupt" text.
+ * Used by the scheduler to avoid interrupting mid-response.
+ * Only checks pane indicators, not recent activity.
  */
-export function isBusy(): boolean {
+export function isActivelyProcessing(): boolean {
   if (!sessionExists()) return false;
 
   const pane = capturePane();
 
   // Check for "esc to interrupt" — Claude is processing
   if (pane.includes('esc to interrupt')) {
-    log.debug('Busy: "esc to interrupt" visible');
+    log.debug('ActivelyProcessing: "esc to interrupt" visible');
     return true;
   }
 
   // Check for Unicode spinner characters
   if (/[✶✷✸✹✺✻✼✽✾✿❀❁❂❃⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/.test(pane)) {
-    log.debug('Busy: spinner visible');
+    log.debug('ActivelyProcessing: spinner visible');
     return true;
   }
+
+  return false;
+}
+
+/**
+ * Check if Claude is busy (includes transcript recency).
+ * Includes all pane indicator checks PLUS recent transcript modification.
+ * Use this for scheduler tasks where you want to avoid interrupting
+ * an active conversation, even between responses.
+ */
+export function isBusy(): boolean {
+  if (isActivelyProcessing()) return true;
 
   // Check if transcript was modified in the last 10 seconds
   const projectDir = getProjectDir();

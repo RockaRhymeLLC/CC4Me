@@ -32,34 +32,12 @@ interface TranscriptMessage {
   };
 }
 
-// ── Dedup ────────────────────────────────────────────────────
-
-const DEDUP_TTL_MS = 5 * 60 * 1000; // 5 minutes
-const _sentHashes = new Map<string, number>(); // hash → timestamp
-
-function contentHash(text: string): string {
-  return createHash('sha256').update(text.substring(0, 500)).digest('hex').substring(0, 16);
-}
-
-function isDuplicate(text: string): boolean {
-  // Prune expired entries
-  const now = Date.now();
-  for (const [hash, ts] of _sentHashes) {
-    if (now - ts > DEDUP_TTL_MS) _sentHashes.delete(hash);
-  }
-
-  const hash = contentHash(text);
-  if (_sentHashes.has(hash)) return true;
-
-  _sentHashes.set(hash, now);
-  return false;
-}
-
 // ── Status line noise detection ──────────────────────────────
 
 /**
- * Patterns matching Claude Code UI chrome that should never be forwarded.
- * Covers status bar elements, edit prompts, and other terminal UI.
+ * Patterns matching Claude Code UI chrome that should never be forwarded
+ * to Telegram. Used in both pane capture (per-line) and JSONL handler
+ * (full message, as safety net).
  */
 const STATUS_LINE_PATTERNS: RegExp[] = [
   /^\[.*\]\s*Context:\s*\d+%/,         // [Opus 4.5] Context: 69% used
@@ -84,6 +62,36 @@ function isStatusLineNoise(text: string): boolean {
     const trimmed = line.trim();
     return trimmed === '' || STATUS_LINE_PATTERNS.some(p => p.test(trimmed));
   });
+}
+
+// ── Dedup ────────────────────────────────────────────────────
+
+const DEDUP_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const _sentHashes = new Map<string, number>(); // hash → timestamp
+
+function contentHash(text: string): string {
+  // Normalize before hashing: strip leading bullets/special chars and collapse whitespace
+  // so pane-capture vs JSONL formatting differences don't bypass dedup
+  const normalized = text
+    .replace(/^[●•◦▪▫■□▶►▷▸‣⦿⦾]\s*/gm, '')  // strip leading bullets per line
+    .replace(/\s+/g, ' ')                        // collapse whitespace
+    .trim()
+    .substring(0, 500);
+  return createHash('sha256').update(normalized).digest('hex').substring(0, 16);
+}
+
+function isDuplicate(text: string): boolean {
+  // Prune expired entries
+  const now = Date.now();
+  for (const [hash, ts] of _sentHashes) {
+    if (now - ts > DEDUP_TTL_MS) _sentHashes.delete(hash);
+  }
+
+  const hash = contentHash(text);
+  if (_sentHashes.has(hash)) return true;
+
+  _sentHashes.set(hash, now);
+  return false;
 }
 
 // ── Delivery log ─────────────────────────────────────────────
@@ -149,6 +157,7 @@ let _retryStartTime: number | null = null;
 let _retryAttemptCount = 0;
 let _lastDeliveredLen = 0;
 let _lastDeliveredHash = '';
+let _lastDeliveredTime = 0; // timestamp of last successful delivery
 
 // ── State ────────────────────────────────────────────────────
 
@@ -285,6 +294,12 @@ function handleAssistantMessage(msg: TranscriptMessage): boolean {
   // Skip empty or placeholder messages
   if (!text || text === 'null' || text === '(no content)') return false;
 
+  // Skip status line noise (safety net — primary filter is in pane capture)
+  if (isStatusLineNoise(text)) {
+    log.debug(`Skipping status line noise (${text.length} chars): ${text.substring(0, 80)}`);
+    return false;
+  }
+
   const hash = contentHash(text);
 
   // Dedup check — skip if we've already sent this content
@@ -304,12 +319,6 @@ function handleAssistantMessage(msg: TranscriptMessage): boolean {
     return false;
   }
 
-  // Skip status line noise (Claude Code UI chrome)
-  if (isStatusLineNoise(text)) {
-    log.debug(`Skipping status line noise (${text.length} chars): ${text.substring(0, 80)}`);
-    return false;
-  }
-
   log.debug(`New assistant message (${text.length} chars)`);
 
   // Track for delivery logging (caller reads these after readNewMessages returns)
@@ -325,6 +334,7 @@ function handleAssistantMessage(msg: TranscriptMessage): boolean {
 
   // Route through channel router (passes both text and thinking)
   routeOutgoingMessage(text, thinking || undefined);
+  _lastDeliveredTime = Date.now();
   return true;
 }
 
@@ -466,6 +476,20 @@ function onRetryExhausted(): void {
   const elapsed = _retryStartTime ? Date.now() - _retryStartTime : 60_000;
   let paneCaptureResult: 'delivered' | 'empty' | 'duplicate' | 'failed' = 'failed';
 
+  // If we delivered something recently (within 90s), skip pane capture entirely.
+  // This happens when multiple hooks fire for the same response — the first hook's
+  // retry delivers via JSONL, then the second hook's retry exhausts and would
+  // fall back to pane capture, producing a duplicate with different formatting.
+  const timeSinceLastDelivery = Date.now() - _lastDeliveredTime;
+  if (_lastDeliveredTime > 0 && timeSinceLastDelivery < 90_000) {
+    log.info(`Pane capture: skipping — delivered ${timeSinceLastDelivery}ms ago via JSONL`);
+    logRetryExhausted(elapsed, 'skipped-recent-delivery', 0, '');
+    _retryStartTime = null;
+    _retryAttemptCount = 0;
+    signalResponseComplete();
+    return;
+  }
+
   try {
     const pane = capturePane();
     if (!pane) {
@@ -535,14 +559,16 @@ function logRetryExhausted(elapsed: number, paneCaptureResult: string, len: numb
 function extractAssistantFromPane(pane: string): string | null {
   const lines = pane.split('\n');
 
-  // UI chrome patterns to skip
+  // UI chrome patterns to skip (base + status line patterns)
   const chromePatterns = [
     /esc to interrupt/i,
     /^[✶✷✸✹✺✻✼✽✾✿❀❁❂❃⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/,
+    /^[●•◦▪▫■□▶►▷▸‣⦿⦾]\s/,  // Bullet/task indicators from Claude Code UI
     /^>/,          // Input prompt
     /^❯/,          // Prompt character
     /^\$/,         // Shell prompt
     /^\s*$/,       // Empty lines (handled below)
+    ...STATUS_LINE_PATTERNS,
   ];
 
   // Find the last substantial block of text that isn't UI chrome.
