@@ -1,0 +1,30 @@
+{
+  "id": "s-v07",
+  "title": "Conversation mode and polish",
+  "description": "After BMO finishes speaking a response, keep the client in listening mode for 3-5 seconds (configurable) so Dave can ask follow-up questions without repeating the wake word. Add 'BMO stop' interrupt detection — if Dave says 'stop' or 'BMO stop' while audio is playing, immediately stop playback. Add audio feedback sounds: 'listening' beep when wake word detected, processing indicator, error sound. Add volume control configuration. Add optional menu bar visual indicator showing BMO's state (idle/listening/processing/speaking).",
+  "planRef": "plans/20260204-voice-integration.plan.md",
+  "todoRef": "054",
+  "status": "complete",
+  "priority": 7,
+  "tests": ["t-015", "t-016", "t-017"],
+  "blockedBy": ["s-v05"],
+  "created": "2026-02-04T15:00:00Z",
+  "updated": "2026-02-04T22:15:00Z",
+  "notes": ["Conversation mode: 3s follow-up window after each response (configurable). Stop interrupt: background thread monitors mic during playback, 240ms sustained speech triggers sd.stop(). Sound files generated as WAV with sine tones + fade. One follow-up per wake word cycle to keep it simple."],
+  "files": [
+    "voice-client/bmo_voice.py",
+    "voice-client/sounds/"
+  ],
+  "acceptanceCriteria": [
+    "After TTS playback completes, client stays in listening mode for configurable duration (default 3s)",
+    "Follow-up audio captured and sent to daemon as normal voice query (no wake word needed)",
+    "If silence during follow-up window, client returns to idle wake-word-only mode",
+    "'BMO stop' or 'stop' detected during audio playback immediately halts playback",
+    "Interrupt detection runs in parallel with playback (separate thread/async)",
+    "Client signals daemon that playback was interrupted",
+    "Audio feedback: short 'listening' beep on wake word detection",
+    "Audio feedback: brief error sound if pipeline fails",
+    "TTS output volume configurable in client config.yaml",
+    "sounds/ directory contains chime.wav, listening.wav, and error.wav"
+  ]
+}

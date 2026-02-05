@@ -54,5 +54,19 @@ tmp/
 temp/
 *.tmp
 
+# ML models (large binary files, downloaded at setup)
+models/
+
+# Python virtual environments
+.venv/
+**/\\.venv/
+
+# Python cache
+__pycache__/
+**/__pycache__/
+
+# Playwright MCP state
+.playwright-mcp/
+
 # Scratchpad (Claude Code temporary files)
 scratchpad/

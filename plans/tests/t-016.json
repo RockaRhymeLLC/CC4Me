@@ -1,0 +1,34 @@
+{
+  "id": "t-016",
+  "title": "Stop command interrupts playback",
+  "description": "Verify Dave can interrupt BMO mid-speech by saying 'stop' or 'BMO stop'",
+  "storyRefs": ["s-v07"],
+  "planRef": "plans/20260204-voice-integration.plan.md",
+  "type": "story",
+  "status": "partial",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Trigger a voice query that will produce a long response (e.g., 'Hey BMO, read me all my open todos with details')",
+      "expected": "BMO begins speaking a long response through speakers"
+    },
+    {
+      "order": 2,
+      "action": "While BMO is still speaking, say 'stop' or 'BMO stop'",
+      "expected": "Audio playback halts immediately"
+    },
+    {
+      "order": 3,
+      "action": "Check daemon logs",
+      "expected": "Daemon received interrupt signal from client"
+    },
+    {
+      "order": 4,
+      "action": "Say 'Hey BMO' again after the interrupt",
+      "expected": "Client responds normally to wake word — no stuck state"
+    }
+  ],
+  "created": "2026-02-04T15:00:00Z",
+  "executedAt": "2026-02-04T22:15:00Z",
+  "result": "PARTIAL — code verified. (1) _play_audio_with_interrupt runs _interrupt_detector in background thread during playback. (2) Detector monitors audio energy — 3+ consecutive high-energy frames (~240ms of speech) triggers interrupt. (3) On interrupt: sd.stop() halts playback, _interrupted flag set. (4) Uses 2x silence_threshold to distinguish speech from speaker output. Full test needs laptop."
+}

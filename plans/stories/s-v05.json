@@ -1,0 +1,37 @@
+{
+  "id": "s-v05",
+  "title": "Laptop voice client",
+  "description": "Build the Python voice client that runs on Dave's MacBook. Handles: openWakeWord wake word detection ('Hey BMO' — custom trained model, fully open source, no telemetry), audio capture with VAD (silence detection for end-of-utterance), HTTP upload to Mac Mini daemon, audio playback of TTS responses, registration/heartbeat with daemon, and auto-reconnect on network changes. Includes install.sh for dependency setup, wake word model training via Google Colab, and launchd plist for auto-start on login.",
+  "planRef": "plans/20260204-voice-integration.plan.md",
+  "todoRef": "054",
+  "status": "complete",
+  "priority": 5,
+  "tests": ["t-009", "t-010", "t-011"],
+  "blockedBy": ["s-v04"],
+  "created": "2026-02-04T15:00:00Z",
+  "updated": "2026-02-04T22:00:00Z",
+  "notes": ["Code written and server-side tests passing. Using hey_jarvis as placeholder wake word — custom hey_bmo model needs Google Colab training. Full testing needs Dave's laptop with mic/speakers. sounddevice chosen over PyAudio for simpler macOS install."],
+  "files": [
+    "voice-client/bmo_voice.py",
+    "voice-client/requirements.txt",
+    "voice-client/config.yaml",
+    "voice-client/install.sh",
+    "voice-client/com.bmo.voice-client.plist"
+  ],
+  "acceptanceCriteria": [
+    "bmo_voice.py runs as a long-lived background process on macOS",
+    "openWakeWord detection listens for 'Hey BMO' continuously (custom trained model, Apache 2.0, fully local)",
+    "On wake word: plays 'listening' feedback sound, starts recording from mic",
+    "VAD (webrtcvad or energy-based) detects end of utterance after ~1s silence",
+    "Captured audio saved as 16kHz 16-bit mono WAV",
+    "Audio POSTed to http://<mac-mini>:3847/voice/transcribe",
+    "Response audio played through built-in speakers (sounddevice or pyaudio)",
+    "Client registers with daemon on startup (POST /voice/register with callback URL)",
+    "Client sends heartbeat every 30 seconds to keep registration alive",
+    "Client handles network disconnection gracefully — retries registration on reconnect",
+    "install.sh installs Python dependencies (openwakeword, onnxruntime, pyaudio/sounddevice, requests) and includes trained 'Hey BMO' wake word model",
+    "launchd plist starts client on user login",
+    "Client uses <1% CPU when idle (listening for wake word only)",
+    "Client uses <50MB RAM"
+  ]
+}

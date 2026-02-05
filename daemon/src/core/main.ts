@@ -20,6 +20,9 @@ import { createTelegramRouter } from '../comms/adapters/telegram.js';
 // Agent comms imports
 import { initAgentComms, stopAgentComms, handleAgentMessage, getAgentStatus, sendAgentMessage } from '../comms/agent-comms.js';
 
+// Voice imports
+import { handleVoiceRequest, initVoiceServer, stopVoiceServer } from '../voice/voice-server.js';
+
 // Automation imports (Phase 3)
 import { startScheduler, stopScheduler } from '../automation/scheduler.js';
 
@@ -165,6 +168,12 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Voice endpoints: /voice/*
+  if (url.pathname.startsWith('/voice/')) {
+    const handled = await handleVoiceRequest(req, res, url.pathname);
+    if (handled) return;
+  }
+
   // Agent comms: POST /agent/message — receive message from peer
   if (req.method === 'POST' && url.pathname === '/agent/message') {
     if (!config['agent-comms'].enabled) {
@@ -246,6 +255,9 @@ server.listen(config.daemon.port, () => {
     log.info('Communications module started');
   }
 
+  // Voice
+  initVoiceServer();
+
   // Agent-to-Agent Comms
   initAgentComms();
 
@@ -259,6 +271,7 @@ server.listen(config.daemon.port, () => {
 function shutdown(signal: string) {
   log.info(`Shutting down (${signal})`);
   stopTranscriptStream();
+  stopVoiceServer();
   stopAgentComms();
   stopScheduler();
   server.close(() => {

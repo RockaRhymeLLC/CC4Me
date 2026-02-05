@@ -1,0 +1,32 @@
+{
+  "id": "s-v04",
+  "title": "Full voice pipeline (STT → Claude → TTS)",
+  "description": "Wire the complete voice flow: receive audio from laptop client, transcribe via whisper.cpp, inject transcribed text into Claude's tmux session (prefixed with [Voice] Dave:), wait for Claude's response via the transcript stream, stream TTS audio back to the client using chunked transfer encoding. This is the core integration story. Requires a voice-pending flag mechanism in the transcript stream — when set, the stream routes Claude's LAST assistant message to a callback that resolves the pending HTTP request. Must also set _lastDeliveredTime to prevent Telegram from double-delivering the same response. (R2 review: use chunked streaming, grab last message not any message, guard against dedup.)",
+  "planRef": "plans/20260204-voice-integration.plan.md",
+  "todoRef": "054",
+  "status": "complete",
+  "priority": 4,
+  "tests": ["t-007", "t-008"],
+  "blockedBy": ["s-v02", "s-v03"],
+  "created": "2026-02-04T15:00:00Z",
+  "updated": "2026-02-04T20:13:00Z",
+  "notes": ["R2 review: (1) Use chunked transfer encoding to stream TTS audio — cuts perceived latency. (2) Grab LAST assistant message since Claude may produce multiple entries (thinking, tool use, final answer). (3) Set _lastDeliveredTime so Telegram channel doesn't also deliver the same response."],
+  "files": [
+    "daemon/src/voice/voice-server.ts",
+    "daemon/src/comms/transcript-stream.ts"
+  ],
+  "acceptanceCriteria": [
+    "POST /voice/transcribe accepts audio, streams TTS audio back via chunked transfer encoding (Transfer-Encoding: chunked)",
+    "Response includes X-Transcription header with the STT text for client logging",
+    "Transcribed text injected into tmux as '[Voice] Dave: <text>' via injectText()",
+    "Daemon waits for Claude's response via transcript stream Stop hook (response complete signal)",
+    "Voice-pending callback captures the LAST assistant message from transcript (not intermediate tool use messages)",
+    "Voice-pending flag set before injection, cleared after response captured or timeout",
+    "_lastDeliveredTime set after voice delivery to prevent Telegram double-delivery (PR #26 dedup guard)",
+    "Response text passed to TTS pipeline, audio chunks streamed to client as they generate",
+    "30-second timeout if Claude doesn't respond — returns error JSON",
+    "Busy check before injection — if Claude is actively processing, queue or return busy status",
+    "Full pipeline latency under 2s for audio processing (excluding Claude thinking time)",
+    "Temp audio files cleaned up after pipeline completes (success or failure)"
+  ]
+}

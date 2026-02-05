@@ -20,6 +20,7 @@ type MessageHandler = (text: string) => void;
 
 let _telegramHandler: MessageHandler | null = null;
 let _stopTypingHandler: (() => void) | null = null;
+let _voicePendingCallback: MessageHandler | null = null;
 
 /**
  * Initialize the channel router.
@@ -79,13 +80,56 @@ export function setChannel(channel: Channel): void {
 }
 
 /**
+ * Register a one-shot callback for the next assistant response (voice pipeline).
+ * When set, the next assistant message is routed to the callback instead of
+ * the normal channel (Telegram, etc.).
+ */
+export function registerVoicePending(callback: MessageHandler): void {
+  _voicePendingCallback = callback;
+  log.debug('Voice-pending callback registered');
+}
+
+/**
+ * Clear any pending voice callback (e.g., on timeout).
+ */
+export function clearVoicePending(): void {
+  if (_voicePendingCallback) {
+    _voicePendingCallback = null;
+    log.debug('Voice-pending callback cleared');
+  }
+}
+
+/**
+ * Check if a voice request is waiting for a response.
+ */
+export function isVoicePending(): boolean {
+  return _voicePendingCallback !== null;
+}
+
+/**
  * Route an outgoing message to the active channel.
  * Called by transcript-stream when it detects a new assistant message.
+ *
+ * If a voice-pending callback is registered, the message is routed there
+ * instead of the normal channel. This prevents Telegram double-delivery.
  *
  * @param text - The assistant's text output
  * @param thinking - Optional thinking block content (sent in verbose mode)
  */
 export function routeOutgoingMessage(text: string, thinking?: string): void {
+  // Voice-pending takes priority — intercept the message for the voice pipeline
+  if (_voicePendingCallback) {
+    const cb = _voicePendingCallback;
+    _voicePendingCallback = null;
+    log.info('Routing response to voice pipeline', { chars: text.length });
+    try {
+      cb(text);
+    } catch (err) {
+      log.error('Voice callback error', { error: err instanceof Error ? err.message : String(err) });
+    }
+    return;
+  }
+
   const channel = getChannel();
 
   switch (channel) {

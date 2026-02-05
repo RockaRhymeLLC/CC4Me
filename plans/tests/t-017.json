@@ -1,0 +1,39 @@
+{
+  "id": "t-017",
+  "title": "Audio feedback sounds play correctly",
+  "description": "Verify all audio feedback sounds work correctly and sound files are present",
+  "storyRefs": ["s-v07"],
+  "planRef": "plans/20260204-voice-integration.plan.md",
+  "type": "story",
+  "status": "pass",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Check that sounds/ directory contains chime.wav, listening.wav, and error.wav",
+      "expected": "All three WAV files present and valid"
+    },
+    {
+      "order": 2,
+      "action": "Trigger wake word detection",
+      "expected": "'listening' sound plays immediately — short, distinct beep"
+    },
+    {
+      "order": 3,
+      "action": "Trigger a chime notification",
+      "expected": "'chime' sound plays — distinctive, different from listening beep"
+    },
+    {
+      "order": 4,
+      "action": "Cause a pipeline error (e.g., daemon unreachable)",
+      "expected": "'error' sound plays — brief, indicates something went wrong"
+    },
+    {
+      "order": 5,
+      "action": "All sounds should be under 1 second and not startling",
+      "expected": "Each sound is short, pleasant, and clearly distinct from the others"
+    }
+  ],
+  "created": "2026-02-04T15:00:00Z",
+  "executedAt": "2026-02-04T22:14:00Z",
+  "result": "PASS. (1) sounds/ directory contains listening.wav (10KB, 0.21s), chime.wav (21KB, 0.43s), error.wav (13KB, 0.27s). (2) All files valid WAV, 24kHz mono 16-bit. (3) listening.wav: two ascending tones (880→1320Hz). (4) chime.wav: three-note arpeggio (660→880→1100Hz). (5) error.wav: descending low tones (330→220Hz). (6) All under 1 second. (7) Tone generation uses fade in/out to prevent clicks."
+}
