@@ -123,11 +123,48 @@ When displaying a to-do with `/todo show`:
 - **Files/Commits/PRs** are shown indented under the note they belong to
 - This separation makes it easy to quickly see what work was done vs. bookkeeping
 
+## Devil's Advocate Check
+
+When picking up a **non-trivial to-do**, spawn a quick devil's advocate sub-agent before diving into the work. This is lightweight — not a full `/review`, just a sanity check on your approach.
+
+### When to Trigger
+
+**Do the check for:**
+- To-dos that involve design decisions or architecture choices
+- Multi-step implementation work (anything that would take more than a few minutes)
+- New features, integrations, or capability additions
+- Self-improvement work (skills, workflows, core behaviors)
+
+**Skip the check for:**
+- Simple, mechanical tasks ("reply to email", "check calendar", "clean up temp files")
+- Research/exploration tasks ("look into X", "find out about Y")
+- Tasks where someone already reviewed the approach (post-`/review` or post-peer-review)
+
+### How It Works
+
+Before you start working on the to-do, briefly outline your planned approach (2-3 sentences), then spawn a Task sub-agent:
+
+```
+Use the Task tool with subagent_type="general-purpose":
+- Give it your planned approach and the to-do description
+- Ask it to challenge: Is this overcomplicated? Is there a simpler way? What could go wrong?
+- Ask for a GO / PAUSE verdict and any specific concerns
+- Keep it fast — this should take seconds, not minutes
+```
+
+If the sub-agent says PAUSE with good reasons, reconsider your approach before proceeding. If it says GO, carry on with confidence.
+
+### Peer Review Gate
+
+For to-dos involving **shared work** (new skills, daemon features, upstream pipeline, agent-comms), also consider sending R2 a heads-up via agent-comms before starting. See `/review` Peer Review Protocol for the full criteria. Not every to-do needs R2's input — but shared capabilities always benefit from a second perspective.
+
 ## Integration
 
 - To-dos can be referenced from calendar.md via `[todo:id]` syntax
 - SessionStart hook loads high-priority to-dos into context
 - PreCompact hook saves active to-do state
+- Devil's advocate sub-agent runs automatically for non-trivial work
+- R2 peer review triggered selectively for shared capabilities
 
 ## Notes
 

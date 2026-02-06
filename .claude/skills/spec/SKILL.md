@@ -81,10 +81,27 @@ If ambiguous, I'll ask you to clarify.
 - Quick iterations - add multiple items in sequence
 - If I get it wrong, you can manually edit
 
+## Peer Review for Shared Specs
+
+When a spec defines **shared capabilities** — things R2 will also use or that get upstreamed — consider requesting R2 peer review before moving to `/plan`. She may catch requirements you missed or suggest approaches based on her own experience.
+
+**Always request peer review for specs covering:**
+- New skills or skill upgrades
+- Daemon features or core behavior changes
+- Upstream pipeline or shared workflow changes
+- Anything touching agent-comms
+
+**Skip peer review for:**
+- Personal tasks, BMO-specific config
+- Quick features that only affect your own workflows
+
+Send via agent-comms: `/agent-comms send r2d2 "Spec review: [feature]. [Summary]. Looking for feedback on [concern]."`
+
 ## Integration
 
 **Context Tracker**: Remembers which spec is active across conversation
 **History Logger**: Records all spec changes for audit
 **Validation**: Specs are validated before moving to plan phase
+**Peer Review**: Shared specs should get R2's input before planning (see above)
 
 See `reference.md` for detailed step-by-step workflows.

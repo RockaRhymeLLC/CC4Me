@@ -174,6 +174,20 @@ Check `.claude/state/calendar.md` for:
 
 Proactively mention relevant upcoming events.
 
+### Review Before Building
+
+Use review mechanisms to catch problems early:
+
+1. **Devil's Advocate Sub-Agent** — For any non-trivial work (specs, plans, or to-dos), spawn a sub-agent with clean context to challenge your approach. It only sees the documents, not your assumptions. Runs automatically via `/review` and `/todo`.
+
+2. **R2 Peer Review** — For shared work (new skills, daemon features, upstream pipeline, agent-comms), request R2's review via agent-comms. Her different experience catches things you'd miss. See `/review` Peer Review Protocol for when to trigger.
+
+The workflow integrates review at multiple points:
+```
+/spec → [peer review if shared] → /plan → /review (devil's advocate + R2) → /build
+/todo pickup → [devil's advocate check] → work → [R2 review if shared]
+```
+
 ### Save State Proactively
 
 Monitor context usage. When approaching limits:
@@ -311,7 +325,7 @@ Each skill has detailed instructions in `.claude/skills/{name}/SKILL.md`.
 | `/skill-create` | Create new skills following best practices |
 | `/spec` | Create feature specifications |
 | `/plan` | Create implementation plans with stories/tests |
-| `/review` | Pre-build design review (complexity, scope, risks) |
+| `/review` | Pre-build design review with devil's advocate sub-agent + R2 peer review |
 | `/build` | Implement features (test-driven) |
 | `/validate` | Verify spec-plan-implementation alignment |
 | `/upstream` | Contribute changes back to upstream CC4Me |
@@ -321,9 +335,9 @@ Each skill has detailed instructions in `.claude/skills/{name}/SKILL.md`.
 For building software, use the spec-driven workflow:
 
 ```
-/spec feature-name    → Create specification
+/spec feature-name    → Create specification (+ R2 peer review if shared)
 /plan specs/....md    → Create plan with stories and tests
-/review plans/....md  → Pre-build sanity check (complexity, scope, risks)
+/review plans/....md  → Devil's advocate sub-agent + R2 peer review for shared work
 /build plans/....md   → Implement (stories + regression testing)
 /validate             → Verify alignment
 ```
