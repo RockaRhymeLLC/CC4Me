@@ -625,9 +625,11 @@ export function createTelegramRouter(): TelegramRouter {
   // Register outgoing message handler with channel router.
   // Uses _replyChatId so transcript responses go to the most recent incoming chat
   // (group or DM). Falls back to Keychain default (primary's DM) on cold start.
-  registerTelegramHandler((text) => {
-    sendMessage(text, _replyChatId ?? undefined);
-  });
+  registerTelegramHandler(
+    (text) => { sendMessage(text, _replyChatId ?? undefined); },
+    () => { startTypingLoop(_replyChatId ?? getTelegramChatId() ?? ''); },
+    () => { stopTypingLoop(); },
+  );
 
   log.info('Telegram adapter initialized');
 

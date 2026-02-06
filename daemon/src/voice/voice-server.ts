@@ -22,7 +22,7 @@ import { transcribe } from './stt.js';
 import { saveTempAudio, cleanupTemp } from './audio-utils.js';
 import { synthesize, startWorker, stopWorker } from './tts.js';
 import { injectText, isActivelyProcessing } from '../core/session-bridge.js';
-import { registerVoicePending, clearVoicePending, isVoicePending, getChannel } from '../comms/channel-router.js';
+import { registerVoicePending, clearVoicePending, isVoicePending, getChannel, startTypingIndicator } from '../comms/channel-router.js';
 
 const log = createLogger('voice-server');
 
@@ -325,6 +325,13 @@ export async function handleVoiceRequest(
         res.end(responseAudio);
       } else {
         // Voice input, text output: inject into Claude, response goes via current channel
+
+        // Start typing indicator so the user sees "typing..." while
+        // waiting for Claude's response via the transcript stream.
+        if (channel === 'telegram' || channel === 'telegram-verbose') {
+          startTypingIndicator();
+        }
+
         const injected = injectText(`[Voice] Dave: ${sttText}`);
         if (!injected) {
           res.writeHead(500, { 'Content-Type': 'application/json' });

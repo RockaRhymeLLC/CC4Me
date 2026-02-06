@@ -489,15 +489,16 @@ class BMOVoiceClient:
                 self.state = State.IDLE
             return
 
+        # Immediate feedback — confirm recording captured
+        play_sent_sound(self.volume)
+
         # Send to daemon (same as wake word flow)
         self.state = State.PROCESSING
         self._response_routed = False
         response_audio = self._send_to_daemon(audio_data)
 
         if response_audio is None:
-            if self._response_routed:
-                play_sent_sound(self.volume)
-            else:
+            if not self._response_routed:
                 play_error_sound(self.volume)
             with self._lock:
                 self.state = State.IDLE
@@ -541,20 +542,13 @@ class BMOVoiceClient:
 
                     energy = np.abs(frame).mean()
 
-                    # While key is held, keep recording regardless of silence
+                    # While key is held, keep recording
                     if self._ptt_pressed:
-                        silence_count = 0
                         continue
 
-                    # Key released — wait for silence to finish the thought
-                    if energy > self.silence_threshold:
-                        silence_count = 0
-                    else:
-                        silence_count += 1
-
-                    if silence_count >= silence_frames_needed:
-                        log.info("PTT: silence detected, stopping")
-                        break
+                    # Key released — stop immediately
+                    log.info("PTT: key released, stopping")
+                    break
 
         except Exception as e:
             log.error("PTT recording error: %s", e)

@@ -19,6 +19,7 @@ export type Channel = 'terminal' | 'telegram' | 'telegram-verbose' | 'silent' | 
 type MessageHandler = (text: string) => void;
 
 let _telegramHandler: MessageHandler | null = null;
+let _startTypingHandler: (() => void) | null = null;
 let _stopTypingHandler: (() => void) | null = null;
 let _voicePendingCallback: MessageHandler | null = null;
 
@@ -34,12 +35,26 @@ export function initChannelRouter(): void {
  * Called by the Telegram adapter when it initializes.
  *
  * @param handler - Function to send a message via Telegram
+ * @param startTyping - Optional function to start the typing indicator
  * @param stopTyping - Optional function to stop the typing indicator
  */
-export function registerTelegramHandler(handler: MessageHandler, stopTyping?: () => void): void {
+export function registerTelegramHandler(handler: MessageHandler, startTyping?: () => void, stopTyping?: () => void): void {
   _telegramHandler = handler;
+  _startTypingHandler = startTyping ?? null;
   _stopTypingHandler = stopTyping ?? null;
   log.debug('Telegram handler registered');
+}
+
+/**
+ * Start the Telegram typing indicator.
+ * Used when voice input arrives on a telegram channel, so the user
+ * sees "typing..." while waiting for Claude's response.
+ */
+export function startTypingIndicator(): void {
+  if (_startTypingHandler) {
+    _startTypingHandler();
+    log.debug('Typing indicator started');
+  }
 }
 
 /**
@@ -104,6 +119,24 @@ export function clearVoicePending(): void {
  */
 export function isVoicePending(): boolean {
   return _voicePendingCallback !== null;
+}
+
+/**
+ * Send a message directly to Telegram, bypassing channel checks.
+ * Used for immediate feedback (e.g., voice transcription echo).
+ */
+export function sendDirectTelegram(text: string): boolean {
+  if (!_telegramHandler) {
+    log.warn('sendDirectTelegram: no handler registered');
+    return false;
+  }
+  try {
+    _telegramHandler(text);
+    return true;
+  } catch (err) {
+    log.error('sendDirectTelegram error', { error: err instanceof Error ? err.message : String(err) });
+    return false;
+  }
 }
 
 /**
