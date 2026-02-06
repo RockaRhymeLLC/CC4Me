@@ -2,22 +2,24 @@
 """
 BMO Voice — macOS Menu Bar App
 
-Wraps bmo_voice.py in a rumps menu bar app. No terminal window needed.
-Lives in the menu bar with status icon, auto-starts on login via Login Items.
+Runs bmo_voice.py as a subprocess and shows status in the menu bar.
+The voice client gets its own process (and its own main thread) so
+audio/CoreAudio/TSM operations never conflict with AppKit's
+main-thread requirement.
 
 Usage:
     python bmo_menubar.py              # Run directly
-    python setup.py py2app             # Build as .app bundle
+    open "BMO Voice.app"               # Run as .app bundle
 """
 
 import logging
 import os
+import signal
+import subprocess
 import sys
 import threading
 
 import rumps
-
-from bmo_voice import BMOVoiceClient, State, load_config
 
 # ---------------------------------------------------------------------------
 # Logging — write to file instead of terminal (no terminal in .app mode)
@@ -38,22 +40,25 @@ logging.basicConfig(
 log = logging.getLogger("bmo-menubar")
 
 # ---------------------------------------------------------------------------
-# State → display mapping
+# State → display mapping (string keys match bmo_voice.py State.value)
 # ---------------------------------------------------------------------------
 
 STATE_DISPLAY = {
-    State.IDLE:       {"title": "BMO",  "tooltip": "BMO Voice — Listening for wake word"},
-    State.LISTENING:  {"title": "BMO 👂", "tooltip": "BMO Voice — Recording..."},
-    State.PROCESSING: {"title": "BMO 💭", "tooltip": "BMO Voice — Processing..."},
-    State.SPEAKING:   {"title": "BMO 🔊", "tooltip": "BMO Voice — Speaking..."},
+    "idle":       {"title": "BMO",    "tooltip": "BMO Voice — Listening for wake word"},
+    "listening":  {"title": "BMO 👂", "tooltip": "BMO Voice — Recording..."},
+    "processing": {"title": "BMO 💭", "tooltip": "BMO Voice — Processing..."},
+    "speaking":   {"title": "BMO 🔊", "tooltip": "BMO Voice — Speaking..."},
 }
 
 # ---------------------------------------------------------------------------
 # Menu bar app
 # ---------------------------------------------------------------------------
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
 class BMOVoiceApp(rumps.App):
-    """macOS menu bar wrapper for BMO Voice Client."""
+    """macOS menu bar wrapper — manages bmo_voice.py as a subprocess."""
 
     def __init__(self):
         super().__init__(
@@ -76,9 +81,9 @@ class BMOVoiceApp(rumps.App):
             rumps.MenuItem("Quit BMO Voice", callback=self.quit_app),
         ]
 
-        # Voice client
-        self._client = None
-        self._client_thread = None
+        # Subprocess state
+        self._process = None
+        self._reader_thread = None
         self._running = False
 
         # Pending UI updates from background threads.
@@ -89,7 +94,7 @@ class BMOVoiceApp(rumps.App):
         self._pending_start_stop = None
 
         # Poll for UI updates on the main thread (rumps timers use NSTimer)
-        self._ui_timer = rumps.Timer(self._apply_pending_ui, 0.15)
+        self._ui_timer = rumps.Timer(self._apply_pending_ui, 0.25)
         self._ui_timer.start()
 
         # Auto-start after app launches (1 second delay for UI to settle)
@@ -97,91 +102,99 @@ class BMOVoiceApp(rumps.App):
         self._startup_timer.start()
 
     def _start_client(self):
-        """Start the voice client in a background thread."""
+        """Start the voice client as a subprocess."""
         if self._running:
             return
 
         try:
-            # Pre-initialize Core Audio on the main thread.
-            # Opening an audio stream triggers macOS HAL device queries,
-            # which call TSMGetInputSourceProperty — a main-thread-only API.
-            # If the first stream opens on a background thread, macOS crashes
-            # with dispatch_assert_queue_fail. Pre-opening here forces the
-            # HAL to cache device info so background threads don't hit TSM.
-            import sounddevice as _sd
-            try:
-                with _sd.InputStream(samplerate=16000, channels=1,
-                                     dtype="int16", blocksize=1280):
-                    pass
-                log.info("Audio pre-initialized on main thread")
-            except Exception as e:
-                log.warning("Audio pre-init failed: %s", e)
+            python = os.path.join(SCRIPT_DIR, ".venv", "bin", "python3")
+            script = os.path.join(SCRIPT_DIR, "bmo_voice.py")
 
-            # Find config relative to this script (or the .app bundle)
-            config_path = os.path.join(os.path.dirname(__file__), "config.yaml")
-            if not os.path.exists(config_path):
-                # In .app bundle, check Resources
-                config_path = os.path.join(
-                    os.path.dirname(sys.executable), "..", "Resources", "config.yaml"
-                )
+            if not os.path.exists(python):
+                raise FileNotFoundError(f"No venv at {python}")
+            if not os.path.exists(script):
+                raise FileNotFoundError(f"No script at {script}")
 
-            config = load_config(config_path)
-            self._client = BMOVoiceClient(config)
-            self._client.on_state_change = self._on_state_change
+            # Open log file for subprocess stderr (voice client logs)
+            log_fh = open(LOG_FILE, "a")
+
+            self._process = subprocess.Popen(
+                [python, script, "--state-output"],
+                stdout=subprocess.PIPE,
+                stderr=log_fh,
+                cwd=SCRIPT_DIR,
+                # Don't forward signals — we handle stop ourselves
+                preexec_fn=os.setpgrp,
+            )
             self._running = True
 
-            self._client_thread = threading.Thread(
-                target=self._run_client, daemon=True
+            # Read state from subprocess stdout in a background thread
+            self._reader_thread = threading.Thread(
+                target=self._read_state, daemon=True
             )
-            self._client_thread.start()
+            self._reader_thread.start()
 
             self.start_stop.title = "Stop"
             self.status_item.title = "Status: Running"
             self.title = "BMO"
-            log.info("Voice client started")
+            log.info("Voice client started (pid=%d)", self._process.pid)
 
         except Exception as e:
             log.error("Failed to start voice client: %s", e, exc_info=True)
-            rumps.notification(
-                title="BMO Voice",
-                subtitle="Error",
-                message=f"Failed to start: {e}",
-            )
             self.status_item.title = f"Status: Error — {e}"
             self.title = "BMO ⚠️"
 
-    def _run_client(self):
-        """Run the voice client (blocks until stopped)."""
+    def _read_state(self):
+        """Read state lines from subprocess stdout (background thread)."""
         try:
-            self._client.start()
+            proc = self._process
+            if proc is None or proc.stdout is None:
+                return
+
+            for raw_line in proc.stdout:
+                line = raw_line.decode("utf-8", errors="replace").strip()
+                if line.startswith("STATE:"):
+                    state = line[6:]
+                    display = STATE_DISPLAY.get(state, STATE_DISPLAY["idle"])
+                    self._pending_title = display["title"]
+
+            # stdout closed — process exited
+            exit_code = proc.wait()
+            log.info("Voice client exited (code=%d)", exit_code)
+
+            if self._running:
+                self._running = False
+                self._pending_status = f"Status: Stopped (exit {exit_code})"
+                self._pending_start_stop = "Start"
+                if exit_code != 0:
+                    self._pending_title = "BMO ⚠️"
+                else:
+                    self._pending_title = "BMO ⏸"
+
         except Exception as e:
-            log.error("Voice client crashed: %s", e, exc_info=True)
-            self._running = False
-            # Schedule UI updates for the main thread
-            self._pending_status = "Status: Stopped (error)"
-            self._pending_start_stop = "Start"
-            self._pending_title = "BMO ⚠️"
+            log.error("State reader error: %s", e, exc_info=True)
 
     def _stop_client(self):
-        """Stop the voice client."""
+        """Stop the voice client subprocess."""
         if not self._running:
             return
 
         self._running = False
-        if self._client:
-            self._client.stop()
-            self._client = None
+        proc = self._process
+        if proc and proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                log.warning("Voice client didn't stop, killing")
+                proc.kill()
+                proc.wait(timeout=2)
+        self._process = None
 
         self.start_stop.title = "Start"
         self.status_item.title = "Status: Stopped"
         self.title = "BMO ⏸"
         log.info("Voice client stopped")
-
-    def _on_state_change(self, new_state: State):
-        """Called by voice client when state changes (from background thread).
-        Don't touch AppKit here — schedule for main thread via _pending_title."""
-        display = STATE_DISPLAY.get(new_state, STATE_DISPLAY[State.IDLE])
-        self._pending_title = display["title"]
 
     def _apply_pending_ui(self, _timer):
         """Apply pending UI updates on the main thread (called by NSTimer)."""

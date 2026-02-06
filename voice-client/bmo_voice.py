@@ -1068,11 +1068,32 @@ class BMOVoiceClient:
 
 def main():
     config_path = None
-    if len(sys.argv) > 1:
-        config_path = sys.argv[1]
+    state_output = False
+
+    args = sys.argv[1:]
+    if "--state-output" in args:
+        state_output = True
+        args.remove("--state-output")
+    if args:
+        config_path = args[0]
+
+    if state_output:
+        # Redirect logging to stderr so stdout stays clean for state lines
+        logging.basicConfig(
+            level=logging.INFO,
+            format="[bmo-voice] %(asctime)s %(levelname)s %(message)s",
+            datefmt="%H:%M:%S",
+            handlers=[logging.StreamHandler(sys.stderr)],
+            force=True,
+        )
 
     config = load_config(config_path)
     client = BMOVoiceClient(config)
+
+    if state_output:
+        def emit_state(new_state):
+            print(f"STATE:{new_state.value}", flush=True)
+        client.on_state_change = emit_state
 
     def on_signal(signum, frame):
         log.info("Received signal %d, shutting down", signum)
