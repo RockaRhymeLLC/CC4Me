@@ -6,11 +6,15 @@ argument-hint: [spec-file, plan-file, or "all"]
 
 # /review - Pre-Build Sanity Check
 
-Challenge assumptions, catch overcomplexity, and find simpler paths before writing code.
+Challenge assumptions, catch overcomplexity, and find simpler paths before writing code. Uses a **devil's advocate sub-agent** for independent review, plus **R2 peer review** for shared work.
 
 ## Purpose
 
-Act as a skeptical-but-constructive reviewer — the engineer who asks "do we really need all this?" before anyone starts typing. This is the automated version of Dave's most valuable contribution: reminding BMO to stop and keep it simple.
+Two layers of review to catch what you can't see in your own work:
+
+1. **Devil's Advocate Sub-Agent** (automatic) — A sub-agent with clean context reviews your spec/plan independently. It only sees the documents, not your conversation history or assumptions. Catches lazy overengineering, scope creep, and obvious gaps.
+
+2. **R2 Peer Review** (selective) — For shared work (skills, daemon features, anything that gets upstreamed), send to R2 for genuine peer review. She brings different experience and context.
 
 ## Usage
 
@@ -39,7 +43,31 @@ Read the target files:
 
 Also read any referenced story files (`plans/stories/s-*.json`) and test files (`plans/tests/t-*.json`).
 
-### Step 2: Run the Review
+### Step 2: Devil's Advocate Sub-Agent
+
+**Always run this.** Spawn a Task sub-agent (general-purpose type) with ONLY the spec/plan content. The sub-agent gets none of your conversation history — just the documents and the review criteria below.
+
+```
+Use the Task tool with subagent_type="general-purpose" and include:
+- The full text of the spec and/or plan
+- The review dimensions below
+- Instructions to be critical, challenge assumptions, and suggest simpler alternatives
+- The output format template
+```
+
+The sub-agent's clean context is the whole point — it sees the plan as a stranger would, not as the person who wrote it.
+
+### Step 3: R2 Peer Review (When Applicable)
+
+After the sub-agent review, determine if R2 peer review is needed. See "Peer Review Protocol" below for the criteria.
+
+If needed, send R2 the spec/plan via agent-comms with a summary of what you're building and what kind of feedback you want.
+
+### Step 4: Synthesize and Format
+
+Combine the sub-agent findings with your own assessment (and R2's feedback if received) into the output format below.
+
+### Review Dimensions
 
 Evaluate across these dimensions, thinking like a senior engineer doing a design review:
 
@@ -154,9 +182,37 @@ Lower is better. Aim for 1-2.
 
 **Remember the context.** This is a personal project, not enterprise software. Favor shipping over perfection.
 
+## Peer Review Protocol
+
+### When to Request R2 Peer Review
+
+**Always request peer review for:**
+- New skills or skill upgrades (she'll use them too)
+- Daemon features (shared codebase)
+- Changes to upstream pipeline or shared workflows
+- Anything touching agent-comms (affects both sides)
+- Self-improvement work (new capabilities, core behavior changes)
+
+**Skip peer review for:**
+- Personal tasks (research, emails, calendar for Dave)
+- BMO-specific config or personality tweaks
+- Quick bugfixes to your own stuff
+- Simple todo items that are just "do the thing"
+
+### How to Request
+
+Send via agent-comms:
+```
+/agent-comms send r2d2 "Peer review request: [feature name]. [1-2 sentence summary of approach]. Spec/plan attached below: [paste key sections or file paths]. Looking for feedback on [specific concern]. No rush if you're busy."
+```
+
+R2's review carries real weight — if she says RETHINK, stop and reconsider before building.
+
 ## Integration
 
 - Fits between `/plan` and `/build` in the standard workflow
 - Can also be used standalone on any spec or plan
 - Review findings can feed back into spec updates via `/spec`
 - The `/validate` skill handles structural alignment; `/review` handles design quality
+- The devil's advocate sub-agent runs automatically on every review
+- R2 peer review is triggered selectively based on the protocol above
