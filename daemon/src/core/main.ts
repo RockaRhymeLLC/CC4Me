@@ -34,6 +34,7 @@ import '../automation/tasks/nightly-todo.js';
 import '../automation/tasks/health-check.js';
 import '../automation/tasks/memory-consolidation.js';
 import '../automation/tasks/approval-audit.js';
+import '../automation/tasks/peer-heartbeat.js';
 
 // ── Bootstrap ────────────────────────────────────────────────
 

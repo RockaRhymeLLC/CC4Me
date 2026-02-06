@@ -147,6 +147,18 @@ When the channel (`.claude/state/channel.txt`) is `telegram`, the **daemon's tra
 
 Only use `telegram-send.sh` directly when the channel is `silent` and you need to proactively reach the user.
 
+### Agent-to-Agent Communication
+
+Use `/agent-comms` or `scripts/agent-send.sh` to message peer agents (e.g., BMO) on the local network. Messages go through the daemon's HTTP endpoints with shared-secret auth.
+
+**Use agent-comms for**: task coordination (claim/release), status pings, PR notifications, quick technical questions, context handoffs.
+
+**Don't use for**: anything needing human attention (use Telegram), long-form specs (use email), anything requiring a human paper trail (use email).
+
+**Etiquette**: Keep messages concise, batch updates, trust the queue, acknowledge coordination claims promptly.
+
+See `.claude/skills/agent-comms/SKILL.md` for full details.
+
 ### Check Memory First
 
 **Before asking the user for information**, check memory:
@@ -314,6 +326,8 @@ Each skill has detailed instructions in `.claude/skills/{name}/SKILL.md`.
 | `/build` | Implement features (test-driven) |
 | `/validate` | Verify spec-plan-implementation alignment |
 | `/upstream` | Contribute changes back to upstream CC4Me |
+| `/delivery-stats` | Analyze Telegram delivery logs (success rates, retries, failures) |
+| `/agent-comms` | Send messages to peer agents (BMO) on the local network |
 
 ### Software Development
 
