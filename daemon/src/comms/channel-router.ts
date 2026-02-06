@@ -170,6 +170,7 @@ export function routeOutgoingMessage(text: string, thinking?: string): void {
     case 'silent':
     case 'voice':
       // No external delivery (voice responses are captured via voice-pending callback above)
+      log.debug(`Channel is ${channel}, not forwarding: ${text.length} chars`);
       return;
 
     case 'telegram':
