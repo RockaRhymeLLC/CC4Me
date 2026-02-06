@@ -182,6 +182,9 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    const remoteAddr = req.socket.remoteAddress ?? 'unknown';
+    log.info('Inbound agent message', { from: remoteAddr });
+
     let body = '';
     req.on('data', (c: Buffer) => { body += c.toString(); });
     req.on('end', () => {
@@ -192,6 +195,7 @@ const server = http.createServer(async (req, res) => {
       try {
         parsed = JSON.parse(body);
       } catch {
+        log.warn('Agent message: invalid JSON', { from: remoteAddr });
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Invalid JSON body' }));
         return;

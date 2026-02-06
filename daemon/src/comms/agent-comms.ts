@@ -24,9 +24,12 @@ interface CommsLogEntry {
   ts: string;
   direction: 'in' | 'out';
   from: string;
+  to?: string;
   type: string;
   text?: string;
   messageId: string;
+  httpStatus?: number;
+  latencyMs?: number;
   error?: string;
 }
 
@@ -190,6 +193,7 @@ export function handleAgentMessage(
     ts: new Date().toISOString(),
     direction: 'in',
     from: msg.from,
+    to: loadConfig().agent.name.toLowerCase(),
     type: msg.type,
     text: msg.text,
     messageId: msg.messageId,
@@ -247,14 +251,17 @@ export async function sendAgentMessage(
 
   const payload = JSON.stringify(msg);
   const url = `http://${peer.host}:${peer.port}/agent/message`;
+  const startTime = Date.now();
 
   // Use curl via child_process instead of Node.js http.request.
   // Node.js on macOS cannot make outbound TCP connections to LAN IPs
   // (EHOSTUNREACH) due to missing local network entitlements.
   // curl is not affected by this restriction.
+  // -w '%{http_code}' appends status code to stdout for capture.
   return new Promise<AgentMessageResponse>((resolve) => {
     const args = [
       '-s', '--connect-timeout', '5',
+      '-w', '\n%{http_code}',
       '-X', 'POST', url,
       '-H', 'Content-Type: application/json',
       '-H', `Authorization: Bearer ${secret}`,
@@ -262,6 +269,8 @@ export async function sendAgentMessage(
     ];
 
     execFile('curl', args, { timeout: 10000 }, (err, stdout, stderr) => {
+      const latencyMs = Date.now() - startTime;
+
       if (err) {
         const detail = stderr?.trim() || err.message || 'unknown error';
         const errorResponse: AgentMessageResponse = {
@@ -273,42 +282,57 @@ export async function sendAgentMessage(
           ts: new Date().toISOString(),
           direction: 'out',
           from: config.agent.name.toLowerCase(),
+          to: peerName,
           type: msg.type,
           text: msg.text,
           messageId: msg.messageId,
+          latencyMs,
           error: errorResponse.error,
         });
-        log.error(`Failed to send message to ${peerName}`, { error: detail, host: peer.host, port: peer.port });
+        log.error(`Failed to send to ${peerName}`, { error: detail, latencyMs, host: peer.host, port: peer.port });
         resolve(errorResponse);
         return;
       }
 
+      // Parse HTTP status from curl -w output (last line)
+      const lines = stdout.trimEnd().split('\n');
+      const httpStatus = parseInt(lines.pop() ?? '', 10) || undefined;
+      const responseBody = lines.join('\n');
+
       try {
-        const response = JSON.parse(stdout) as AgentMessageResponse;
+        const response = JSON.parse(responseBody) as AgentMessageResponse;
         logCommsEntry({
           ts: new Date().toISOString(),
           direction: 'out',
           from: config.agent.name.toLowerCase(),
+          to: peerName,
           type: msg.type,
           text: msg.text,
           messageId: msg.messageId,
+          httpStatus,
+          latencyMs,
         });
+        log.info(`Sent message to ${peerName}`, { messageId: msg.messageId, type: msg.type, httpStatus, latencyMs });
         resolve(response);
       } catch {
         const errorResponse: AgentMessageResponse = {
           ok: false,
           queued: false,
-          error: `Invalid response from peer: ${stdout.slice(0, 200)}`,
+          error: `Invalid response from peer (HTTP ${httpStatus ?? '?'}): ${responseBody.slice(0, 200)}`,
         };
         logCommsEntry({
           ts: new Date().toISOString(),
           direction: 'out',
           from: config.agent.name.toLowerCase(),
+          to: peerName,
           type: msg.type,
           text: msg.text,
           messageId: msg.messageId,
+          httpStatus,
+          latencyMs,
           error: errorResponse.error,
         });
+        log.warn(`Bad response from ${peerName}`, { httpStatus, latencyMs, body: responseBody.slice(0, 200) });
         resolve(errorResponse);
       }
     });
