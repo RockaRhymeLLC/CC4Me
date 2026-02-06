@@ -260,9 +260,23 @@ class CallbackServer:
 class BMOVoiceClient:
     """Main voice client — state machine driving audio pipeline."""
 
+    @property
+    def state(self):
+        return self._state
+
+    @state.setter
+    def state(self, new_state):
+        self._state = new_state
+        if self.on_state_change:
+            try:
+                self.on_state_change(new_state)
+            except Exception:
+                pass  # Don't let callback errors break the voice pipeline
+
     def __init__(self, config: dict):
         self.config = config
-        self.state = State.IDLE
+        self._state = State.IDLE
+        self.on_state_change = None  # Optional callback: fn(new_state: State)
         self._lock = threading.Lock()
         self._running = False
         self._heartbeat_thread: threading.Thread | None = None
