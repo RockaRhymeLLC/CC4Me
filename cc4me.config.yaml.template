@@ -68,6 +68,9 @@ scheduler:
     - name: "approval-audit"
       enabled: true
       cron: "0 9 1 */6 *"    # 9am on the 1st, every 6 months
+    - name: "peer-heartbeat"
+      enabled: false         # Enable if using agent-comms with peers
+      interval: "5m"
 
 # ── Security ──────────────────────────
 security:
