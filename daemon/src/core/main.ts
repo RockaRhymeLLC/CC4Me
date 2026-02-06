@@ -20,6 +20,9 @@ import { createTelegramRouter } from '../comms/adapters/telegram.js';
 // Agent comms imports
 import { initAgentComms, stopAgentComms, handleAgentMessage, getAgentStatus, sendAgentMessage } from '../comms/agent-comms.js';
 
+// Voice imports
+import { handleVoiceRequest, initVoiceServer, stopVoiceServer } from '../voice/voice-server.js';
+
 // Automation imports (Phase 3)
 import { startScheduler, stopScheduler } from '../automation/scheduler.js';
 
@@ -227,6 +230,12 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Voice endpoints: /voice/*
+  if (url.pathname.startsWith('/voice/')) {
+    const handled = await handleVoiceRequest(req, res, url.pathname);
+    if (handled) return;
+  }
+
   // 404
   res.writeHead(404);
   res.end('Not found');
@@ -247,6 +256,9 @@ server.listen(config.daemon.port, () => {
   // Agent-to-Agent Comms
   initAgentComms();
 
+  // Voice
+  initVoiceServer();
+
   // Phase 3: Automation
   startScheduler();
   log.info('Scheduler started');
@@ -258,6 +270,7 @@ function shutdown(signal: string) {
   log.info(`Shutting down (${signal})`);
   stopTranscriptStream();
   stopAgentComms();
+  stopVoiceServer();
   stopScheduler();
   server.close(() => {
     log.info('Daemon stopped');
