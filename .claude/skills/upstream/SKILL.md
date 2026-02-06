@@ -1,17 +1,18 @@
 ---
 name: upstream
 description: Upstream local enhancements back to the original CC4Me repo. Use when contributing fork improvements to the shared upstream project.
-argument-hint: [audit | genericize | analyze | pr | status]
+argument-hint: [audit | genericize | analyze | pr | status | sync]
 disable-model-invocation: true
 ---
 
 # Upstream Enhancements
 
-Contribute enhancements from your local fork back to the original CC4Me repository. This is a multi-phase workflow that audits, genericizes, analyzes, and prepares clean PRs.
+Contribute enhancements from your local fork back to the original CC4Me repository via the `cc4me-dev` middleman repo. This is a multi-phase workflow that syncs, audits, genericizes, and prepares clean PRs.
 
 ## Usage
 
 - `/upstream` or `/upstream status` - Show current upstream progress
+- `/upstream sync` - Sync cc4me-dev with fork's latest changes
 - `/upstream audit` - Run the full audit + genericize + analyze pipeline
 - `/upstream genericize <pr-group>` - Genericize files for a specific PR group
 - `/upstream analyze` - Generate or update the analysis document
@@ -20,49 +21,42 @@ Contribute enhancements from your local fork back to the original CC4Me reposito
 ## Overview
 
 ```
-Fork (your repo)                     Upstream (CC4Me)
-+--------------+                     +--------------+
-| Fork-specific|   /upstream audit   |   Generic    |
-|  code with   | ------------------- |  code ready  |
-| enhancements |   copy + strip      |  for anyone  |
-+--------------+                     +--------------+
-       |                                   |
-       |         Analysis Doc              |
-       |    (tech debt, findings)          |
-       |              |                    |
-       v              v                    v
-   Don't touch    Review with        Create PRs
-                    owner            after approval
+Fork (BMO repo)         cc4me-dev (middleman)        Upstream (CC4Me)
++--------------+        +------------------+         +--------------+
+| Fork-specific|  sync  | PII-scrubbed     |   PR    |   Generic    |
+|  code with   | -----> | genericized code | ------> |  code ready  |
+| enhancements |        |                  |         |  for anyone  |
++--------------+        +------------------+         +--------------+
+                              |
+                              | Remotes:
+                              |   origin -> fork (CC4Me-BMO)
+                              |   upstream -> CC4Me
 ```
 
 ## Key Directories
 
 | Path | Purpose |
 |------|---------|
-| Fork repo directory | Your fork -- live assistant code. **NEVER modify for upstream work.** |
-| Upstream working copy | Working copy of upstream repo. All genericization happens here. |
+| `~/CC4Me-BMO/` | Your fork -- live assistant code. **NEVER modify for upstream work.** |
+| `~/cc4me-dev/` | Middleman working copy. All genericization and PRs happen here. Has `origin` (fork) and `upstream` (CC4Me) remotes. |
 | `.claude/state/research/upstream-analysis.md` | Analysis document (tech debt, findings, recommendations) |
 
-## Phase 1: Setup Working Copy
+## Phase 1: Sync cc4me-dev
 
 ```bash
-# First time only -- clone the upstream repo
-git clone <upstream-repo-url> ~/CC4Me-upstream
-cd ~/CC4Me-upstream
-
-# Subsequent runs -- pull latest
-cd ~/CC4Me-upstream
+cd ~/cc4me-dev
 git checkout main
-git pull origin main
+git pull origin main      # Pull latest from fork
+git fetch upstream        # Fetch upstream state
 ```
 
-Verify the clone is clean and matches the upstream repo before starting.
+Verify the working tree is clean before starting any upstream work.
 
 ## Phase 2: Audit & Genericize
 
 ### PR Groups
 
-Work through these groups in order. Each becomes a branch and eventually a PR.
+Work through these groups in order. Each becomes a branch off `upstream/main` and eventually a PR to the upstream CC4Me repo.
 
 #### Group 1: Session Persistence & Lifecycle Hooks
 **Branch**: `feature/session-persistence`
@@ -82,6 +76,7 @@ Work through these groups in order. Each becomes a branch and eventually a PR.
 **Branch**: `feature/email-integration`
 **Files to copy from fork**:
 - `.claude/skills/email/SKILL.md`
+- `.claude/skills/email-compose/SKILL.md`
 - `scripts/email/jmap.js` (Fastmail)
 - `scripts/email/graph.js` (M365)
 - `scripts/email-reminder.sh`
@@ -114,6 +109,19 @@ Work through these groups in order. Each becomes a branch and eventually a PR.
 - `SETUP.md` (updated with integration steps)
 - `.claude/skills/setup/SKILL.md` (updated wizard)
 - `scripts/init.sh` (updated with new prereqs)
+
+#### Group 6: Skills
+**Branch**: `feature/skills-update`
+**Files to copy from fork** (all skills not yet upstream):
+- `.claude/skills/review/SKILL.md`
+- `.claude/skills/email-compose/SKILL.md`
+- Updated versions of existing skills (todo, memory, calendar, etc.)
+
+**Genericization for skills is especially important:**
+- Strip any agent-specific personality references (names, pronouns)
+- Replace hardcoded agent names with config references or `{{NAME}}`
+- Remove references to specific Telegram chat IDs, email addresses, or hostnames
+- Keep the functional logic intact — just remove identity assumptions
 
 ### Genericization Rules
 
@@ -210,22 +218,33 @@ Generate `upstream-analysis.md` in `.claude/state/research/` with this structure
 
 ## Phase 5: Create PRs (After Approval)
 
+PRs go from cc4me-dev to the upstream CC4Me repo.
+
 For each approved PR group:
 
 ```bash
-cd ~/CC4Me-upstream
-git checkout main
-git pull origin main
-git checkout -b feature/<branch-name>
+cd ~/cc4me-dev
 
-# Copy and genericize files (already done in Phase 2)
-# Stage changes
+# Create branch off upstream/main (not origin/main!)
+git fetch upstream
+git checkout -b feature/<branch-name> upstream/main
+
+# Copy genericized files from origin/main
+# (files were already audited and cleaned in Phase 2)
+git checkout origin/main -- <file1> <file2> ...
+
+# Review the diff — ensure no PII, no fork-specific content
+git diff --cached
+
+# Commit
 git add <files>
 git commit -m "Add <feature description>"
 
-# Push and create PR
+# Push to origin (fork) and create PR targeting upstream
 git push -u origin feature/<branch-name>
-gh pr create --title "<PR title>" --body "<description>"
+gh pr create --repo RockaRhymeLLC/CC4Me \
+  --title "<PR title>" \
+  --body "<description>"
 ```
 
 ### PR Standards
@@ -233,13 +252,14 @@ gh pr create --title "<PR title>" --body "<description>"
 - Clean commit messages describing the "why"
 - PR description includes: summary, files changed, testing notes
 - No personal data in any committed file
+- PRs target the **upstream** repo (CC4Me), not the fork
 
 ## Phase 6: Merge & Verify
 
 After owner reviews each PR:
 
 1. Merge on GitHub (or via `gh pr merge`)
-2. Pull merged changes: `git checkout main && git pull`
+2. Sync cc4me-dev: `git fetch upstream && git checkout main && git merge upstream/main`
 3. Verify: Clone fresh to a temp directory, run `init.sh` and `/setup`, confirm everything works
 4. Move to next PR group
 
@@ -256,12 +276,15 @@ Track progress in the analysis document's summary section:
 | 3. Telegram Integration| [ ] | [ ] | [ ] | [ ] | [ ] | [ ] |
 | 4. Scheduled Jobs      | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] |
 | 5. Documentation       | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] |
+| 6. Skills              | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] |
 ```
 
 ## Notes
 
 - **Never modify the fork** during upstream work
-- **Always work in** the upstream working copy
+- **Always work in** `~/cc4me-dev` (the middleman repo)
+- **Branches for PRs** should be based on `upstream/main`, not `origin/main`
 - **Analysis doc is the source of truth** for what needs attention
 - **Owner approval required** before any commits or PRs
+- **Skills need extra scrutiny** — they often contain agent-specific personality, names, or config references that must be genericized
 - This skill is reusable -- any fork can use `/upstream` to contribute enhancements back
