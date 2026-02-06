@@ -5,6 +5,7 @@ yarn.lock
 
 # Build outputs
 dist/
+build/
 *.tsbuildinfo
 
 # Agent-specific config (each agent has their own)
