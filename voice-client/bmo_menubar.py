@@ -81,6 +81,17 @@ class BMOVoiceApp(rumps.App):
         self._client_thread = None
         self._running = False
 
+        # Pending UI updates from background threads.
+        # Background threads set these; a main-thread timer applies them.
+        # This avoids crashes from AppKit/TSM calls off the main thread.
+        self._pending_title = None
+        self._pending_status = None
+        self._pending_start_stop = None
+
+        # Poll for UI updates on the main thread (rumps timers use NSTimer)
+        self._ui_timer = rumps.Timer(self._apply_pending_ui, 0.15)
+        self._ui_timer.start()
+
         # Auto-start after app launches (1 second delay for UI to settle)
         self._startup_timer = rumps.Timer(self._delayed_start, 1)
         self._startup_timer.start()
@@ -91,6 +102,21 @@ class BMOVoiceApp(rumps.App):
             return
 
         try:
+            # Pre-initialize Core Audio on the main thread.
+            # Opening an audio stream triggers macOS HAL device queries,
+            # which call TSMGetInputSourceProperty — a main-thread-only API.
+            # If the first stream opens on a background thread, macOS crashes
+            # with dispatch_assert_queue_fail. Pre-opening here forces the
+            # HAL to cache device info so background threads don't hit TSM.
+            import sounddevice as _sd
+            try:
+                with _sd.InputStream(samplerate=16000, channels=1,
+                                     dtype="int16", blocksize=1280):
+                    pass
+                log.info("Audio pre-initialized on main thread")
+            except Exception as e:
+                log.warning("Audio pre-init failed: %s", e)
+
             # Find config relative to this script (or the .app bundle)
             config_path = os.path.join(os.path.dirname(__file__), "config.yaml")
             if not os.path.exists(config_path):
@@ -131,15 +157,10 @@ class BMOVoiceApp(rumps.App):
         except Exception as e:
             log.error("Voice client crashed: %s", e, exc_info=True)
             self._running = False
-            rumps.notification(
-                title="BMO Voice",
-                subtitle="Crashed",
-                message=f"Voice client error: {e}",
-            )
-            # Update UI from main thread
-            self.status_item.title = "Status: Stopped (error)"
-            self.start_stop.title = "Start"
-            self.title = "BMO ⚠️"
+            # Schedule UI updates for the main thread
+            self._pending_status = "Status: Stopped (error)"
+            self._pending_start_stop = "Start"
+            self._pending_title = "BMO ⚠️"
 
     def _stop_client(self):
         """Stop the voice client."""
@@ -157,9 +178,22 @@ class BMOVoiceApp(rumps.App):
         log.info("Voice client stopped")
 
     def _on_state_change(self, new_state: State):
-        """Called by voice client when state changes. Update menu bar."""
+        """Called by voice client when state changes (from background thread).
+        Don't touch AppKit here — schedule for main thread via _pending_title."""
         display = STATE_DISPLAY.get(new_state, STATE_DISPLAY[State.IDLE])
-        self.title = display["title"]
+        self._pending_title = display["title"]
+
+    def _apply_pending_ui(self, _timer):
+        """Apply pending UI updates on the main thread (called by NSTimer)."""
+        if self._pending_title is not None:
+            self.title = self._pending_title
+            self._pending_title = None
+        if self._pending_status is not None:
+            self.status_item.title = self._pending_status
+            self._pending_status = None
+        if self._pending_start_stop is not None:
+            self.start_stop.title = self._pending_start_stop
+            self._pending_start_stop = None
 
     # -- Menu callbacks -------------------------------------------------------
 
