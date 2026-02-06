@@ -30,14 +30,17 @@ channels:
     # - type: "graph"    # Microsoft 365 via Graph API
     # - type: "jmap"     # Fastmail via JMAP
 
-# ── Agent-to-Agent Comms ──────────────
-agent-comms:
-  enabled: true
-  secret: "keychain:credential-agent-comms-secret"
-  peers:
-    - name: "r2d2"
-      host: "chrissys-mac-mini.local"
-      port: 3847
+  # Voice integration (optional)
+  # Requires: whisper-cli (Homebrew), Python 3.12+ with mlx-audio (TTS)
+  # See docs/voice-integration.md for full setup guide
+  voice:
+    enabled: false
+    stt:
+      model_path: "models/ggml-small.en.bin"   # Whisper model for speech-to-text
+    tts:
+      port: 3848                                # TTS worker port
+      speaker: "Aiden"                          # mlx-audio voice (Aiden, Ryan, Dylan, Eric, etc.)
+      instruct_prompt: "A clear, friendly voice."
 
 # ── Automation ────────────────────────
 scheduler:
@@ -68,9 +71,6 @@ scheduler:
     - name: "peer-heartbeat"
       enabled: false         # Enable if using agent-comms with peers
       interval: "5m"
-    - name: "upstream-sync"
-      enabled: true
-      cron: "0 8 * * 1"      # Monday 8am — alongside health check
 
 # ── Security ──────────────────────────
 security:
