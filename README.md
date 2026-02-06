@@ -21,6 +21,7 @@ Clone this repo, run setup, and you have an AI assistant that survives terminal 
 - **Rate limiting** - Configurable limits on incoming and outgoing messages
 - **Scheduled automation** - Context monitoring, inbox checks, todo reminders, memory consolidation, health checks
 - **Wake-on-message** - Auto-starts session when you send a Telegram message
+- **Voice integration** - Talk to your assistant via wake word or push-to-talk from a secondary machine
 
 ### Development Workflow
 - **Spec > Plan > Validate > Build** - Structured software development
@@ -109,6 +110,13 @@ daemon/src/
         index.ts                   # Email adapter factory
         jmap-provider.ts           # Fastmail provider
         graph-provider.ts          # Microsoft 365 provider
+  voice/
+    voice-server.ts                # Voice HTTP endpoints (transcribe, synthesize, speak)
+    voice-client-registry.ts       # Track connected voice clients
+    stt.ts                         # Speech-to-text via whisper-cli
+    tts.ts                         # Text-to-speech via mlx-audio worker
+    tts-worker.py                  # Persistent TTS microservice
+    audio-utils.ts                 # WAV file utilities
   automation/
     scheduler.ts                   # Cron + interval task runner with busy checks
     tasks/
@@ -295,6 +303,24 @@ security add-generic-password -a "assistant" -s "credential-graph-user-email" -w
 
 See `.claude/knowledge/integrations/fastmail.md` and `.claude/knowledge/integrations/microsoft-graph.md` for full setup guides.
 
+### Voice
+
+Talk to your assistant using your voice from a secondary machine (e.g., laptop). The voice system uses a client-server architecture:
+
+- **Voice client** (`voice-client/`) runs on the machine with speakers and mic
+- **Daemon voice server** runs on the CC4Me machine, handles STT and TTS
+- Communication over HTTP on your local network
+
+**Two input modes:**
+- **Wake word** - Say a trigger phrase (e.g., "Hey Jarvis") to start listening
+- **Push-to-talk** - Hold a key (default: right Command) to speak
+
+**Two response modes (automatic based on channel):**
+- **Voice channel** - Full voice pipeline: speech in, speech out (STT -> Claude -> TTS)
+- **Telegram channel** - Voice input, text response via Telegram (with typing indicator)
+
+See [docs/voice-integration.md](docs/voice-integration.md) for the full setup guide including prerequisites, configuration, and troubleshooting.
+
 ### Persistent Service (launchd)
 
 The daemon runs as a single macOS background service:
@@ -419,6 +445,12 @@ CC4Me/
 │   ├── init.sh                      # Project initialization
 │   ├── telegram-send.sh             # Manual Telegram send (silent mode)
 │   └── telegram-setup/              # Telegram webhook setup tools
+├── voice-client/                    # Voice client (runs on laptop/secondary machine)
+│   ├── voice_client.py              # Main voice client script
+│   ├── config.yaml                  # Voice client configuration
+│   ├── install.sh                   # Setup script (creates venv, installs deps)
+│   ├── requirements.txt             # Python dependencies
+│   └── com.cc4me.voice-client.plist # launchd template for auto-start
 ├── cc4me.config.yaml                # Your config (copy from template)
 ├── cc4me.config.yaml.template       # Default config template
 ├── launchd/
