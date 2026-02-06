@@ -302,6 +302,9 @@ class BMOVoiceClient:
         self.ww_model_name = ww["model"]
         self.ww_threshold = ww["threshold"]
         self.ww_framework = ww["inference_framework"]
+        self.ww_patience = ww.get("patience", 2)
+        self.ww_vad_threshold = ww.get("vad_threshold", 0.5)
+        self._ww_model_key = None  # Set after model loads
 
         # Playback
         self.volume = config["playback"]["volume"]
@@ -375,13 +378,21 @@ class BMOVoiceClient:
 
         model_path = self.ww_model_name
 
+        # Common kwargs — vad_threshold enables Silero VAD gating so
+        # non-speech sounds (keyboard clicks, taps) get filtered out
+        model_kwargs = dict(
+            inference_framework=self.ww_framework,
+            vad_threshold=self.ww_vad_threshold,
+        )
+
         # If it's a file path, use it directly
         if os.path.isfile(model_path):
             log.info("Loading custom wake word model: %s", model_path)
             self._oww_model = OWWModel(
                 wakeword_models=[model_path],
-                inference_framework=self.ww_framework,
+                **model_kwargs,
             )
+            self._ww_model_key = os.path.splitext(os.path.basename(model_path))[0]
         else:
             # Use pre-trained model by name
             log.info("Downloading pre-trained models (if needed)")
@@ -389,10 +400,12 @@ class BMOVoiceClient:
             log.info("Loading pre-trained wake word model: %s", model_path)
             self._oww_model = OWWModel(
                 wakeword_models=[model_path],
-                inference_framework=self.ww_framework,
+                **model_kwargs,
             )
+            self._ww_model_key = model_path
 
-        log.info("Wake word model loaded")
+        log.info("Wake word model loaded (vad_threshold=%.2f, patience=%d)",
+                 self.ww_vad_threshold, self.ww_patience)
 
     # -- Daemon communication ------------------------------------------------
 
@@ -579,8 +592,8 @@ class BMOVoiceClient:
 
     def _listen_loop(self):
         """Main loop: listen for wake word, record, send, play response."""
-        log.info("Listening for wake word '%s' (threshold=%.2f)",
-                 self.ww_model_name, self.ww_threshold)
+        log.info("Listening for wake word '%s' (threshold=%.2f, patience=%d, vad=%.2f)",
+                 self.ww_model_name, self.ww_threshold, self.ww_patience, self.ww_vad_threshold)
 
         try:
             with sd.InputStream(
@@ -605,11 +618,23 @@ class BMOVoiceClient:
 
                     for model_name, score in prediction.items():
                         if score > self.ww_threshold:
-                            log.info("Wake word detected! (%s: %.3f)",
-                                     model_name, score)
-                            self._handle_wake()
-                            # Reset model scores after detection
-                            self._oww_model.reset()
+                            # Confirmation: noise spikes drop instantly,
+                            # real speech sustains across frames. Read one
+                            # more frame and verify the score stays elevated.
+                            confirm_frame, _ = stream.read(self.frame_size)
+                            confirm_data = confirm_frame[:, 0]
+                            confirm_pred = self._oww_model.predict(confirm_data)
+                            confirm_score = confirm_pred.get(model_name, 0)
+
+                            if confirm_score > self.ww_threshold * 0.3:
+                                log.info("Wake word confirmed! (%s: %.3f → %.3f)",
+                                         model_name, score, confirm_score)
+                                self._handle_wake()
+                                self._oww_model.reset()
+                            else:
+                                log.info("Wake word rejected (noise spike: %s: %.3f → %.3f)",
+                                         model_name, score, confirm_score)
+                                self._oww_model.reset()
                             break
 
         except KeyboardInterrupt:

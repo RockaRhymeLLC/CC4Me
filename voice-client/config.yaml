@@ -14,8 +14,10 @@ client:
 wake_word:
   # Path to custom model file, or a pre-trained model name (e.g., "hey_jarvis")
   model: "hey_bee_mo.onnx"
-  threshold: 0.7            # Detection confidence threshold (0.0-1.0)
+  threshold: 0.5            # Detection confidence threshold (0.0-1.0)
   inference_framework: "onnx"
+  patience: 2               # Consecutive frames above threshold needed (filters noise spikes)
+  vad_threshold: 0.5        # Silero VAD threshold — filters non-speech sounds (0 = disabled)
 
 # Audio
 audio:
