@@ -14,7 +14,7 @@ client:
 wake_word:
   # Path to custom model file, or a pre-trained model name (e.g., "hey_jarvis")
   model: "hey_bee_mo.onnx"
-  threshold: 0.5            # Detection confidence threshold (0.0-1.0)
+  threshold: 0.7            # Detection confidence threshold (0.0-1.0)
   inference_framework: "onnx"
 
 # Audio
