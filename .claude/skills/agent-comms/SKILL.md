@@ -67,9 +67,8 @@ Peers are configured in `cc4me.config.yaml` under `agent-comms.peers`. Each peer
 
 ## Architecture
 
-- **Inbound**: Daemon receives on `POST /agent/message`, validates auth (bearer token from Keychain), queues if busy or injects immediately with `[Agent] Name:` prefix
+- **Inbound**: Daemon receives on `POST /agent/message`, validates auth (bearer token from Keychain), injects directly into tmux session with `[Agent] Name:` prefix (same as Telegram — tmux buffers input natively)
 - **Outbound**: Daemon sends via `curl` subprocess (not Node.js `http.request`, which has macOS LAN networking issues)
-- **Queue**: FIFO queue with 3-second drain interval, delivers when agent goes idle
 - **Auth**: Shared secret stored in macOS Keychain (`credential-agent-comms-secret`)
 - **Logging**: All messages logged as JSONL to `logs/agent-comms.log`
 
