@@ -44,9 +44,31 @@ export interface EmailChannelConfig {
   providers: EmailProviderConfig[];
 }
 
+export interface VoiceSttConfig {
+  model?: string;           // Whisper model name (e.g., "small.en")
+  model_path?: string;      // Full path to model file
+  language?: string;        // Language code (default: "en")
+}
+
+export interface VoiceTtsConfig {
+  port?: number;            // TTS worker port (default: 3848)
+  engine?: string;          // TTS engine name
+  model?: string;           // TTS model path
+  speaker?: string;         // Voice name
+  voice?: string;           // Voice ID/name
+  instruct_prompt?: string; // TTS style instruction
+}
+
+export interface VoiceChannelConfig {
+  enabled: boolean;
+  stt: VoiceSttConfig;
+  tts: VoiceTtsConfig;
+}
+
 export interface ChannelsConfig {
   telegram: TelegramChannelConfig;
   email: EmailChannelConfig;
+  voice?: VoiceChannelConfig;
 }
 
 export interface TaskScheduleConfig {
