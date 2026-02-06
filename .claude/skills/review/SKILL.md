@@ -106,10 +106,6 @@ Evaluate across these dimensions, thinking like a senior engineer doing a design
 - Are there gaps in test coverage for critical paths?
 - Are story dependencies reasonable?
 
-### Step 3: Format the Review
-
-Output a structured review with clear, actionable feedback.
-
 ## Output Format
 
 ```markdown
