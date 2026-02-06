@@ -97,6 +97,36 @@ export function isActivelyProcessing(): boolean {
 }
 
 /**
+ * Check if Claude Code is idle — waiting for user input.
+ * Looks for the `❯` input prompt in the pane, which only appears
+ * when Claude Code is waiting for the next message (not processing,
+ * not mid-response, not running tools).
+ *
+ * Use this for tasks that should only run when the assistant has
+ * nothing to do (e.g., todo reminders, proactive nudges).
+ */
+export function isIdle(): boolean {
+  if (!sessionExists()) return false;
+
+  const pane = capturePane();
+
+  // The ❯ prompt appears on its own line when Claude Code is waiting for input.
+  // Check the last few non-empty lines for the prompt character.
+  const lines = pane.split('\n').filter(l => l.trim().length > 0);
+  const lastLines = lines.slice(-5);
+
+  for (const line of lastLines) {
+    const trimmed = line.trim();
+    // The prompt is ❯ possibly followed by user-typed text
+    if (trimmed === '❯' || trimmed.startsWith('❯ ')) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Check if Claude is busy (includes transcript recency).
  * Includes all pane indicator checks PLUS recent transcript modification.
  * Use this for scheduler tasks where you want to avoid interrupting
