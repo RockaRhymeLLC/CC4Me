@@ -1,7 +1,7 @@
 ---
 name: todo
 description: Manage persistent to-dos that survive across sessions. List, add, update, and complete to-dos stored in .claude/state/todos/.
-argument-hint: [list | add "description" | update id | complete id | show id]
+argument-hint: [list | add "description" | note id "text" | update id | complete id | show id]
 ---
 
 # To-Do Management
@@ -26,10 +26,20 @@ Parse $ARGUMENTS to determine the action:
 ### Show To-Do
 - `show {id}` or `{id}` - Show to-do details including all actions/history
 
+### Add Work Note
+- `note {id} "Progress update text"` - Add a work note to a to-do
+- Work notes track progress, decisions, blockers, and context for resuming work
+- Automatically extract references from the note text:
+  - **Files**: paths like `src/foo.ts`, `daemon/src/core/main.ts`
+  - **Commits**: hashes like `abc1234` or `6f6f60c`
+  - **PRs**: references like `PR #28` or `#123`
+- Store extracted refs in the action's `files`, `commits`, `prs` arrays
+- Notes are displayed prominently in the "Work Log" section of `/todo show`
+
 ### Update To-Do
 - `update {id} status:in-progress` - Change status
 - `update {id} priority:high` - Change priority
-- `update {id} note:"Progress note"` - Add action/note to history
+- `update {id} note:"Progress note"` - Add action/note to history (same as `note` command)
 - `update {id} blocked:"Waiting on X"` - Mark as blocked with reason
 
 ### Complete To-Do
@@ -85,25 +95,76 @@ See `reference.md` for the full JSON schema.
 ```
 ## To-Do [32]: Implement login flow
 
-Priority: HIGH | Status: open | Due: 2026-02-01
+Priority: HIGH | Status: in-progress | Due: 2026-02-01
 
 ### Description
 Build the login flow with email/password authentication.
 
-### Actions
+### Work Log
+- 2026-01-28 14:30 - Started research on auth libraries
+- 2026-01-29 10:00 - Chose passport.js, set up middleware scaffold
+  Files: src/auth/middleware.ts, src/auth/passport.ts
+  Commits: abc1234
+- 2026-01-29 16:00 - Login endpoint working, need to add validation
+  Files: src/routes/auth.ts
+  Commits: def5678
+
+### History
 - 2026-01-28 10:00 - Created
-- 2026-01-28 14:30 - Note: Started research on auth libraries
-- 2026-01-28 16:00 - Status changed: in-progress
+- 2026-01-28 16:00 - Status: in-progress
 
 ### Next Step
-Set up authentication middleware
+Add email validation and password strength check
 ```
+
+When displaying a to-do with `/todo show`:
+- **Work Log** shows only `note` type actions (the actual progress)
+- **History** shows status changes, priority changes, created/completed events
+- **Files/Commits/PRs** are shown indented under the note they belong to
+- This separation makes it easy to quickly see what work was done vs. bookkeeping
+
+## Devil's Advocate Check
+
+When picking up a **non-trivial to-do**, spawn a quick devil's advocate sub-agent before diving into the work. This is lightweight — not a full `/review`, just a sanity check on your approach.
+
+### When to Trigger
+
+**Do the check for:**
+- To-dos that involve design decisions or architecture choices
+- Multi-step implementation work (anything that would take more than a few minutes)
+- New features, integrations, or capability additions
+- Self-improvement work (skills, workflows, core behaviors)
+
+**Skip the check for:**
+- Simple, mechanical tasks ("reply to email", "check calendar", "clean up temp files")
+- Research/exploration tasks ("look into X", "find out about Y")
+- Tasks where someone already reviewed the approach (post-`/review` or post-peer-review)
+
+### How It Works
+
+Before you start working on the to-do, briefly outline your planned approach (2-3 sentences), then spawn a Task sub-agent:
+
+```
+Use the Task tool with subagent_type="general-purpose":
+- Give it your planned approach and the to-do description
+- Ask it to challenge: Is this overcomplicated? Is there a simpler way? What could go wrong?
+- Ask for a GO / PAUSE verdict and any specific concerns
+- Keep it fast — this should take seconds, not minutes
+```
+
+If the sub-agent says PAUSE with good reasons, reconsider your approach before proceeding. If it says GO, carry on with confidence.
+
+### Peer Review Gate
+
+For to-dos involving **shared work** (new skills, daemon features, upstream pipeline, agent-comms), also consider sending your peer agent a heads-up via agent-comms before starting. See `/review` Peer Review Protocol for the full criteria. Not every to-do needs peer input — but shared capabilities always benefit from a second perspective.
 
 ## Integration
 
 - To-dos can be referenced from calendar.md via `[todo:id]` syntax
 - SessionStart hook loads high-priority to-dos into context
 - PreCompact hook saves active to-do state
+- Devil's advocate sub-agent runs automatically for non-trivial work
+- Peer review triggered selectively for shared capabilities
 
 ## Notes
 
