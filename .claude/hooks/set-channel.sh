@@ -17,7 +17,7 @@ fi
 INPUT=$(cat)
 PROMPT=$(echo "$INPUT" | /usr/bin/jq -r '.prompt // empty')
 
-if [[ "$PROMPT" == "[Telegram]"* ]]; then
+if [[ "$PROMPT" == "[Telegram]"* ]] || [[ "$PROMPT" == "[Voice]"* ]]; then
   # Keep verbose if already in verbose mode
   if [ "$CURRENT" = "telegram-verbose" ]; then
     echo "telegram-verbose" > "$CHANNEL_FILE"

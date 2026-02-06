@@ -22,7 +22,7 @@ import { transcribe } from './stt.js';
 import { saveTempAudio, cleanupTemp } from './audio-utils.js';
 import { synthesize, startWorker, stopWorker } from './tts.js';
 import { injectText, isActivelyProcessing } from '../core/session-bridge.js';
-import { registerVoicePending, clearVoicePending, isVoicePending } from '../comms/channel-router.js';
+import { registerVoicePending, clearVoicePending, isVoicePending, getChannel } from '../comms/channel-router.js';
 
 const log = createLogger('voice-server');
 
@@ -277,51 +277,66 @@ export async function handleVoiceRequest(
 
       log.info('Voice pipeline: STT complete', { text: sttText });
 
-      // Step 2: Register voice-pending callback and inject into Claude
-      const responseText = await new Promise<string>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          clearVoicePending();
-          reject(new Error('Claude did not respond within 30 seconds'));
-        }, VOICE_RESPONSE_TIMEOUT_MS);
+      // Check channel to determine response routing
+      const channel = getChannel();
 
-        registerVoicePending((text: string) => {
-          clearTimeout(timeout);
-          resolve(text);
+      if (channel === 'voice') {
+        // Full voice pipeline: STT → Claude → TTS → audio response
+        const responseText = await new Promise<string>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            clearVoicePending();
+            reject(new Error('Claude did not respond within 30 seconds'));
+          }, VOICE_RESPONSE_TIMEOUT_MS);
+
+          registerVoicePending((text: string) => {
+            clearTimeout(timeout);
+            resolve(text);
+          });
+
+          const injected = injectText(`[Voice] Dave: ${sttText}`);
+          if (!injected) {
+            clearTimeout(timeout);
+            clearVoicePending();
+            reject(new Error('Failed to inject text into Claude session'));
+          }
         });
 
-        // Inject transcribed text into Claude's tmux session
+        log.info('Voice pipeline: Claude responded', { chars: responseText.length });
+
+        // TTS — synthesize Claude's response
+        const ttsInput = responseText.length > MAX_TTS_CHARS
+          ? responseText.substring(0, MAX_TTS_CHARS - 3) + '...'
+          : responseText;
+
+        const responseAudio = await synthesize(ttsInput);
+
+        log.info('Voice pipeline: TTS complete', {
+          responseChars: responseText.length,
+          ttsChars: ttsInput.length,
+          audioBytes: responseAudio.length,
+        });
+
+        res.writeHead(200, {
+          'Content-Type': 'audio/wav',
+          'X-Transcription': encodeURIComponent(sttText),
+          'X-Response-Text': encodeURIComponent(responseText),
+          'Content-Length': String(responseAudio.length),
+        });
+        res.end(responseAudio);
+      } else {
+        // Voice input, text output: inject into Claude, response goes via current channel
         const injected = injectText(`[Voice] Dave: ${sttText}`);
         if (!injected) {
-          clearTimeout(timeout);
-          clearVoicePending();
-          reject(new Error('Failed to inject text into Claude session'));
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Failed to inject text into Claude session' }));
+          return true;
         }
-      });
 
-      log.info('Voice pipeline: Claude responded', { chars: responseText.length });
+        log.info('Voice pipeline: text injected, response via channel', { text: sttText, channel });
 
-      // Step 3: TTS — synthesize Claude's response
-      // Truncate if needed to stay within TTS limits
-      const ttsInput = responseText.length > MAX_TTS_CHARS
-        ? responseText.substring(0, MAX_TTS_CHARS - 3) + '...'
-        : responseText;
-
-      const responseAudio = await synthesize(ttsInput);
-
-      log.info('Voice pipeline: TTS complete', {
-        responseChars: responseText.length,
-        ttsChars: ttsInput.length,
-        audioBytes: responseAudio.length,
-      });
-
-      // Step 4: Send audio response
-      res.writeHead(200, {
-        'Content-Type': 'audio/wav',
-        'X-Transcription': encodeURIComponent(sttText),
-        'X-Response-Text': encodeURIComponent(responseText),
-        'Content-Length': String(responseAudio.length),
-      });
-      res.end(responseAudio);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ text: sttText, responseChannel: channel }));
+      }
 
     } catch (err) {
       clearVoicePending(); // Clean up in case of error

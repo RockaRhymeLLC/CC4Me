@@ -31,6 +31,13 @@ import requests
 import sounddevice as sd
 import yaml
 
+# Optional: pynput for push-to-talk hotkey
+try:
+    from pynput import keyboard
+    PYNPUT_AVAILABLE = True
+except ImportError:
+    PYNPUT_AVAILABLE = False
+
 logging.basicConfig(
     level=logging.INFO,
     format="[bmo-voice] %(asctime)s %(levelname)s %(message)s",
@@ -105,6 +112,15 @@ def play_chime_sound(volume: float = 1.0):
     audio = np.concatenate([t1, gap, t2, gap, t3])
     sd.play(audio, sr)
     sd.wait()
+
+
+def play_sent_sound(volume: float = 1.0):
+    """Play a soft 'sent' confirmation — single descending tone."""
+    sr = 24000
+    t1 = generate_tone(880, 0.12, sr, 0.2 * volume)
+    sd.play(t1, sr)
+    sd.wait()
+
 
 # ---------------------------------------------------------------------------
 # Confirmation/rejection phrase detection
@@ -281,8 +297,17 @@ class BMOVoiceClient:
         self.follow_up_duration = conv.get("follow_up_duration", 3.0)
         self.enable_stop_interrupt = conv.get("enable_stop_interrupt", True)
 
+        # Push-to-talk
+        ptt = config.get("push_to_talk", {})
+        self.ptt_enabled = ptt.get("enabled", False) and PYNPUT_AVAILABLE
+        self.ptt_key = ptt.get("key", "right_cmd")
+        self._ptt_pressed = False
+        self._ptt_listener = None
+
         # Interrupt flag (set by interrupt detector during playback)
         self._interrupted = False
+        # Set when response is routed to text channel (not an error)
+        self._response_routed = False
 
         # Heartbeat
         self.heartbeat_interval = config["heartbeat"]["interval"]
@@ -310,6 +335,10 @@ class BMOVoiceClient:
         )
         self._heartbeat_thread.start()
 
+        # Start push-to-talk listener if enabled
+        if self.ptt_enabled:
+            self._start_ptt_listener()
+
         # Enter main listening loop
         self._listen_loop()
 
@@ -317,6 +346,8 @@ class BMOVoiceClient:
         """Shut down the voice client."""
         log.info("Stopping BMO voice client")
         self._running = False
+        if self._ptt_listener:
+            self._ptt_listener.stop()
         if hasattr(self, '_callback_server'):
             self._callback_server.stop()
         self._unregister()
@@ -394,6 +425,147 @@ class BMOVoiceClient:
             return ip
         except Exception:
             return "127.0.0.1"
+
+    # -- Push-to-talk --------------------------------------------------------
+
+    def _start_ptt_listener(self):
+        """Start the push-to-talk keyboard listener."""
+        if not PYNPUT_AVAILABLE:
+            log.warning("Push-to-talk requested but pynput not installed")
+            return
+
+        # Map config key names to pynput keys
+        key_map = {
+            "right_cmd": keyboard.Key.cmd_r,
+            "left_cmd": keyboard.Key.cmd_l,
+            "right_alt": keyboard.Key.alt_r,
+            "left_alt": keyboard.Key.alt_l,
+            "right_ctrl": keyboard.Key.ctrl_r,
+            "left_ctrl": keyboard.Key.ctrl_l,
+            "right_shift": keyboard.Key.shift_r,
+            "left_shift": keyboard.Key.shift_l,
+            "f18": keyboard.Key.f18,
+            "f19": keyboard.Key.f19,
+            "f20": keyboard.Key.f20,
+        }
+
+        self._ptt_target_key = key_map.get(self.ptt_key)
+        if not self._ptt_target_key:
+            log.warning("Unknown push-to-talk key: %s", self.ptt_key)
+            return
+
+        def on_press(key):
+            if key == self._ptt_target_key and not self._ptt_pressed:
+                self._ptt_pressed = True
+                log.info("Push-to-talk: key pressed")
+                # Trigger recording in a separate thread to not block the listener
+                threading.Thread(target=self._handle_ptt, daemon=True).start()
+
+        def on_release(key):
+            if key == self._ptt_target_key:
+                self._ptt_pressed = False
+                log.debug("Push-to-talk: key released")
+
+        self._ptt_listener = keyboard.Listener(on_press=on_press, on_release=on_release)
+        self._ptt_listener.start()
+        log.info("Push-to-talk enabled (key: %s)", self.ptt_key)
+
+    def _handle_ptt(self):
+        """Handle push-to-talk: record while key is held, then send."""
+        with self._lock:
+            if self.state != State.IDLE:
+                log.debug("PTT ignored — not idle")
+                return
+            self.state = State.LISTENING
+
+        play_listening_sound(self.volume)
+
+        # Record while key is held (or until silence after speech)
+        audio_data = self._record_ptt()
+
+        if audio_data is None or len(audio_data) == 0:
+            log.info("PTT: no speech captured")
+            with self._lock:
+                self.state = State.IDLE
+            return
+
+        # Send to daemon (same as wake word flow)
+        self.state = State.PROCESSING
+        self._response_routed = False
+        response_audio = self._send_to_daemon(audio_data)
+
+        if response_audio is None:
+            if self._response_routed:
+                play_sent_sound(self.volume)
+            else:
+                play_error_sound(self.volume)
+            with self._lock:
+                self.state = State.IDLE
+            return
+
+        # Play response
+        self.state = State.SPEAKING
+        self._play_audio_with_interrupt(response_audio)
+
+        with self._lock:
+            self.state = State.IDLE
+
+    def _record_ptt(self) -> bytes | None:
+        """Record audio while push-to-talk key is held.
+
+        Continues recording while _ptt_pressed is True, plus captures
+        trailing audio after key release until silence.
+        """
+        log.info("PTT recording...")
+        frames: list[np.ndarray] = []
+        silence_count = 0
+        silence_frames_needed = int(
+            self.silence_duration * self.sample_rate / self.frame_size
+        )
+        max_frames = int(self.max_recording * self.sample_rate / self.frame_size)
+
+        try:
+            with sd.InputStream(
+                samplerate=self.sample_rate,
+                channels=self.channels,
+                dtype="int16",
+                blocksize=self.frame_size,
+            ) as stream:
+                for i in range(max_frames):
+                    if not self._running:
+                        return None
+
+                    data, _ = stream.read(self.frame_size)
+                    frame = data[:, 0]
+                    frames.append(frame.copy())
+
+                    energy = np.abs(frame).mean()
+
+                    # While key is held, keep recording regardless of silence
+                    if self._ptt_pressed:
+                        silence_count = 0
+                        continue
+
+                    # Key released — wait for silence to finish the thought
+                    if energy > self.silence_threshold:
+                        silence_count = 0
+                    else:
+                        silence_count += 1
+
+                    if silence_count >= silence_frames_needed:
+                        log.info("PTT: silence detected, stopping")
+                        break
+
+        except Exception as e:
+            log.error("PTT recording error: %s", e)
+            return None
+
+        if not frames:
+            return None
+
+        all_audio = np.concatenate(frames)
+        log.info("PTT recorded %.1fs of audio", len(all_audio) / self.sample_rate)
+        return self._pcm_to_wav(all_audio)
 
     # -- Main listening loop -------------------------------------------------
 
@@ -476,9 +648,15 @@ class BMOVoiceClient:
 
         # Send to daemon
         self.state = State.PROCESSING
+        self._response_routed = False
         response_audio = self._send_to_daemon(audio_data)
         if response_audio is None:
-            play_error_sound(self.volume)
+            if self._response_routed:
+                play_sent_sound(self.volume)
+                # Still enter follow-up mode for Telegram routing
+                self._do_follow_up_loop()
+            else:
+                play_error_sound(self.volume)
             return
 
         # Play response (with optional stop interrupt detection)
@@ -491,21 +669,35 @@ class BMOVoiceClient:
             return
 
         # Enter follow-up listening window (conversation mode)
-        if self.follow_up_duration > 0:
-            log.info("Listening for follow-up (%.1fs)...", self.follow_up_duration)
-            follow_up_audio = self._listen_for_follow_up()
-            if follow_up_audio is not None:
-                log.info("Follow-up detected, continuing conversation")
-                # Recursively handle the follow-up (no wake word needed)
-                self.state = State.PROCESSING
-                response_audio = self._send_to_daemon(follow_up_audio)
-                if response_audio:
-                    self.state = State.SPEAKING
-                    self._play_audio_with_interrupt(response_audio)
-                    # One level of follow-up (could recurse deeper, but
-                    # keeping it simple — one follow-up per wake word)
+        self._do_follow_up_loop()
+
+    def _do_follow_up_loop(self):
+        """Listen for follow-up utterances after a response (voice or Telegram)."""
+        if self.follow_up_duration <= 0:
+            return
+
+        log.info("Listening for follow-up (%.1fs)...", self.follow_up_duration)
+        follow_up_audio = self._listen_for_follow_up()
+        if follow_up_audio is not None:
+            log.info("Follow-up detected, continuing conversation")
+            # Handle the follow-up (no wake word needed)
+            self.state = State.PROCESSING
+            self._response_routed = False
+            response_audio = self._send_to_daemon(follow_up_audio)
+            if response_audio:
+                self.state = State.SPEAKING
+                self._play_audio_with_interrupt(response_audio)
+                # Recurse for another follow-up opportunity
+                if not self._interrupted:
+                    self._do_follow_up_loop()
                 else:
-                    play_error_sound(self.volume)
+                    self._interrupted = False
+            elif self._response_routed:
+                play_sent_sound(self.volume)
+                # Recurse for another follow-up even after Telegram routing
+                self._do_follow_up_loop()
+            else:
+                play_error_sound(self.volume)
 
     def _record_utterance(self) -> bytes | None:
         """Record audio until silence is detected. Returns WAV bytes."""
@@ -584,16 +776,31 @@ class BMOVoiceClient:
             )
 
             if r.status_code == 200:
-                transcription = unquote(
-                    r.headers.get("X-Transcription", "")
-                )
-                response_text = unquote(
-                    r.headers.get("X-Response-Text", "")
-                )
-                log.info("Transcription: %s", transcription)
-                log.info("Response: %s",
-                         response_text[:100] + ("..." if len(response_text) > 100 else ""))
-                return r.content
+                content_type = r.headers.get("Content-Type", "")
+
+                if "audio/" in content_type:
+                    # Full voice pipeline — daemon returned TTS audio
+                    transcription = unquote(
+                        r.headers.get("X-Transcription", "")
+                    )
+                    response_text = unquote(
+                        r.headers.get("X-Response-Text", "")
+                    )
+                    log.info("Transcription: %s", transcription)
+                    log.info("Response: %s",
+                             response_text[:100] + ("..." if len(response_text) > 100 else ""))
+                    return r.content
+                else:
+                    # JSON response — voice input accepted, response via other channel
+                    self._response_routed = True
+                    try:
+                        data = r.json()
+                        log.info("Transcription: %s", data.get("text", ""))
+                        channel = data.get("responseChannel", "unknown")
+                        log.info("Response routed to %s (no audio)", channel)
+                    except Exception:
+                        log.info("Non-audio response from daemon")
+                    return None
             else:
                 try:
                     err = r.json()
@@ -648,11 +855,14 @@ class BMOVoiceClient:
                     if not has_speech:
                         waited += 1
                         if energy > self.silence_threshold:
+                            log.info("Follow-up: speech detected (energy=%d > threshold=%d)",
+                                     int(energy), self.silence_threshold)
                             has_speech = True
                             frames.append(frame.copy())
                             silence_count = 0
                         elif waited >= start_wait_frames:
                             # No speech within follow-up window
+                            log.debug("Follow-up: no speech detected in window")
                             return None
                     else:
                         frames.append(frame.copy())

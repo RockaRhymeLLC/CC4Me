@@ -17,6 +17,8 @@ const log = createLogger('scheduler');
 export interface ScheduledTask {
   name: string;
   run: () => Promise<void>;
+  /** If false, task handles session checks internally (e.g. has a fallback). Default: true. */
+  requiresSession?: boolean;
 }
 
 interface RunningTask {
@@ -46,14 +48,16 @@ async function executeTask(running: RunningTask): Promise<boolean> {
   // Skip if Claude is actively processing (mid-response)
   // Individual tasks handle their own busy-state logic if they need
   // the stricter check (e.g., context-watchdog uses isBusy() internally)
-  if (isActivelyProcessing()) {
-    log.debug(`Skipping ${running.task.name}: Claude is actively processing`);
+  const needsSession = running.task.requiresSession !== false;
+
+  if (needsSession && isActivelyProcessing()) {
+    log.info(`Skipping ${running.task.name}: Claude is actively processing`);
     return false;
   }
 
   // Skip if no session (for tasks that need to inject)
-  if (!sessionExists()) {
-    log.debug(`Skipping ${running.task.name}: no session`);
+  if (needsSession && !sessionExists()) {
+    log.warn(`Skipping ${running.task.name}: no tmux session`);
     return false;
   }
 

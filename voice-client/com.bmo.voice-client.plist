@@ -7,13 +7,12 @@
 
     <key>ProgramArguments</key>
     <array>
-        <!-- Update this path to match where you cloned CC4Me-BMO -->
-        <string>/Users/dave/CC4Me-BMO/voice-client/.venv/bin/python3</string>
-        <string>/Users/dave/CC4Me-BMO/voice-client/bmo_voice.py</string>
+        <string>/Users/davidhurley/voice-client/.venv/bin/python3</string>
+        <string>/Users/davidhurley/voice-client/bmo_voice.py</string>
     </array>
 
     <key>WorkingDirectory</key>
-    <string>/Users/dave/CC4Me-BMO/voice-client</string>
+    <string>/Users/davidhurley/voice-client</string>
 
     <key>RunAtLoad</key>
     <true/>

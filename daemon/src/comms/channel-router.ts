@@ -14,7 +14,7 @@ import { createLogger } from '../core/logger.js';
 
 const log = createLogger('channel-router');
 
-export type Channel = 'terminal' | 'telegram' | 'telegram-verbose' | 'silent';
+export type Channel = 'terminal' | 'telegram' | 'telegram-verbose' | 'silent' | 'voice';
 
 type MessageHandler = (text: string) => void;
 
@@ -61,7 +61,7 @@ export function getChannel(): Channel {
   try {
     const channelFile = resolveProjectPath('.claude', 'state', 'channel.txt');
     const content = fs.readFileSync(channelFile, 'utf8').trim();
-    if (['terminal', 'telegram', 'telegram-verbose', 'silent'].includes(content)) {
+    if (['terminal', 'telegram', 'telegram-verbose', 'silent', 'voice'].includes(content)) {
       return content as Channel;
     }
   } catch {
@@ -135,13 +135,17 @@ export function routeOutgoingMessage(text: string, thinking?: string): void {
   switch (channel) {
     case 'terminal':
     case 'silent':
-      // No external delivery
+    case 'voice':
+      // No external delivery (voice responses are captured via voice-pending callback above)
       return;
 
     case 'telegram':
+      log.info(`Routing to telegram: ${text.length} chars, handler=${!!_telegramHandler}`);
       if (_telegramHandler) {
         try {
+          log.info('Calling telegram handler now');
           _telegramHandler(text);
+          log.info('Telegram handler returned');
         } catch (err) {
           log.error('Telegram handler error', { error: err instanceof Error ? err.message : String(err) });
         }

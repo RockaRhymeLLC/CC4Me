@@ -42,7 +42,8 @@ Examples:
 5. **Create tests** - One JSON per test in `plans/tests/`
 6. **Link to to-do** - If this plan was spawned from a to-do, add references
 7. **Run /validate** - Verify completeness
-8. **Suggest /build** - Ready for implementation
+8. **Suggest /review** - Sanity-check before building (catches overcomplexity, simpler alternatives)
+9. **Suggest /build** - Ready for implementation
 
 ## Output Structure
 

@@ -311,6 +311,7 @@ Each skill has detailed instructions in `.claude/skills/{name}/SKILL.md`.
 | `/skill-create` | Create new skills following best practices |
 | `/spec` | Create feature specifications |
 | `/plan` | Create implementation plans with stories/tests |
+| `/review` | Pre-build design review (complexity, scope, risks) |
 | `/build` | Implement features (test-driven) |
 | `/validate` | Verify spec-plan-implementation alignment |
 | `/upstream` | Contribute changes back to upstream CC4Me |
@@ -322,6 +323,7 @@ For building software, use the spec-driven workflow:
 ```
 /spec feature-name    → Create specification
 /plan specs/....md    → Create plan with stories and tests
+/review plans/....md  → Pre-build sanity check (complexity, scope, risks)
 /build plans/....md   → Implement (stories + regression testing)
 /validate             → Verify alignment
 ```

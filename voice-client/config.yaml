@@ -32,8 +32,13 @@ playback:
 
 # Conversation mode
 conversation:
-  follow_up_duration: 3.0    # Seconds to listen for follow-up after response
+  follow_up_duration: 10.0   # Seconds to listen for follow-up (longer for Telegram latency)
   enable_stop_interrupt: false # Disabled — mic picks up speaker audio and false-triggers
+
+# Push-to-talk (hold key to speak without wake word)
+push_to_talk:
+  enabled: true
+  key: "right_cmd"           # Options: right_cmd, right_alt, right_ctrl, f18, etc.
 
 # Heartbeat
 heartbeat:
