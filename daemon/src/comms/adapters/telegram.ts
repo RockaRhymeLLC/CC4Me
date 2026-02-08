@@ -9,9 +9,11 @@
  * - Download photos and documents to local media directory
  * - Manage typing indicator loop
  * - Handle Siri Shortcut endpoint
+ * - Browser hand-off command interception and relay
  */
 
 import https from 'node:https';
+import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { getTelegramBotToken, getTelegramChatId, getShortcutAuthToken } from '../../core/keychain.js';
@@ -19,6 +21,7 @@ import { resolveProjectPath, loadConfig } from '../../core/config.js';
 import { sessionExists, startSession, injectText, isBusy } from '../../core/session-bridge.js';
 import { registerTelegramHandler, setChannel } from '../channel-router.js';
 import { createLogger } from '../../core/logger.js';
+import { getSidecarPort, isSidecarReady } from '../../browser/browser-sidecar.js';
 import {
   classifySender,
   addApproved,
@@ -35,6 +38,111 @@ const log = createLogger('telegram');
 
 const MEDIA_DIR_REL = '.claude/state/telegram-media';
 const REPLY_CHAT_ID_REL = '.claude/state/reply-chat-id.txt';
+
+// ── Browser hand-off state ─────────────────────────────────
+
+interface HandoffState {
+  active: boolean;
+  /** Chat ID to send screenshots/status to during hand-off */
+  replyChatId: string | null;
+  /** Timestamp when hand-off started */
+  startedAt: string | null;
+}
+
+const _handoff: HandoffState = {
+  active: false,
+  replyChatId: null,
+  startedAt: null,
+};
+
+/**
+ * Activate browser hand-off mode. Called from daemon endpoint.
+ * When active, safe sender messages matching hand-off patterns
+ * are intercepted and routed to the browser sidecar.
+ *
+ * @param replyChatId Optional chat ID override; defaults to _replyChatId or Keychain
+ * @returns true if hand-off was activated successfully
+ */
+export async function activateHandoff(replyChatId?: string): Promise<boolean> {
+  if (!isSidecarReady()) {
+    log.warn('Cannot activate hand-off: browser sidecar not ready');
+    return false;
+  }
+
+  _handoff.active = true;
+  _handoff.replyChatId = replyChatId ?? _replyChatId ?? getTelegramChatId();
+  _handoff.startedAt = new Date().toISOString();
+
+  // Tell the sidecar hand-off is active (for idle timeout tracking)
+  try {
+    const port = getSidecarPort();
+    const body = JSON.stringify({ active: true });
+    await new Promise<void>((resolve, reject) => {
+      const req = http.request({
+        hostname: 'localhost',
+        port,
+        path: '/handoff/set',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+      }, (res) => {
+        res.resume();
+        resolve();
+      });
+      req.on('error', reject);
+      req.write(body);
+      req.end();
+    });
+  } catch (err) {
+    log.warn('Failed to notify sidecar of hand-off start', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  log.info('Browser hand-off activated', { replyChatId: _handoff.replyChatId });
+  return true;
+}
+
+/**
+ * Deactivate browser hand-off mode.
+ */
+export async function deactivateHandoff(): Promise<void> {
+  _handoff.active = false;
+  _handoff.replyChatId = null;
+  _handoff.startedAt = null;
+
+  // Tell the sidecar hand-off is over
+  try {
+    const port = getSidecarPort();
+    const body = JSON.stringify({ active: false });
+    await new Promise<void>((resolve, reject) => {
+      const req = http.request({
+        hostname: 'localhost',
+        port,
+        path: '/handoff/set',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+      }, (res) => {
+        res.resume();
+        resolve();
+      });
+      req.on('error', reject);
+      req.write(body);
+      req.end();
+    });
+  } catch (err) {
+    log.warn('Failed to notify sidecar of hand-off stop', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  log.info('Browser hand-off deactivated');
+}
+
+export function isHandoffActive(): boolean {
+  return _handoff.active;
+}
+
+// ── Telegram types ──────────────────────────────────────────
 
 interface TelegramUpdate {
   update_id?: number;
@@ -153,7 +261,7 @@ function extractMessageContext(msg: TelegramMessage): MessageContext {
     ? msg.from.id.toString()
     : replyChatId;
 
-  // Only skip our own messages (not other bots — they may be peers like R2)
+  // Only skip our own messages (not other bots — they may be peers)
   const ownBotId = getOwnBotId();
   const isSelf = msg.from?.is_bot === true && msg.from?.id?.toString() === ownBotId;
 
@@ -254,7 +362,7 @@ async function downloadTelegramFile(fileId: string, filename: string): Promise<s
 
 // ── Send message ────────────────────────────────────────────
 
-function sendMessage(text: string, chatId?: string): void {
+export function sendMessage(text: string, chatId?: string): void {
   const token = getTelegramBotToken();
   const targetChatId = chatId ?? getTelegramChatId();
   if (!token || !targetChatId) {
@@ -298,6 +406,269 @@ function sendMessage(text: string, chatId?: string): void {
 
   req.write(data);
   req.end();
+}
+
+// ── Send photo (for hand-off screenshots) ────────────────────
+
+export function sendPhoto(photoBuffer: Buffer, chatId?: string, caption?: string): void {
+  const token = getTelegramBotToken();
+  const targetChatId = chatId ?? _handoff.replyChatId ?? _replyChatId ?? getTelegramChatId();
+  if (!token || !targetChatId) {
+    log.error('Cannot send photo: missing bot token or chat ID');
+    return;
+  }
+
+  const boundary = `----FormBoundary${Date.now()}`;
+  const parts: Buffer[] = [];
+
+  // chat_id part
+  parts.push(Buffer.from(
+    `--${boundary}\r\nContent-Disposition: form-data; name="chat_id"\r\n\r\n${targetChatId}\r\n`
+  ));
+
+  // caption part (optional)
+  if (caption) {
+    parts.push(Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="caption"\r\n\r\n${caption}\r\n`
+    ));
+  }
+
+  // photo part
+  parts.push(Buffer.from(
+    `--${boundary}\r\nContent-Disposition: form-data; name="photo"; filename="screenshot.png"\r\nContent-Type: image/png\r\n\r\n`
+  ));
+  parts.push(photoBuffer);
+  parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+
+  const body = Buffer.concat(parts);
+
+  const req = https.request({
+    hostname: 'api.telegram.org',
+    path: `/bot${token}/sendPhoto`,
+    method: 'POST',
+    headers: {
+      'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      'Content-Length': body.length,
+    },
+  }, (res) => {
+    let responseBody = '';
+    res.on('data', (chunk: Buffer) => { responseBody += chunk.toString(); });
+    res.on('end', () => {
+      try {
+        const result = JSON.parse(responseBody);
+        if (result.ok) {
+          log.debug('Sent photo to Telegram');
+        } else {
+          log.error('Telegram sendPhoto failed', { response: responseBody });
+        }
+      } catch {
+        log.error('Telegram sendPhoto: unparseable response');
+      }
+    });
+  });
+
+  req.on('error', (err) => {
+    log.error('Telegram sendPhoto error', { error: err.message });
+  });
+
+  req.write(body);
+  req.end();
+}
+
+// ── Browser hand-off command relay ──────────────────────────
+
+/**
+ * Forward a hand-off command to the browser sidecar.
+ * Returns the result to send back to the user via Telegram.
+ */
+async function relayHandoffCommand(command: string, args?: string): Promise<void> {
+  const port = getSidecarPort();
+  const chatId = _handoff.replyChatId ?? _replyChatId ?? getTelegramChatId() ?? '';
+
+  try {
+    if (command === 'type') {
+      // Forward text to the sidecar's type endpoint
+      // IMPORTANT: Do NOT log the text — it may contain passwords
+      const body = JSON.stringify({ text: args ?? '' });
+      const result = await sidecarRequest('POST', '/session/type', body);
+      if (result.screenshot) {
+        sendPhoto(Buffer.from(result.screenshot, 'base64'), chatId);
+      }
+    } else if (command === 'click') {
+      const body = JSON.stringify({ text: args ?? '' });
+      const result = await sidecarRequest('POST', '/session/click', body);
+      if (result.screenshot) {
+        sendPhoto(Buffer.from(result.screenshot, 'base64'), chatId);
+      }
+    } else if (command === 'scroll') {
+      const direction = args?.toLowerCase().includes('up') ? 'up' : 'down';
+      const body = JSON.stringify({ direction });
+      const result = await sidecarRequest('POST', '/session/scroll', body);
+      if (result.screenshot) {
+        sendPhoto(Buffer.from(result.screenshot, 'base64'), chatId);
+      }
+    } else if (command === 'screenshot') {
+      const result = await sidecarRequest('GET', '/session/screenshot');
+      if (result.screenshot) {
+        sendPhoto(Buffer.from(result.screenshot, 'base64'), chatId);
+      } else {
+        sendMessage('Could not take screenshot.', chatId);
+      }
+    } else if (command === 'done' || command === 'all yours') {
+      await deactivateHandoff();
+      sendMessage('Hand-off complete. Resuming autonomous browsing.', chatId);
+      // Notify Claude session
+      if (sessionExists()) {
+        injectText('[Browser] Hand-off complete. The human has finished their part. You can resume browsing.');
+      }
+    } else if (command === 'abort') {
+      // Close the session entirely
+      try {
+        await sidecarRequest('POST', '/session/stop', JSON.stringify({ saveContext: false }));
+      } catch { /* session may already be closed */ }
+      await deactivateHandoff();
+      sendMessage('Session aborted and closed.', chatId);
+      if (sessionExists()) {
+        injectText('[Browser] Hand-off aborted by human. Browser session closed.');
+      }
+    } else if (command === 'navigate' || command === 'goto' || command === 'go') {
+      if (!args) {
+        sendMessage('Usage: navigate <url>', chatId);
+        return;
+      }
+      const body = JSON.stringify({ url: args });
+      const result = await sidecarRequest('POST', '/session/navigate', body);
+      if (result.screenshot) {
+        sendPhoto(Buffer.from(result.screenshot, 'base64'), chatId);
+      }
+    } else {
+      sendMessage(
+        `Unknown command: "${command}"\n\n` +
+        `Available commands:\n` +
+        `• type: <text> — type into focused field\n` +
+        `• click: <text or selector> — click element\n` +
+        `• scroll up/down — scroll the page\n` +
+        `• screenshot — take a screenshot\n` +
+        `• navigate <url> — go to a URL\n` +
+        `• done / all yours — complete hand-off\n` +
+        `• abort — close session`,
+        chatId,
+      );
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log.error('Hand-off command failed', { command, error: msg });
+    sendMessage(`Command failed: ${msg}`, chatId);
+  }
+}
+
+/**
+ * Make an HTTP request to the browser sidecar.
+ */
+function sidecarRequest(method: string, path: string, body?: string): Promise<Record<string, unknown>> {
+  const port = getSidecarPort();
+  return new Promise((resolve, reject) => {
+    const headers: Record<string, string | number> = { 'Content-Type': 'application/json' };
+    if (body) headers['Content-Length'] = Buffer.byteLength(body);
+
+    const req = http.request({
+      hostname: 'localhost',
+      port,
+      path,
+      method,
+      headers,
+    }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (chunk: Buffer) => chunks.push(chunk));
+      res.on('end', () => {
+        const raw = Buffer.concat(chunks);
+
+        // For screenshots, the response may be binary (image/png)
+        const contentType = res.headers['content-type'] ?? '';
+        if (contentType.includes('image/')) {
+          resolve({ screenshot: raw.toString('base64') });
+          return;
+        }
+
+        try {
+          const json = JSON.parse(raw.toString('utf-8'));
+          if (res.statusCode && res.statusCode >= 400) {
+            reject(new Error(json.error ?? `HTTP ${res.statusCode}`));
+          } else {
+            resolve(json);
+          }
+        } catch {
+          // Non-JSON response
+          if (res.statusCode && res.statusCode >= 400) {
+            reject(new Error(`HTTP ${res.statusCode}`));
+          } else {
+            resolve({});
+          }
+        }
+      });
+    });
+    req.on('error', reject);
+    if (body) req.write(body);
+    req.end();
+  });
+}
+
+/**
+ * Check if a message from a safe sender should be intercepted as a hand-off command.
+ * Returns true if the message was handled as a hand-off command.
+ */
+function tryHandoffIntercept(text: string): boolean {
+  if (!_handoff.active) return false;
+
+  const lower = text.toLowerCase().trim();
+
+  // "type: <text>" — relay to browser, NEVER log the text
+  if (lower.startsWith('type:') || lower.startsWith('type ')) {
+    const payload = text.substring(text.indexOf(':') >= 0 && text.indexOf(':') <= 5 ? text.indexOf(':') + 1 : 5).trim();
+    relayHandoffCommand('type', payload);
+    return true;
+  }
+
+  // "click: <selector or text>"
+  if (lower.startsWith('click:') || lower.startsWith('click ')) {
+    const payload = text.substring(text.indexOf(':') >= 0 && text.indexOf(':') <= 6 ? text.indexOf(':') + 1 : 6).trim();
+    relayHandoffCommand('click', payload);
+    return true;
+  }
+
+  // "scroll up" / "scroll down"
+  if (lower.startsWith('scroll')) {
+    relayHandoffCommand('scroll', text);
+    return true;
+  }
+
+  // "screenshot" — take and send screenshot
+  if (lower === 'screenshot' || lower === 'ss') {
+    relayHandoffCommand('screenshot');
+    return true;
+  }
+
+  // "done" / "all yours" — complete hand-off
+  if (lower === 'done' || lower === 'all yours' || lower === 'allyours') {
+    relayHandoffCommand('done');
+    return true;
+  }
+
+  // "abort" — cancel and close session
+  if (lower === 'abort' || lower === 'cancel') {
+    relayHandoffCommand('abort');
+    return true;
+  }
+
+  // "navigate <url>" / "goto <url>" / "go <url>"
+  if (lower.startsWith('navigate ') || lower.startsWith('goto ') || lower.startsWith('go ')) {
+    const url = text.split(/\s+/).slice(1).join(' ').trim();
+    relayHandoffCommand('navigate', url);
+    return true;
+  }
+
+  // Not a hand-off command
+  return false;
 }
 
 // ── Incoming message handling ───────────────────────────────
@@ -495,6 +866,11 @@ async function processIncomingMessage(text: string, senderId: string, replyChatI
       return;
     }
 
+    // Check if this is a hand-off command (safe senders only)
+    if (tryHandoffIntercept(text)) {
+      return;
+    }
+
     // Normal safe sender flow
     await injectWithSessionWakeup(text, senderId, replyChatId, firstName, false);
     return;
@@ -652,7 +1028,7 @@ export function createTelegramRouter(): TelegramRouter {
 
       const ctx = extractMessageContext(msg);
 
-      // Skip our own messages to prevent self-loops (but process other bots like R2)
+      // Skip our own messages to prevent self-loops (but process other bots)
       if (ctx.isSelf) {
         log.debug(`Skipping own bot message in chat ${ctx.replyChatId}`);
         return;

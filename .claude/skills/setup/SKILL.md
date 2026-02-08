@@ -81,7 +81,7 @@ Creates: `.claude/state/safe-senders.json`
    - `credential-graph-user-email`
 6. Test: `node scripts/email/graph.js inbox`
 
-See `.claude/knowledge/integrations/microsoft-graph.md` for detailed Azure setup.
+See `.claude/skills/email/graph-reference.md` for detailed Azure setup.
 
 #### Persistent Session
 1. Explain tmux-based persistent sessions
