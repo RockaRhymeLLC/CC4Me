@@ -8,7 +8,7 @@ user-invocable: false
 
 Reference for working with Telegram.
 
-**See also**: `.claude/knowledge/integrations/telegram.md` for setup instructions and API basics.
+**See also**: [setup.md](setup.md) for setup instructions and API basics.
 
 ## Architecture Overview (v2 — Daemon)
 

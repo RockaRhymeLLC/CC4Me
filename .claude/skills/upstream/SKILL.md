@@ -80,9 +80,9 @@ Work through these groups in order. Each becomes a branch off `upstream/main` an
 - `scripts/email/jmap.js` (Fastmail)
 - `scripts/email/graph.js` (M365)
 - `scripts/email-reminder.sh`
-- `.claude/knowledge/integrations/fastmail.md`
-- `.claude/knowledge/integrations/microsoft-graph.md`
-- `.claude/knowledge/integrations/keychain.md`
+- `.claude/skills/email/fastmail-reference.md`
+- `.claude/skills/email/graph-reference.md`
+- `.claude/skills/keychain/reference.md`
 
 #### Group 3: Telegram Integration
 **Branch**: `feature/telegram-integration`
@@ -91,7 +91,7 @@ Work through these groups in order. Each becomes a branch off `upstream/main` an
 - `scripts/telegram-send.sh`
 - `scripts/transcript-watcher.sh`
 - `scripts/telegram-setup/*` (entire directory)
-- `.claude/knowledge/integrations/telegram.md`
+- `.claude/skills/telegram/setup.md`
 
 #### Group 4: Scheduled Jobs & Monitoring
 **Branch**: `feature/scheduled-jobs`
