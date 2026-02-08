@@ -239,6 +239,11 @@ class CallbackServer:
         self.port = port
         CallbackHandler.voice_client = voice_client
         self._server = HTTPServer(("0.0.0.0", port), CallbackHandler)
+        self._server.allow_reuse_address = True
+        self._server.socket.setsockopt(
+            __import__("socket").SOL_SOCKET,
+            __import__("socket").SO_REUSEADDR, 1
+        )
         self._thread: threading.Thread | None = None
 
     def start(self):
@@ -251,6 +256,7 @@ class CallbackServer:
 
     def stop(self):
         self._server.shutdown()
+        self._server.server_close()
         log.info("Callback server stopped")
 
 # ---------------------------------------------------------------------------
