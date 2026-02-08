@@ -72,23 +72,38 @@ export function capturePane(): string {
 
 /**
  * Check if Claude is actively generating a response (pane indicators only).
- * Looks for spinner characters and "esc to interrupt" text.
+ * Looks for spinner characters and "esc to interrupt" text in a small
+ * **recent window** of the pane — only the last 10 content lines,
+ * excluding the bottom 3 lines (status line / input bar which have
+ * decorative Unicode that triggers false positives).
+ *
+ * This avoids two sources of false positives:
+ * 1. Status line Unicode chars matching the spinner regex
+ * 2. Historical spinner output in scroll-back (e.g. "✻ Worked for 51s")
+ *
  * Used by the scheduler to avoid interrupting mid-response.
- * Only checks pane indicators, not recent activity.
  */
 export function isActivelyProcessing(): boolean {
   if (!sessionExists()) return false;
 
   const pane = capturePane();
 
+  // Split into lines, exclude the bottom 3 (status bar + input prompt),
+  // then only check the last 10 content lines (where current activity shows).
+  // This avoids matching historical spinner chars in scroll-back.
+  const lines = pane.split('\n');
+  const contentLines = lines.slice(0, Math.max(lines.length - 3, 0));
+  const recentLines = contentLines.slice(-10);
+  const content = recentLines.join('\n');
+
   // Check for "esc to interrupt" — Claude is processing
-  if (pane.includes('esc to interrupt')) {
+  if (content.includes('esc to interrupt')) {
     log.debug('ActivelyProcessing: "esc to interrupt" visible');
     return true;
   }
 
-  // Check for Unicode spinner characters
-  if (/[✶✷✸✹✺✻✼✽✾✿❀❁❂❃⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/.test(pane)) {
+  // Check for Unicode spinner characters in recent content only
+  if (/[✶✷✸✹✺✻✼✽✾✿❀❁❂❃⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/.test(content)) {
     log.debug('ActivelyProcessing: spinner visible');
     return true;
   }
@@ -166,6 +181,12 @@ export function isBusy(): boolean {
  * Inject text into the Claude Code session.
  * Sends the text followed by Enter to submit it.
  *
+ * Pre-injection cleanup: sends Escape (dismiss any autocomplete/menu)
+ * and Ctrl-U (clear any partial input) before typing new text.
+ *
+ * Enter is sent with retry logic — if the text is still visible in
+ * the pane after the first Enter, we retry up to 2 more times.
+ *
  * @param text - Text to inject (will be escaped for tmux)
  * @param pressEnter - Whether to press Enter after (default: true)
  */
@@ -179,6 +200,16 @@ export function injectText(text: string, pressEnter = true): boolean {
   const tmux = getTmuxCmd();
 
   try {
+    // Pre-injection cleanup: dismiss menus and clear partial input
+    execSync(`${tmux} send-keys -t ${session} Escape`, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    execSync('sleep 0.05', { stdio: ['pipe', 'pipe', 'pipe'] });
+    execSync(`${tmux} send-keys -t ${session} C-u`, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    execSync('sleep 0.05', { stdio: ['pipe', 'pipe', 'pipe'] });
+
     // Use -l flag for literal text (handles special chars)
     const sanitized = text.replace(/'/g, "'\\''");
     execSync(`${tmux} send-keys -t ${session} -l '${sanitized}'`, {
@@ -186,18 +217,33 @@ export function injectText(text: string, pressEnter = true): boolean {
     });
 
     if (pressEnter) {
-      // Small delay to ensure text is fully written before pressing Enter.
-      // Without this, rapid send-keys calls can race on macOS, causing
-      // the Enter to fire before text lands or not fire at all.
-      execSync('sleep 0.1', { stdio: ['pipe', 'pipe', 'pipe'] });
+      // Longer delay before Enter to ensure text is fully rendered
+      execSync('sleep 0.3', { stdio: ['pipe', 'pipe', 'pipe'] });
 
-      execSync(`${tmux} send-keys -t ${session} Enter`, {
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
+      // Send Enter with retry — sometimes the first one doesn't register
+      const MAX_ENTER_ATTEMPTS = 3;
+      for (let attempt = 1; attempt <= MAX_ENTER_ATTEMPTS; attempt++) {
+        execSync(`${tmux} send-keys -t ${session} Enter`, {
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
 
-      // Verify Enter was sent by retrying once if needed
-      // (belt-and-suspenders for the "messages sitting unsent" bug)
-      execSync('sleep 0.1', { stdio: ['pipe', 'pipe', 'pipe'] });
+        // Wait and verify the text was submitted (pane should no longer
+        // contain our injected text on the input line)
+        execSync('sleep 0.3', { stdio: ['pipe', 'pipe', 'pipe'] });
+
+        if (attempt < MAX_ENTER_ATTEMPTS) {
+          // Check if text is still sitting in the input line
+          const pane = capturePane();
+          const lines = pane.split('\n').filter(l => l.trim().length > 0);
+          const lastLines = lines.slice(-5);
+          const textStillPending = lastLines.some(l => l.includes(text.slice(0, 40)));
+
+          if (!textStillPending) {
+            break; // Text was submitted successfully
+          }
+          log.warn(`Enter attempt ${attempt} may not have fired — retrying`);
+        }
+      }
     }
 
     log.debug(`Injected text (${text.length} chars)`);
