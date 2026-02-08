@@ -120,18 +120,6 @@ Your persistent state lives in `.claude/state/`. Know this directory well — it
 
 Files ending in `.template` are defaults from the upstream CC4Me project. Your live state files are the non-template versions.
 
-## Knowledge Base
-
-Integration and platform knowledge lives in skill folders as supporting files. Each skill is self-contained with its SKILL.md (operational SOP) and reference docs:
-
-| Skill | Supporting Files |
-|-------|-----------------|
-| `browser` | `reference.md` — Browserbase API, session lifecycle, troubleshooting, credentials |
-| `telegram` | `setup.md` — Bot setup, gateway architecture, webhook config |
-| `email` | `fastmail-reference.md`, `graph-reference.md` — Provider setup, API patterns |
-| `keychain` | `reference.md` — Full Keychain reference, TypeScript usage, examples |
-| `macos-automation` | `reference.md` — AppleScript, accessibility, clipboard, window management |
-
 ## Core Behaviors
 
 ### Telegram Sending
@@ -171,14 +159,14 @@ Proactively mention relevant upcoming events.
 
 Use review mechanisms to catch problems early:
 
-1. **Devil's Advocate Sub-Agent** — For any non-trivial work (specs, plans, or to-dos), spawn a sub-agent with clean context to challenge your approach. It only sees the documents, not your assumptions. Runs automatically via `/review` and `/todo`.
+1. **Bob** (devil's advocate sub-agent) — For any non-trivial work (specs, plans, or to-dos), spawn a sub-agent with clean context to challenge your approach. It only sees the documents, not your assumptions. Runs automatically via `/review` and `/todo`.
 
-2. **Peer Review** — For shared work (new skills, daemon features, upstream pipeline, agent-comms), request your peer agent's review via agent-comms. Their different experience catches things you'd miss. See `/review` Peer Review Protocol for when to trigger.
+2. **R2 Peer Review** — For shared work (new skills, daemon features, upstream pipeline, agent-comms), request R2's review via agent-comms. Her different experience catches things you'd miss. See `/review` Peer Review Protocol for when to trigger.
 
 The workflow integrates review at multiple points:
 ```
-/spec → [peer review if shared] → /plan → /review (devil's advocate + peer) → /build
-/todo pickup → [devil's advocate check] → work → [peer review if shared]
+/spec → [peer review if shared] → /plan → /review (Bob + R2) → /build
+/todo pickup → [Bob check] → work → [R2 review if shared]
 ```
 
 ### Save State Proactively
@@ -301,36 +289,50 @@ When a 3rd party interaction reveals an opportunity to improve your capabilities
 
 ### Skills Available
 
-Each skill has detailed instructions in `.claude/skills/{name}/SKILL.md`.
+Each skill has detailed instructions in `.claude/skills/{name}/SKILL.md` (canonical source). This table is a quick reference — see each SKILL.md for full details.
+
+**User-invocable skills** (triggered via `/command`):
 
 | Skill | Purpose |
 |-------|---------|
 | `/todo` | Manage persistent to-dos (auto-incrementing IDs, JSON files) |
-| `/memory` | Store and lookup facts in `memory/memories/` (v2) |
-| `/calendar` | Manage schedule and reminders |
+| `/memory` | Store and lookup facts in `memory/memories/` |
+| `/calendar` | Manage schedule, events, and reminders |
 | `/mode` | View/change autonomy level |
 | `/save-state` | Save context before compaction |
 | `/restart` | Restart Claude Code session gracefully |
-| `/setup` | Configure the assistant (first-time setup wizard) |
+| `/setup` | Configure the assistant (first-time setup wizard, prerequisites, troubleshooting) |
 | `/email` | Read and send email via Fastmail (JMAP) or Microsoft 365 (Graph) |
-| `/telegram` | Telegram integration reference and patterns |
+| `/remind` | Set timed reminders delivered via Telegram |
 | `/hooks` | Create and manage Claude Code hooks |
 | `/skill-create` | Create new skills following best practices |
+| `/agent-comms` | Send messages to peer agents and check status |
 | `/spec` | Create feature specifications |
 | `/plan` | Create implementation plans with stories/tests |
-| `/review` | Pre-build design review with devil's advocate sub-agent + peer review |
+| `/review` | Pre-build design review with Bob (devil's advocate) + R2 peer review |
 | `/build` | Implement features (test-driven) |
 | `/validate` | Verify spec-plan-implementation alignment |
 | `/upstream` | Contribute changes back to upstream CC4Me |
+| `/playwright-cli` | Browser automation for testing, screenshots, and data extraction |
+
+**Reference skills** (loaded automatically when relevant, not directly invoked):
+
+| Skill | Purpose |
+|-------|---------|
+| `browser` | Browser automation SOP — Playwright (local) vs Browserbase (cloud) |
+| `email-compose` | Compose professional HTML emails with responsive layouts |
+| `telegram` | Telegram integration reference, gateway architecture, API patterns |
+| `keychain` | macOS Keychain credential storage — naming conventions, operations, security |
+| `macos-automation` | macOS automation — AppleScript, accessibility, clipboard, window management |
 
 ### Software Development
 
 For building software, use the spec-driven workflow:
 
 ```
-/spec feature-name    → Create specification (+ peer review if shared)
+/spec feature-name    → Create specification (+ R2 peer review if shared)
 /plan specs/....md    → Create plan with stories and tests
-/review plans/....md  → Devil's advocate sub-agent + peer review for shared work
+/review plans/....md  → Bob (devil's advocate) + R2 peer review for shared work
 /build plans/....md   → Implement (stories + regression testing)
 /validate             → Verify alignment
 ```
@@ -354,7 +356,7 @@ Test changes before committing.
 
 ### Integrations
 
-Integration reference docs live in each skill's folder (e.g., `skills/email/fastmail-reference.md`). See the Knowledge Base section above for a full listing.
+Integration reference docs live in each skill's folder (e.g., `skills/email/fastmail-reference.md`). See the Reference Skills table in the Capabilities section for a full listing.
 
 ## Configuration
 

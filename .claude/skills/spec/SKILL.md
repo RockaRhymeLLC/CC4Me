@@ -83,7 +83,7 @@ If ambiguous, I'll ask you to clarify.
 
 ## Peer Review for Shared Specs
 
-When a spec defines **shared capabilities** — things your peer agent will also use or that get upstreamed — consider requesting peer review before moving to `/plan`. They may catch requirements you missed or suggest approaches based on their own experience.
+When a spec defines **shared capabilities** — things R2 will also use or that get upstreamed — consider requesting R2 peer review before moving to `/plan`. She may catch requirements you missed or suggest approaches based on her own experience.
 
 **Always request peer review for specs covering:**
 - New skills or skill upgrades
@@ -92,16 +92,27 @@ When a spec defines **shared capabilities** — things your peer agent will also
 - Anything touching agent-comms
 
 **Skip peer review for:**
-- Personal tasks, agent-specific config
+- Personal tasks, BMO-specific config
 - Quick features that only affect your own workflows
 
-Send via agent-comms: `/agent-comms send <peer-name> "Spec review: [feature]. [Summary]. Looking for feedback on [concern]."`
+Send via agent-comms: `/agent-comms send r2d2 "Spec review: [feature]. [Summary]. Looking for feedback on [concern]."`
+
+## Documentation Impact Section
+
+Every spec includes a **Documentation Impact** section that identifies which docs will need updating when the feature ships. This is checked by `/validate` post-build to ensure docs stay fresh. Common candidates:
+
+- `CLAUDE.md` — new skills, config options, behavior changes
+- `SKILL.md` files — new or modified skills
+- `README.md` — user-facing feature additions
+- `cc4me.config.yaml` — new config options
+
+If the feature has no doc impact, document "None expected."
 
 ## Integration
 
 **Context Tracker**: Remembers which spec is active across conversation
 **History Logger**: Records all spec changes for audit
-**Validation**: Specs are validated before moving to plan phase
-**Peer Review**: Shared specs should get peer input before planning (see above)
+**Validation**: Specs are validated before moving to plan phase; doc impact is checked post-build
+**Peer Review**: Shared specs should get R2's input before planning (see above)
 
 See `reference.md` for detailed step-by-step workflows.

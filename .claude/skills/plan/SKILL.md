@@ -42,8 +42,8 @@ Examples:
 5. **Create tests** - One JSON per test in `plans/tests/`
 6. **Link to to-do** - If this plan was spawned from a to-do, add references
 7. **Run /validate** - Verify completeness
-8. **Run /review** - Sanity-check before building (devil's advocate sub-agent + optional peer review)
-9. **Peer review gate** - If this plan involves shared work (skills, daemon, upstream, agent-comms), request peer review before building. See `/review` Peer Review Protocol
+8. **Run /review** - Sanity-check before building (Bob + optional R2 peer review)
+9. **Peer review gate** - If this plan involves shared work (skills, daemon, upstream, agent-comms), request R2 peer review before building. See `/review` Peer Review Protocol
 10. **Suggest /build** - Ready for implementation
 
 ## Output Structure
@@ -186,8 +186,8 @@ Check existing IDs to avoid collisions.
 
 - **To-Do system**: Plans can reference parent to-do via `todoRef`
 - **Validation**: /validate checks story-test coverage
-- **Review**: /review runs devil's advocate sub-agent + optional peer review before /build
-- **Peer review**: Plans for shared work must go through peer review before building (see `/review` Peer Review Protocol)
+- **Review**: /review runs Bob (devil's advocate) + optional R2 peer review before /build
+- **Peer review**: Plans for shared work must go through R2 before building (see `/review` Peer Review Protocol)
 - **Build**: /build works through stories in priority order
 
 See `reference.md` for detailed schemas.
