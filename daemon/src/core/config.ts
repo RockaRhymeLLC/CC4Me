@@ -149,6 +149,22 @@ export interface SecurityConfig {
   rate_limits: RateLimitsConfig;
 }
 
+export interface BrowserbaseConfig {
+  enabled: boolean;
+  sidecar_port: number;
+  default_timeout: number;
+  idle_warning: number;
+  handoff_timeout: number;
+  handoff_session_timeout: number;
+  block_ads: boolean;
+  solve_captchas: boolean;
+  record_sessions: boolean;
+}
+
+export interface IntegrationsConfig {
+  browserbase?: BrowserbaseConfig;
+}
+
 export interface CC4MeConfig {
   agent: AgentConfig;
   tmux: TmuxConfig;
@@ -157,6 +173,7 @@ export interface CC4MeConfig {
   'agent-comms': AgentCommsConfig;
   scheduler: SchedulerConfig;
   security: SecurityConfig;
+  integrations?: IntegrationsConfig;
 }
 
 // ── Defaults ─────────────────────────────────────────────────

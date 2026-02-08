@@ -1,0 +1,28 @@
+{
+  "id": "s-b07",
+  "title": "Telegram hand-off commands",
+  "description": "Wire up the Telegram ↔ sidecar integration for hand-off commands. This makes the core hand-off loop work.\n\nIn daemon's telegram.ts processIncomingMessage(), after sender classification (safe sender only), check if a browser hand-off is active. If so, intercept these patterns before injecting into Claude session:\n\n| Pattern | Action |\n|---------|--------|\n| `type: [text]` (at message start) | POST to sidecar /session/type — text NOT logged anywhere |\n| `done` (exact match) | Inject into Claude session as hand-off completion signal |\n| `all yours` (exact match) | Same as done |\n| `go ahead` (exact match) | Same as done |\n| `abort` (exact match) | POST to sidecar /session/stop, inject abort signal into Claude |\n| `cancel` (exact match) | Same as abort |\n| `screenshot` (exact match) | GET sidecar /session/screenshot, send image via Telegram |\n| Other messages | Normal Telegram flow (not browser-related) |\n\nThe daemon needs a lightweight hand-off state flag:\n- Set when BMO sends a hand-off request (via a daemon API endpoint or state file)\n- Cleared when done/abort received or session closes\n- Used only for routing — not a formal state machine\n\nEdge cases:\n- 'type: done' → types 'done' into the field (type: prefix takes priority)\n- 'type:' with no text after → ignore or type empty string\n- 'done' when no hand-off active → normal message flow to Claude\n- Race condition: type: followed immediately by done → process sequentially",
+  "planRef": "plans/20260206-browser-handoff.plan.md",
+  "todoRef": "065",
+  "status": "complete",
+  "priority": 7,
+  "tests": ["t-028", "t-029"],
+  "blockedBy": ["s-b06"],
+  "created": "2026-02-07T05:00:00Z",
+  "updated": "2026-02-07T07:00:00Z",
+  "notes": ["2026-02-07: Telegram hand-off commands implemented. Hand-off state (activate/deactivate/isActive) in telegram.ts. Sidecar HTTP helpers for type/stop/screenshot. sendPhoto via Telegram multipart API. handleHandoffCommand intercepts type:/done/abort/screenshot for safe senders when hand-off active. Daemon endpoints: POST /browser/handoff/start, POST /browser/handoff/stop, GET /browser/handoff/status. All 8 acceptance criteria met. Daemon compiles clean."],
+  "files": [
+    "daemon/src/comms/adapters/telegram.ts",
+    "daemon/src/core/main.ts"
+  ],
+  "acceptanceCriteria": [
+    "type: messages relay text to sidecar /session/type — text is NOT logged in daemon logs",
+    "done/all yours/go ahead messages signal Claude session to resume (hand-off completion)",
+    "abort/cancel messages close session via sidecar and signal Claude",
+    "screenshot messages capture and send image back via Telegram",
+    "Non-command messages flow through normal Telegram handling during active hand-off",
+    "Hand-off active flag set/cleared in daemon state",
+    "Commands only intercepted when hand-off is active (done when no hand-off = normal message)",
+    "type: at message start takes priority (type: done → types 'done' into field)"
+  ]
+}

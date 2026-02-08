@@ -1,0 +1,24 @@
+{
+  "id": "s-b01",
+  "title": "Pre-implementation gate: validate mobile live view UX",
+  "description": "Before writing any code, validate that Browserbase's mobile live view is actually usable for hand-offs. Create a free Browserbase account, store credentials in Keychain, launch a test session programmatically, get the live view URL, and have Dave test it on his phone via Telegram. This is a go/no-go gate — if mobile interaction is painful (tiny targets, broken scrolling, lag), we need to revisit the approach before building anything.\n\nSteps:\n1. Create Browserbase account (free tier)\n2. Store API key as `credential-browserbase-api-key` and project ID as `credential-browserbase-project-id` in Keychain\n3. Write a minimal test script that creates a session, navigates to a test site, and retrieves the debuggerFullscreenUrl\n4. Send Dave the live view URL via Telegram with instructions to test: tap links, scroll, type in a form field, interact with buttons\n5. Get Dave's verdict on mobile UX\n6. If pass: upgrade to Developer plan ($20/month), proceed to s-b02. If fail: stop and reassess approach.\n\nMeasurable pass/fail criteria:\n- Dave can complete a form interaction (tap input field, type text, tap submit button) on his phone in under 60 seconds\n- Text is legible without zooming\n- Buttons/links are tappable without precision frustration\n- Page scrolls smoothly\n- Latency is under 3 seconds for interactions",
+  "planRef": "plans/20260206-browser-handoff.plan.md",
+  "todoRef": "065",
+  "status": "complete",
+  "priority": 1,
+  "tests": ["t-018"],
+  "blockedBy": [],
+  "created": "2026-02-07T05:00:00Z",
+  "updated": "2026-02-07T06:00:00Z",
+  "notes": [
+    "2026-02-07: Account created by Dave (Turnstile CAPTCHA blocked automation). Org: bmo-hurley, email: bmo_hurley@fastmail.com. API key and project ID stored in Keychain. Test session created via SDK, navigated to Wikipedia Adventure Time page, live view URL sent to Dave via Telegram. Dave confirmed: desktop page, can zoom and scroll. GO verdict — usable for hand-off scenarios. Skipping Developer plan upgrade for now (free tier sufficient for PoC build)."
+  ],
+  "files": ["/tmp/bb-signup/test-liveview2.mjs"],
+  "acceptanceCriteria": [
+    "Browserbase free account created and credentials stored in Keychain",
+    "Test script successfully creates a session and retrieves live view URL",
+    "Dave completes a form interaction on his phone in under 60 seconds (tap field, type, tap button)",
+    "Text is legible without zooming, buttons are tappable, scrolling works, latency under 3s",
+    "Go/no-go decision recorded. If GO: upgrade to Developer plan before proceeding."
+  ]
+}

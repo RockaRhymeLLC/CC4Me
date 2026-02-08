@@ -1,0 +1,44 @@
+{
+  "id": "t-031",
+  "title": "Orphan session recovery on startup",
+  "description": "Verify sidecar detects and handles orphaned Browserbase sessions on startup",
+  "storyRefs": ["s-b08"],
+  "planRef": "plans/20260206-browser-handoff.plan.md",
+  "type": "story",
+  "status": "pending",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Start a Browserbase session via sidecar, then kill the sidecar process (simulate crash). Verify browser-session.json exists with session state.",
+      "expected": "browser-session.json contains sessionId, connectUrl, contextName, handoffActive: false, startedAt"
+    },
+    {
+      "order": 2,
+      "action": "Restart the sidecar process",
+      "expected": "On startup, sidecar reads browser-session.json, calls bb.sessions.list({ status: 'RUNNING' }) to find the orphaned session"
+    },
+    {
+      "order": 3,
+      "action": "Verify orphaned session with no active hand-off is closed",
+      "expected": "Sidecar closes the orphaned session via REQUEST_RELEASE. browser-session.json is deleted. Log shows 'Closed orphaned session [id]'."
+    },
+    {
+      "order": 4,
+      "action": "Repeat: start session, set handoffActive: true in state file, kill sidecar, restart",
+      "expected": "Sidecar detects orphaned session with active hand-off. On free tier (no keepAlive): closes session and logs warning. On Developer plan: attempts CDP reconnection first."
+    },
+    {
+      "order": 5,
+      "action": "POST /cleanup endpoint with no orphaned sessions",
+      "expected": "Returns 200 with message indicating no orphaned sessions found"
+    },
+    {
+      "order": 6,
+      "action": "Verify browser-session.json is deleted on normal session close (POST /session/stop)",
+      "expected": "File does not exist after clean session close"
+    }
+  ],
+  "created": "2026-02-07T05:00:00Z",
+  "executedAt": "2026-02-07T07:30:00Z",
+  "result": "pass"
+}

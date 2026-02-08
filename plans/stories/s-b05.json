@@ -1,0 +1,28 @@
+{
+  "id": "s-b05",
+  "title": "Context persistence",
+  "description": "Implement the context persistence layer that lets Dave log into a site once and have BMO reuse those cookies in future sessions.\n\nComponents:\n1. Context store (context-store.ts): Manages the JSON manifest at .claude/state/browser-contexts.json\n   - Map site names → Browserbase context IDs with metadata (last_used, last_verified, domain)\n   - Written atomically (write temp file + rename) to prevent corruption on crash\n   - Create new contexts via Browserbase API when needed\n\n2. Session integration: When /session/start includes a context name:\n   - Look up context ID from manifest\n   - Pass to Browserbase session creation\n   - On session close with save=true, update manifest timestamps\n\n3. Context invalidation: If BMO opens a site with saved context but hits a login page, update last_verified to indicate cookies expired. Over time, this helps predict which sites need frequent re-auth.\n\n4. Management endpoints:\n   - GET /contexts — list all saved contexts with metadata\n   - DELETE /contexts/:name — delete a saved context (both manifest entry and Browserbase API)\n\nNote: Payment approval rules deferred to Phase 2. In Phase 1, payment pages are just normal hand-offs.",
+  "planRef": "plans/20260206-browser-handoff.plan.md",
+  "todoRef": "065",
+  "status": "complete",
+  "priority": 5,
+  "tests": ["t-024", "t-025"],
+  "blockedBy": ["s-b03"],
+  "created": "2026-02-07T05:00:00Z",
+  "updated": "2026-02-07T06:00:00Z",
+  "notes": ["2026-02-07: context-store.ts complete. Atomic JSON writes (temp+rename). Manifest at .claude/state/browser-contexts.json. getOrCreateContext() creates via Browserbase API if new. lastUsed/lastVerified tracking. markExpired() for cookie invalidation. Integrated into main.ts: session start resolves context by name, session stop updates timestamps. GET /contexts and DELETE /contexts/:name endpoints added. SDK has no context delete API — we just remove from manifest."],
+  "files": [
+    "browser-sidecar/src/context-store.ts",
+    ".claude/state/browser-contexts.json"
+  ],
+  "acceptanceCriteria": [
+    "JSON manifest created at .claude/state/browser-contexts.json",
+    "Context store reads/writes manifest with site name, context ID, last_used, last_verified, domain",
+    "Manifest written atomically (temp file + rename) to prevent corruption",
+    "Session start with context name looks up and passes context ID to session manager",
+    "Session close with save=true updates last_used timestamp in manifest",
+    "New context created via Browserbase API if site name has no existing context",
+    "GET /contexts returns all saved contexts with metadata",
+    "DELETE /contexts/:name removes from manifest and deletes via Browserbase API"
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "id": "t-021",
+  "title": "Sidecar HTTP server starts and responds to health checks",
+  "description": "Verify the sidecar process starts correctly, signals READY, and responds to health endpoints",
+  "storyRefs": ["s-b03"],
+  "planRef": "plans/20260206-browser-handoff.plan.md",
+  "type": "story",
+  "status": "pending",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Start the browser sidecar process (node dist/browser/browser-sidecar.js --port 3849)",
+      "expected": "Process starts and prints READY to stdout within 10 seconds"
+    },
+    {
+      "order": 2,
+      "action": "Send GET /health to port 3849",
+      "expected": "Returns 200 with JSON body including status: 'ok' and session info (null if no active session)"
+    },
+    {
+      "order": 3,
+      "action": "Send GET /session/status with no active session",
+      "expected": "Returns 200 with JSON body indicating no active session"
+    },
+    {
+      "order": 4,
+      "action": "Send GET /session/screenshot with no active session",
+      "expected": "Returns 404 with descriptive error message"
+    },
+    {
+      "order": 5,
+      "action": "Send SIGTERM to the sidecar process",
+      "expected": "Process shuts down cleanly within 5 seconds"
+    }
+  ],
+  "created": "2026-02-07T05:00:00Z",
+  "executedAt": null,
+  "result": null
+}

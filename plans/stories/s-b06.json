@@ -1,0 +1,30 @@
+{
+  "id": "s-b06",
+  "title": "Daemon integration + lifecycle management",
+  "description": "Integrate the browser sidecar into the daemon's lifecycle, following the TTS worker pattern exactly.\n\nConfig:\n- Add integrations.browserbase section to cc4me.config.yaml\n- Fields: enabled, sidecar_port, default_timeout, idle_warning, handoff_timeout, default_region, block_ads, solve_captchas, record_sessions, context_store\n- Config type definitions in daemon/src/core/config.ts\n\nKeychain:\n- Add getBrowserbaseApiKey() and getBrowserbaseProjectId() to keychain.ts\n\nDaemon lifecycle (main.ts):\n- initBrowserSidecar(): Spawn sidecar as child process, watch stdout for READY\n- Health monitoring: periodic GET /health (like TTS worker pattern — 30s interval, 5s timeout)\n- Auto-restart on crash (max 3 retries)\n- stopBrowserSidecar(): SIGTERM + cleanup on daemon shutdown\n- Add to graceful shutdown sequence\n\nHTTP proxy (optional but recommended):\n- Daemon can proxy /browser/* requests to sidecar port for unified API surface\n- Or callers (Claude session) can hit sidecar port directly — TBD during implementation\n\nThe sidecar process is the compiled JS from browser-sidecar/src/main.ts, run via node.",
+  "planRef": "plans/20260206-browser-handoff.plan.md",
+  "todoRef": "065",
+  "status": "complete",
+  "priority": 6,
+  "tests": ["t-026", "t-027"],
+  "blockedBy": ["s-b03"],
+  "created": "2026-02-07T05:00:00Z",
+  "updated": "2026-02-07T05:00:00Z",
+  "notes": ["2026-02-07: Daemon integration complete. browser-sidecar.ts follows TTS worker pattern exactly: spawn, READY signal, health checks (30s), auto-restart (3 retries), SIGTERM shutdown. Config types added (BrowserbaseConfig, IntegrationsConfig). Keychain accessors added (getBrowserbaseApiKey, getBrowserbaseProjectId). Wired into main.ts init/shutdown. Config added to cc4me.config.yaml with enabled:true, port 3849, timeouts. Both daemon and sidecar compile clean."],
+  "files": [
+    "cc4me.config.yaml",
+    "daemon/src/core/main.ts",
+    "daemon/src/core/config.ts",
+    "daemon/src/core/keychain.ts"
+  ],
+  "acceptanceCriteria": [
+    "integrations.browserbase config section added to cc4me.config.yaml",
+    "Config types defined in daemon config.ts",
+    "Keychain accessors added for browserbase-api-key and browserbase-project-id",
+    "Daemon spawns sidecar process and waits for READY signal",
+    "Health monitoring pings /health every 30 seconds",
+    "Auto-restart on sidecar crash (max 3 retries)",
+    "Graceful shutdown sends SIGTERM to sidecar",
+    "Sidecar disabled when integrations.browserbase.enabled is false"
+  ]
+}

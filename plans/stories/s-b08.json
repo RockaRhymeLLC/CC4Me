@@ -1,0 +1,28 @@
+{
+  "id": "s-b08",
+  "title": "Orphan session recovery",
+  "description": "On sidecar startup (and via /cleanup endpoint), check Browserbase API for active sessions from previous runs and handle them appropriately.\n\nBehavior:\n1. On startup, call bb.sessions.list({ status: 'RUNNING' }) to find orphaned sessions\n2. For each running session:\n   a. Check if it was in a hand-off state (Dave was actively using it). The sidecar persists hand-off state to a small JSON file so it survives crashes.\n   b. If hand-off was active and keepAlive is available: attempt to reconnect CDP, notify Dave that sidecar recovered\n   c. If no hand-off active (or reconnect fails): close session via REQUEST_RELEASE to stop billing\n3. Log all recovery actions\n\nState persistence for crash recovery:\n- Write minimal session state to .claude/state/browser-session.json: { sessionId, connectUrl, contextName, handoffActive, startedAt }\n- Read on startup to determine if orphaned sessions need reconnection\n- Delete file when session closes normally\n\nThe /cleanup endpoint allows manual trigger of the same logic (useful for debugging or if auto-recovery missed something).\n\nOn free tier (no keepAlive), reconnection isn't possible — just close orphaned sessions. The reconnection path is for Developer plan.",
+  "planRef": "plans/20260206-browser-handoff.plan.md",
+  "todoRef": "065",
+  "status": "complete",
+  "priority": 8,
+  "tests": ["t-031"],
+  "blockedBy": ["s-b03"],
+  "created": "2026-02-07T05:00:00Z",
+  "updated": "2026-02-07T07:30:00Z",
+  "notes": ["2026-02-07: Orphan session recovery implemented. Session state persisted to browser-session.json (atomic writes). recoverOrphanSessions() runs at startup — lists RUNNING sessions, checks if hand-off was active, closes orphans via REQUEST_RELEASE. /cleanup endpoint for manual trigger. /handoff/set endpoint lets daemon update hand-off flag in persisted state. State file deleted on normal close and graceful shutdown. Daemon's activateHandoff/deactivateHandoff notify sidecar. Both compile clean."],
+  "files": [
+    "browser-sidecar/src/main.ts",
+    "browser-sidecar/src/session-manager.ts",
+    ".claude/state/browser-session.json"
+  ],
+  "acceptanceCriteria": [
+    "On startup, sidecar queries Browserbase API for RUNNING sessions",
+    "Orphaned sessions with no active hand-off are closed via REQUEST_RELEASE",
+    "Orphaned sessions with active hand-off attempt reconnection (Developer plan only)",
+    "Session state persisted to browser-session.json for crash recovery",
+    "State file deleted on normal session close",
+    "POST /cleanup endpoint triggers manual orphan recovery",
+    "All recovery actions logged"
+  ]
+}

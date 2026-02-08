@@ -1,0 +1,44 @@
+{
+  "id": "t-029",
+  "title": "Hand-off done/abort/screenshot commands",
+  "description": "Verify done, abort, and screenshot Telegram commands work during active hand-off",
+  "storyRefs": ["s-b07"],
+  "planRef": "plans/20260206-browser-handoff.plan.md",
+  "type": "story",
+  "status": "pending",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Start a browser session and set hand-off active flag in daemon",
+      "expected": "Session active, hand-off flag set"
+    },
+    {
+      "order": 2,
+      "action": "Send 'screenshot' from Dave via Telegram",
+      "expected": "Daemon calls GET /session/screenshot on sidecar, sends the resulting image back to Dave via Telegram"
+    },
+    {
+      "order": 3,
+      "action": "Send 'done' from Dave via Telegram",
+      "expected": "Daemon clears hand-off active flag. Message is injected into Claude session as a hand-off completion signal (e.g., '[Browser] Dave completed hand-off'). Sidecar takes a fresh screenshot."
+    },
+    {
+      "order": 4,
+      "action": "Set hand-off active again. Send 'all yours' from Dave via Telegram",
+      "expected": "Same behavior as 'done' — recognized as hand-off completion"
+    },
+    {
+      "order": 5,
+      "action": "Set hand-off active again. Send 'abort' from Dave via Telegram",
+      "expected": "Daemon calls POST /session/stop on sidecar (with saveContext: true). Hand-off flag cleared. Abort signal injected into Claude session."
+    },
+    {
+      "order": 6,
+      "action": "Send 'cancel' from Dave via Telegram with hand-off active",
+      "expected": "Same behavior as 'abort' — recognized as hand-off cancellation"
+    }
+  ],
+  "created": "2026-02-07T05:00:00Z",
+  "executedAt": "2026-02-07T07:00:00Z",
+  "result": "pass"
+}
