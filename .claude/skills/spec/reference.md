@@ -94,6 +94,15 @@ Format as:
 - Architecture decisions
 - Technical constraints
 
+#### Documentation Impact
+
+**Ask**: "Will this feature require updates to any docs?"
+- Check if it adds new skills, config options, behaviors, or integrations
+- Identify which docs will need updating: `CLAUDE.md`, specific `SKILL.md` files, `README.md`, `cc4me.config.yaml`
+- Format as checklist: `- [ ] CLAUDE.md — [reason]`
+- If none expected, document as "None expected"
+- This list feeds into `/validate` post-build to verify docs were actually updated
+
 #### Open Questions
 
 **Ask**: "Are there any open questions or uncertainties we need to resolve before planning?"

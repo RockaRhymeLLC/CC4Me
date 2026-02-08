@@ -6,13 +6,13 @@ argument-hint: [spec-file, plan-file, or "all"]
 
 # /review - Pre-Build Sanity Check
 
-Challenge assumptions, catch overcomplexity, and find simpler paths before writing code. Uses a **devil's advocate sub-agent** for independent review, plus **R2 peer review** for shared work.
+Challenge assumptions, catch overcomplexity, and find simpler paths before writing code. Uses **Bob** (a devil's advocate sub-agent) for independent review, plus **R2 peer review** for shared work.
 
 ## Purpose
 
 Two layers of review to catch what you can't see in your own work:
 
-1. **Devil's Advocate Sub-Agent** (automatic) — A sub-agent with clean context reviews your spec/plan independently. It only sees the documents, not your conversation history or assumptions. Catches lazy overengineering, scope creep, and obvious gaps.
+1. **Bob** (automatic) — A devil's advocate sub-agent with clean context reviews your spec/plan independently. It only sees the documents, not your conversation history or assumptions. Catches lazy overengineering, scope creep, and obvious gaps.
 
 2. **R2 Peer Review** (selective) — For shared work (skills, daemon features, anything that gets upstreamed), send to R2 for genuine peer review. She brings different experience and context.
 
@@ -43,7 +43,7 @@ Read the target files:
 
 Also read any referenced story files (`plans/stories/s-*.json`) and test files (`plans/tests/t-*.json`).
 
-### Step 2: Devil's Advocate Sub-Agent
+### Step 2: Bob (Devil's Advocate)
 
 **Always run this.** Spawn a Task sub-agent (general-purpose type) with ONLY the spec/plan content. The sub-agent gets none of your conversation history — just the documents and the review criteria below.
 
@@ -100,6 +100,12 @@ Evaluate across these dimensions, thinking like a senior engineer doing a design
 - Would a simpler architecture work for the next 6 months?
 - Are we over-engineering because it's fun, not because it's needed?
 
+#### Documentation Impact
+- Will this change affect any docs? (CLAUDE.md, SKILL.md files, README.md, cc4me.config.yaml)
+- Which specific docs need updating when this is built?
+- Are there new skills, config options, or behaviors that need to be documented?
+- Will existing doc sections become stale or misleading after this ships?
+
 #### Story & Test Quality (if plan exists)
 - Are stories small enough to complete in one session?
 - Do tests actually verify the important behavior?
@@ -138,6 +144,11 @@ Evaluate across these dimensions, thinking like a senior engineer doing a design
 ### Story/Test Gaps
 - [Gap 1]
 - [Gap 2]
+
+### Documentation Impact
+- [List docs that need updating when this ships]
+- [e.g., "CLAUDE.md skills table — new skill added"]
+- [e.g., "setup SKILL.md — new config option"]
 
 ### Recommendations
 1. [Most important change]
@@ -210,5 +221,5 @@ R2's review carries real weight — if she says RETHINK, stop and reconsider bef
 - Can also be used standalone on any spec or plan
 - Review findings can feed back into spec updates via `/spec`
 - The `/validate` skill handles structural alignment; `/review` handles design quality
-- The devil's advocate sub-agent runs automatically on every review
+- Bob (devil's advocate sub-agent) runs automatically on every review
 - R2 peer review is triggered selectively based on the protocol above

@@ -97,11 +97,22 @@ When a spec defines **shared capabilities** — things R2 will also use or that 
 
 Send via agent-comms: `/agent-comms send r2d2 "Spec review: [feature]. [Summary]. Looking for feedback on [concern]."`
 
+## Documentation Impact Section
+
+Every spec includes a **Documentation Impact** section that identifies which docs will need updating when the feature ships. This is checked by `/validate` post-build to ensure docs stay fresh. Common candidates:
+
+- `CLAUDE.md` — new skills, config options, behavior changes
+- `SKILL.md` files — new or modified skills
+- `README.md` — user-facing feature additions
+- `cc4me.config.yaml` — new config options
+
+If the feature has no doc impact, document "None expected."
+
 ## Integration
 
 **Context Tracker**: Remembers which spec is active across conversation
 **History Logger**: Records all spec changes for audit
-**Validation**: Specs are validated before moving to plan phase
+**Validation**: Specs are validated before moving to plan phase; doc impact is checked post-build
 **Peer Review**: Shared specs should get R2's input before planning (see above)
 
 See `reference.md` for detailed step-by-step workflows.

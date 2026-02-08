@@ -46,6 +46,8 @@ Parse $ARGUMENTS to determine the action:
 - `complete {id}` - Mark to-do as completed
 - `done {id}` - Alias for complete
 
+**Documentation nudge on completion**: When completing a to-do, scan its work notes for references to doc-adjacent files (`SKILL.md`, `CLAUDE.md`, `README.md`, `cc4me.config.yaml`). Also check if the to-do involved changes to skills, config, core behaviors, or daemon features. If any apply, remind yourself (or the user) to verify the relevant docs are up to date. Example: "This todo touched skills — is the CLAUDE.md skills table still accurate?"
+
 ## File Format
 
 To-dos are stored as individual JSON files in `.claude/state/todos/`.
@@ -123,9 +125,9 @@ When displaying a to-do with `/todo show`:
 - **Files/Commits/PRs** are shown indented under the note they belong to
 - This separation makes it easy to quickly see what work was done vs. bookkeeping
 
-## Devil's Advocate Check
+## Bob Check (Devil's Advocate)
 
-When picking up a **non-trivial to-do**, spawn a quick devil's advocate sub-agent before diving into the work. This is lightweight — not a full `/review`, just a sanity check on your approach.
+When picking up a **non-trivial to-do**, spawn a quick Bob (devil's advocate) sub-agent before diving into the work. This is lightweight — not a full `/review`, just a sanity check on your approach.
 
 ### When to Trigger
 
@@ -148,6 +150,7 @@ Before you start working on the to-do, briefly outline your planned approach (2-
 Use the Task tool with subagent_type="general-purpose":
 - Give it your planned approach and the to-do description
 - Ask it to challenge: Is this overcomplicated? Is there a simpler way? What could go wrong?
+- Ask it to flag documentation impact: Will this change affect CLAUDE.md, any SKILL.md, README.md, or cc4me.config.yaml? If so, which ones?
 - Ask for a GO / PAUSE verdict and any specific concerns
 - Keep it fast — this should take seconds, not minutes
 ```
@@ -163,7 +166,7 @@ For to-dos involving **shared work** (new skills, daemon features, upstream pipe
 - To-dos can be referenced from calendar.md via `[todo:id]` syntax
 - SessionStart hook loads high-priority to-dos into context
 - PreCompact hook saves active to-do state
-- Devil's advocate sub-agent runs automatically for non-trivial work
+- Bob (devil's advocate sub-agent) runs automatically for non-trivial work
 - R2 peer review triggered selectively for shared capabilities
 
 ## Notes
