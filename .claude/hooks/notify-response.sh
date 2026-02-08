@@ -62,8 +62,17 @@ if [ "$HOOK_EVENT" = "Stop" ] || [ "$HOOK_EVENT" = "SubagentStop" ]; then
     # Small delay to let Claude finish writing
     sleep 0.5
 
+    # Pre-injection cleanup: dismiss menus, clear partial input
+    $TMUX_CMD send-keys -t "$SESSION_NAME" Escape
+    sleep 0.05
+    $TMUX_CMD send-keys -t "$SESSION_NAME" C-u
+    sleep 0.05
+
     $TMUX_CMD send-keys -t "$SESSION_NAME" -l '/clear'
-    sleep 0.1
+    sleep 0.3
+    $TMUX_CMD send-keys -t "$SESSION_NAME" Enter
+    # Retry Enter after a short delay (sometimes first one doesn't register)
+    sleep 0.3
     $TMUX_CMD send-keys -t "$SESSION_NAME" Enter
 
   elif [ -f "$SAVE_FLAG" ]; then
@@ -77,9 +86,18 @@ if [ "$HOOK_EVENT" = "Stop" ] || [ "$HOOK_EVENT" = "SubagentStop" ]; then
     # Small delay to let Claude finish writing
     sleep 0.5
 
+    # Pre-injection cleanup: dismiss menus, clear partial input
+    $TMUX_CMD send-keys -t "$SESSION_NAME" Escape
+    sleep 0.05
+    $TMUX_CMD send-keys -t "$SESSION_NAME" C-u
+    sleep 0.05
+
     # Inject /save-state
     $TMUX_CMD send-keys -t "$SESSION_NAME" -l "/save-state \"Auto-save: context at ${USED}% used\""
-    sleep 0.1
+    sleep 0.3
+    $TMUX_CMD send-keys -t "$SESSION_NAME" Enter
+    # Retry Enter
+    sleep 0.3
     $TMUX_CMD send-keys -t "$SESSION_NAME" Enter
 
     # Set clear-pending — next Stop event will inject /clear
