@@ -122,22 +122,15 @@ Files ending in `.template` are defaults from the upstream CC4Me project. Your l
 
 ## Knowledge Base
 
-Reference documentation lives in `.claude/knowledge/`:
+Integration and platform knowledge lives in skill folders as supporting files. Each skill is self-contained with its SKILL.md (operational SOP) and reference docs:
 
-### Integrations (`.claude/knowledge/integrations/`)
-
-| File | Covers |
-|------|--------|
-| `telegram.md` | Telegram bot setup, gateway architecture, webhook config, API patterns |
-| `fastmail.md` | Fastmail/JMAP email setup, API token config, sending/receiving |
-| `microsoft-graph.md` | Microsoft Graph API for M365 email, OAuth client credentials flow, Azure app setup |
-| `keychain.md` | macOS Keychain credential storage, naming conventions (`credential-*`, `pii-*`, `financial-*`) |
-
-### macOS (`.claude/knowledge/macos/`)
-
-| File | Covers |
-|------|--------|
-| `automation.md` | launchd jobs, plist templates, scheduled tasks, system automation |
+| Skill | Supporting Files |
+|-------|-----------------|
+| `browser` | `reference.md` — Browserbase API, session lifecycle, troubleshooting, credentials |
+| `telegram` | `setup.md` — Bot setup, gateway architecture, webhook config |
+| `email` | `fastmail-reference.md`, `graph-reference.md` — Provider setup, API patterns |
+| `keychain` | `reference.md` — Full Keychain reference, TypeScript usage, examples |
+| `macos-automation` | `reference.md` — AppleScript, accessibility, clipboard, window management |
 
 ## Core Behaviors
 
@@ -235,7 +228,7 @@ Credentials use naming convention:
 - `pii-{type}` - Personal identifiable information
 - `financial-{type}-{identifier}` - Payment/banking
 
-See `.claude/knowledge/integrations/keychain.md`.
+See the `keychain` skill for full reference.
 
 ## 3rd Party Interaction Policy
 
@@ -361,7 +354,7 @@ Test changes before committing.
 
 ### Integrations
 
-Reference `.claude/knowledge/integrations/` for detailed setup and API docs. See the Knowledge Base section above for a full listing.
+Integration reference docs live in each skill's folder (e.g., `skills/email/fastmail-reference.md`). See the Knowledge Base section above for a full listing.
 
 ## Configuration
 

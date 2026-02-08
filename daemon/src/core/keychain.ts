@@ -103,6 +103,14 @@ export function getAgentCommsSecret(): string | null {
   return getCredential('credential-agent-comms-secret');
 }
 
+export function getBrowserbaseApiKey(): string | null {
+  return getCredential('credential-browserbase-api-key');
+}
+
+export function getBrowserbaseProjectId(): string | null {
+  return getCredential('credential-browserbase-project-id');
+}
+
 /**
  * Validate a bearer token against the stored agent-comms secret.
  * Resolves the secret from Keychain on first call (cached after that).
