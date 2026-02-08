@@ -56,10 +56,22 @@ Execute each layer in order. All must pass for validation success.
 - Is error handling appropriate?
 - Would you approve this as a code reviewer?
 
-### Layer 6: Manual Review
+### Layer 6: Documentation Freshness (Post-Build)
+**If the spec has a Documentation Impact section:**
+- Read the spec's Documentation Impact checklist
+- For each listed doc (CLAUDE.md, SKILL.md files, README.md, cc4me.config.yaml):
+  - Check if the file was modified since the build started (git diff or timestamp)
+  - If not modified, flag as potentially stale
+- If no Documentation Impact section exists, check common docs heuristically:
+  - New skill added → CLAUDE.md skills table updated?
+  - Config changes → cc4me.config.yaml documented?
+  - New behavior → CLAUDE.md Core Behaviors section current?
+- Result: PASS (all docs updated), WARN (some flagged), or SKIP (no doc impact)
+
+### Layer 7: Manual Review
 **Present to user:**
 - Summary of what was validated
-- Any warnings or concerns
+- Any warnings or concerns (including doc freshness flags)
 - Request sign-off before proceeding
 
 ## Output Format
@@ -96,17 +108,23 @@ Result: PASS
 - Error handling: Appropriate
 Result: PASS
 
-### Layer 6: Manual Review
+### Layer 6: Documentation Freshness
+- Spec lists doc impact: CLAUDE.md (skills table), setup SKILL.md
+- CLAUDE.md: Modified (verified)
+- setup SKILL.md: Modified (verified)
+Result: PASS
+
+### Layer 7: Manual Review
 Awaiting user sign-off...
 
 ---
-Overall: 5/5 layers passed, 1 pending approval
+Overall: 6/6 layers passed, 1 pending approval
 ```
 
 ## When Validation Runs
 
-- **After /plan**: Validates spec and plan completeness
-- **After /build**: Full validation including implementation
+- **After /plan**: Validates spec and plan completeness (Layers 1-3)
+- **After /build**: Full validation including implementation and doc freshness (Layers 1-7)
 - **Manual**: Run anytime with `/validate`
 
 ## Error Handling
