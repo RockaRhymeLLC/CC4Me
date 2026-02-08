@@ -12,6 +12,7 @@
  */
 
 import https from 'node:https';
+import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { getTelegramBotToken, getTelegramChatId, getShortcutAuthToken } from '../../core/keychain.js';
@@ -19,6 +20,7 @@ import { resolveProjectPath, loadConfig } from '../../core/config.js';
 import { sessionExists, startSession, injectText, isBusy } from '../../core/session-bridge.js';
 import { registerTelegramHandler, setChannel } from '../channel-router.js';
 import { createLogger } from '../../core/logger.js';
+import { getSidecarPort, isSidecarReady } from '../../browser/browser-sidecar.js';
 import {
   classifySender,
   addApproved,
@@ -35,6 +37,195 @@ const log = createLogger('telegram');
 
 const MEDIA_DIR_REL = '.claude/state/telegram-media';
 const REPLY_CHAT_ID_REL = '.claude/state/reply-chat-id.txt';
+
+// ── Browser hand-off state ─────────────────────────────────
+
+interface HandoffState {
+  active: boolean;
+  /** Chat ID to send screenshots/status to during hand-off */
+  replyChatId: string | null;
+  /** Timestamp when hand-off started */
+  startedAt: string | null;
+}
+
+const _handoff: HandoffState = {
+  active: false,
+  replyChatId: null,
+  startedAt: null,
+};
+
+/**
+ * Activate browser hand-off mode. Called from daemon endpoint.
+ * When active, safe sender messages matching hand-off patterns
+ * are intercepted and routed to the browser sidecar.
+ *
+ * Awaits sidecar notification — if sidecar is unreachable, hand-off still activates
+ * but idle timers won't run (degraded timeout protection).
+ */
+export async function activateHandoff(replyChatId?: string): Promise<boolean> {
+  if (!isSidecarReady()) {
+    log.warn('Cannot activate hand-off: sidecar not ready');
+    return false;
+  }
+  _handoff.active = true;
+  _handoff.replyChatId = replyChatId ?? _replyChatId;
+  _handoff.startedAt = new Date().toISOString();
+  log.info('Browser hand-off activated', { replyChatId: _handoff.replyChatId });
+
+  // Notify sidecar — this starts idle timers on the sidecar side
+  try {
+    await sidecarRequest('POST', '/handoff/set', { active: true });
+  } catch (err) {
+    log.warn('Failed to notify sidecar of hand-off activation — idle timeout protection is degraded', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    // Notify Dave that timeout protection is degraded
+    sendMessage('Warning: Could not confirm hand-off with browser sidecar. Idle timeout protection may not work.');
+  }
+
+  return true;
+}
+
+/**
+ * Deactivate browser hand-off mode.
+ * Awaits sidecar notification to stop idle timers. Best-effort if sidecar is unreachable.
+ */
+export async function deactivateHandoff(): Promise<void> {
+  const wasActive = _handoff.active;
+  _handoff.active = false;
+  _handoff.replyChatId = null;
+  _handoff.startedAt = null;
+  log.info('Browser hand-off deactivated');
+
+  // Notify sidecar to stop idle timers
+  if (wasActive) {
+    try {
+      await sidecarRequest('POST', '/handoff/set', { active: false });
+    } catch (err) {
+      log.warn('Failed to notify sidecar of hand-off deactivation (may already be dead)', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+}
+
+export function isHandoffActive(): boolean {
+  return _handoff.active;
+}
+
+// ── Sidecar HTTP helpers ───────────────────────────────────
+
+function sidecarRequest(method: string, path: string, body?: unknown): Promise<{ status: number; data: unknown }> {
+  return new Promise((resolve, reject) => {
+    const port = getSidecarPort();
+    const payload = body ? JSON.stringify(body) : undefined;
+
+    const req = http.request({
+      hostname: 'localhost',
+      port,
+      path,
+      method,
+      headers: payload
+        ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) }
+        : undefined,
+    }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (chunk: Buffer) => chunks.push(chunk));
+      res.on('end', () => {
+        const raw = Buffer.concat(chunks);
+        const contentType = res.headers['content-type'] ?? '';
+        if (contentType.includes('image/png')) {
+          resolve({ status: res.statusCode ?? 200, data: raw });
+        } else {
+          try {
+            resolve({ status: res.statusCode ?? 200, data: JSON.parse(raw.toString()) });
+          } catch {
+            resolve({ status: res.statusCode ?? 200, data: raw.toString() });
+          }
+        }
+      });
+    });
+
+    req.on('error', reject);
+    req.setTimeout(10_000, () => { req.destroy(new Error('Sidecar request timeout')); });
+    if (payload) req.write(payload);
+    req.end();
+  });
+}
+
+function sidecarScreenshot(): Promise<Buffer | null> {
+  return sidecarRequest('GET', '/session/screenshot').then(({ status, data }) => {
+    if (status === 200 && Buffer.isBuffer(data)) return data;
+    return null;
+  }).catch(() => null);
+}
+
+// ── Telegram sendPhoto ─────────────────────────────────────
+
+function sendPhoto(imageBuffer: Buffer, chatId?: string, caption?: string): void {
+  const token = getTelegramBotToken();
+  const targetChatId = chatId ?? getTelegramChatId();
+  if (!token || !targetChatId) {
+    log.error('Cannot sendPhoto: missing bot token or chat ID');
+    return;
+  }
+
+  const boundary = '----BMOBoundary' + Date.now();
+  const parts: Buffer[] = [];
+
+  // chat_id field
+  parts.push(Buffer.from(
+    `--${boundary}\r\nContent-Disposition: form-data; name="chat_id"\r\n\r\n${targetChatId}\r\n`
+  ));
+
+  // caption field (optional)
+  if (caption) {
+    parts.push(Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="caption"\r\n\r\n${caption}\r\n`
+    ));
+  }
+
+  // photo field
+  parts.push(Buffer.from(
+    `--${boundary}\r\nContent-Disposition: form-data; name="photo"; filename="screenshot.png"\r\nContent-Type: image/png\r\n\r\n`
+  ));
+  parts.push(imageBuffer);
+  parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+
+  const body = Buffer.concat(parts);
+
+  const req = https.request({
+    hostname: 'api.telegram.org',
+    path: `/bot${token}/sendPhoto`,
+    method: 'POST',
+    headers: {
+      'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      'Content-Length': body.length,
+    },
+  }, (res) => {
+    let responseBody = '';
+    res.on('data', (chunk: Buffer) => { responseBody += chunk.toString(); });
+    res.on('end', () => {
+      try {
+        const result = JSON.parse(responseBody);
+        if (result.ok) {
+          log.debug('Screenshot sent to Telegram');
+        } else {
+          log.error('Telegram sendPhoto failed', { response: responseBody });
+        }
+      } catch {
+        log.error('Telegram sendPhoto: unparseable response');
+      }
+    });
+  });
+
+  req.on('error', (err) => {
+    log.error('Telegram sendPhoto error', { error: err.message });
+  });
+
+  req.write(body);
+  req.end();
+}
 
 interface TelegramUpdate {
   update_id?: number;
@@ -254,7 +445,7 @@ async function downloadTelegramFile(fileId: string, filename: string): Promise<s
 
 // ── Send message ────────────────────────────────────────────
 
-function sendMessage(text: string, chatId?: string): void {
+export function sendMessage(text: string, chatId?: string): void {
   const token = getTelegramBotToken();
   const targetChatId = chatId ?? getTelegramChatId();
   if (!token || !targetChatId) {
@@ -476,6 +667,106 @@ function handleReaction(reaction: MessageReactionUpdated): void {
   }
 }
 
+/**
+ * Handle a browser hand-off command from a safe sender.
+ * Returns true if the message was a hand-off command (consumed), false otherwise.
+ */
+async function handleHandoffCommand(text: string, replyChatId: string): Promise<boolean> {
+  const lower = text.toLowerCase().trim();
+
+  // type: [text] — relay text to browser (takes priority over other matches)
+  if (lower.startsWith('type:')) {
+    const relayText = text.slice(5).trimStart(); // Preserve original case after "type:"
+    if (!relayText) {
+      // "type:" with nothing after — ignore
+      return true;
+    }
+
+    try {
+      // Security: DO NOT log relayText — it may contain passwords
+      log.info('Hand-off: relaying typed text to sidecar');
+      await sidecarRequest('POST', '/session/type', { text: relayText });
+      sendMessage('Typed.', replyChatId);
+    } catch (err) {
+      log.error('Hand-off type relay failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      sendMessage('Failed to type text into browser.', replyChatId);
+    }
+    return true;
+  }
+
+  // screenshot — capture and send back via Telegram
+  if (lower === 'screenshot') {
+    try {
+      const screenshot = await sidecarScreenshot();
+      if (screenshot) {
+        sendPhoto(screenshot, replyChatId, 'Browser screenshot');
+      } else {
+        sendMessage('Could not capture screenshot.', replyChatId);
+      }
+    } catch (err) {
+      log.error('Hand-off screenshot failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      sendMessage('Screenshot failed.', replyChatId);
+    }
+    return true;
+  }
+
+  // done / all yours / go ahead — hand-off completion
+  if (lower === 'done' || lower === 'all yours' || lower === 'go ahead') {
+    await deactivateHandoff();
+
+    // Take a fresh screenshot for Claude's context (non-fatal if it fails)
+    try {
+      const screenshot = await sidecarScreenshot();
+      if (screenshot && screenshot.length <= 2 * 1024 * 1024) {
+        const screenshotDir = resolveProjectPath(MEDIA_DIR_REL);
+        fs.mkdirSync(screenshotDir, { recursive: true });
+        const screenshotPath = path.join(screenshotDir, `handoff_done_${Date.now()}.png`);
+        fs.writeFileSync(screenshotPath, screenshot);
+        injectText(`[Browser] Dave completed hand-off. Screenshot saved: ${screenshotPath}`);
+      } else {
+        if (screenshot) {
+          log.warn('Hand-off done screenshot too large, skipping save', { bytes: screenshot.length });
+        }
+        injectText(`[Browser] Dave completed hand-off.`);
+      }
+    } catch (err) {
+      log.error('Hand-off done screenshot failed', { error: err instanceof Error ? err.message : String(err) });
+      injectText(`[Browser] Dave completed hand-off.`);
+    }
+
+    sendMessage('Hand-off complete. BMO is back in control.', replyChatId);
+    log.info('Hand-off completed by user');
+    return true;
+  }
+
+  // abort / cancel — close session and abort (always works, even if sidecar is dead)
+  if (lower === 'abort' || lower === 'cancel') {
+    // Deactivate daemon-side hand-off state first (always succeeds)
+    await deactivateHandoff();
+
+    // Best-effort sidecar stop — don't fail if sidecar is dead
+    try {
+      await sidecarRequest('POST', '/session/stop', { saveContext: true });
+    } catch (err) {
+      log.warn('Hand-off abort: sidecar stop failed (may already be dead)', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    injectText(`[Browser] Dave aborted hand-off. Session closed.`);
+    sendMessage('Hand-off aborted. Session closed.', replyChatId);
+    log.info('Hand-off aborted by user');
+    return true;
+  }
+
+  // Not a hand-off command
+  return false;
+}
+
 async function processIncomingMessage(text: string, senderId: string, replyChatId: string, firstName: string): Promise<void> {
   // Classify the sender by their user ID (works for both DMs and groups)
   const tier: SenderTier = classifySender(senderId, 'telegram');
@@ -492,6 +783,34 @@ async function processIncomingMessage(text: string, senderId: string, replyChatI
   if (tier === 'safe') {
     // Check if this is an approval response from the primary
     if (checkForApprovalResponse(text, senderId)) {
+      return;
+    }
+
+    // Check if browser hand-off is active
+    if (_handoff.active) {
+      // /ask escape hatch — passes through to Claude even during hand-off
+      if (text.startsWith('/ask ')) {
+        const question = text.slice(5).trim();
+        if (question) {
+          await injectWithSessionWakeup(question, senderId, replyChatId, firstName, false);
+          return;
+        }
+      }
+
+      const handled = await handleHandoffCommand(text, replyChatId);
+      if (handled) return;
+
+      // Not a recognized command — treat as text to type into the focused field
+      try {
+        log.info('Hand-off: relaying message as typed text');
+        await sidecarRequest('POST', '/session/type', { text });
+        sendMessage('Typed.', replyChatId);
+      } catch (err) {
+        log.error('Hand-off type relay failed', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+        sendMessage('Failed to type. Commands: done, abort, screenshot, /ask [question]', replyChatId);
+      }
       return;
     }
 

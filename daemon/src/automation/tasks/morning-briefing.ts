@@ -32,14 +32,40 @@ function gatherCalendar(): string {
 
 function gatherWeather(): string {
   try {
+    // One-line current conditions
+    const current = execFileSync('/usr/bin/curl', [
+      '-s', '--max-time', '8',
+      'wttr.in/White+Hall+MD?format=%c+%t+|+Humidity:+%h+|+Wind:+%w+|+Precip:+%p',
+    ], { encoding: 'utf8', timeout: 10_000 }).trim();
+
+    // 3-day forecast summary (compact)
+    const forecast = execFileSync('/usr/bin/curl', [
+      '-s', '--max-time', '8',
+      'wttr.in/White+Hall+MD?format=3',
+    ], { encoding: 'utf8', timeout: 10_000 }).trim();
+
+    if (!current && !forecast) return 'Weather unavailable.';
+    const parts = [];
+    if (current) parts.push(`Now: ${current}`);
+    if (forecast) parts.push(`Forecast: ${forecast}`);
+    return parts.join('\n');
+  } catch (err) {
+    log.warn('Weather fetch failed', { error: err instanceof Error ? err.message : String(err) });
+    return 'Weather unavailable.';
+  }
+}
+
+function gatherLookahead(): string {
+  try {
+    // Check next 7 days for notable events (birthdays, travel, storms, deadlines)
     const output = execSync(
-      'curl -s "wttr.in/White+Hall+MD?format=%c+%t+%h+humidity,+%w+wind,+%p+precip"',
+      'icalbuddy -n -nc -nrd -npn -ea -eep notes,url -b "• " -iep title,datetime eventsFrom:tomorrow to:today+7',
       { encoding: 'utf8', timeout: 10_000 },
     ).trim();
-    return output || 'Weather unavailable.';
+    return output || 'Nothing notable in the next 7 days.';
   } catch {
-    log.warn('Weather fetch failed');
-    return 'Weather unavailable.';
+    log.warn('icalbuddy lookahead failed');
+    return 'Lookahead unavailable.';
   }
 }
 
@@ -130,18 +156,22 @@ function sendDirectTelegram(text: string): void {
 /**
  * Format a plain-text briefing for direct Telegram delivery.
  */
-function formatPlainBriefing(today: string, weather: string, calendar: string, todos: string, overnight: string): string {
+function formatPlainBriefing(today: string, weather: string, calendar: string, lookahead: string, todos: string, overnight: string): string {
   const lines = [
     `Good morning! Here's your briefing for ${today}.`,
     '',
-    `Weather: ${weather}`,
+    `Weather:`,
+    weather,
     '',
-    'Schedule:',
+    'Today:',
     calendar,
-    '',
-    'Open to-dos:',
-    todos,
   ];
+
+  if (lookahead && !lookahead.includes('Nothing notable') && !lookahead.includes('unavailable')) {
+    lines.push('', 'Coming up:', lookahead);
+  }
+
+  lines.push('', 'Open to-dos:', todos);
 
   if (overnight && overnight !== 'No overnight messages.') {
     lines.push('', 'Overnight:', overnight);
@@ -155,6 +185,7 @@ async function run(): Promise<void> {
 
   const calendar = gatherCalendar();
   const weather = gatherWeather();
+  const lookahead = gatherLookahead();
   const todos = gatherTodos();
   const overnight = gatherOvernightMessages();
 
@@ -172,10 +203,13 @@ async function run(): Promise<void> {
       'Send Dave a concise, friendly morning briefing via Telegram with the data below.',
       'Format it nicely but keep it short — a snapshot, not an essay.',
       'Include any notable items and a cheerful greeting.',
+      'If the lookahead has anything notable (birthdays, travel, big storms, deadlines), call it out.',
       '',
-      `WEATHER: ${weather}`,
+      `WEATHER:\n${weather}`,
       '',
       `CALENDAR:\n${calendar}`,
+      '',
+      `COMING UP (next 7 days):\n${lookahead}`,
       '',
       `OPEN TO-DOS:\n${todos}`,
       '',
@@ -187,7 +221,7 @@ async function run(): Promise<void> {
   } else {
     // No session — send a plain-text briefing directly via Telegram
     log.warn('No Claude session available — sending plain-text briefing via Telegram');
-    const briefing = formatPlainBriefing(today, weather, calendar, todos, overnight);
+    const briefing = formatPlainBriefing(today, weather, calendar, lookahead, todos, overnight);
     sendDirectTelegram(briefing);
   }
 }
