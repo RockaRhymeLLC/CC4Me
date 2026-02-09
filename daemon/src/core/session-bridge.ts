@@ -33,9 +33,15 @@ const STALE_STATE_MS = 10 * 60 * 1000; // 10 minutes
 export function updateAgentState(hookEvent: string): void {
   const prev = _agentState;
   if (hookEvent === 'Stop') {
+    // Stop = main agent turn complete → idle
     _agentState = 'idle';
+  } else if (hookEvent === 'SubagentStop') {
+    // SubagentStop = Task sub-agent finished, but main agent may still be working.
+    // Don't change state — let Stop be the authoritative idle signal.
+    // This prevents SubagentStop from incorrectly setting busy after Stop fires.
+    return;
   } else {
-    // PostToolUse, SubagentStop, UserPromptSubmit, etc. — agent is working
+    // PostToolUse, UserPromptSubmit, etc. — agent is working
     _agentState = 'busy';
   }
   _agentStateUpdatedAt = Date.now();
