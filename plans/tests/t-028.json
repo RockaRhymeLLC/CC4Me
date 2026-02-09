@@ -1,0 +1,44 @@
+{
+  "id": "t-028",
+  "title": "Telegram type: relay during hand-off",
+  "description": "Verify type: messages are relayed to sidecar and NOT logged",
+  "storyRefs": ["s-b07"],
+  "planRef": "plans/20260206-browser-handoff.plan.md",
+  "type": "story",
+  "status": "pending",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Start a browser session via sidecar and navigate to a page with an input field. Set hand-off active flag in daemon.",
+      "expected": "Session active, hand-off flag set"
+    },
+    {
+      "order": 2,
+      "action": "Click on the input field via sidecar to focus it",
+      "expected": "Input field focused"
+    },
+    {
+      "order": 3,
+      "action": "Send a Telegram message from Dave: 'type: secret-password-123'",
+      "expected": "Daemon intercepts the message (does NOT inject into Claude session). Daemon calls POST /session/type on sidecar with the text."
+    },
+    {
+      "order": 4,
+      "action": "Take a screenshot of the browser session",
+      "expected": "Screenshot shows 'secret-password-123' typed into the input field"
+    },
+    {
+      "order": 5,
+      "action": "Search daemon logs for 'secret-password-123'",
+      "expected": "Text does NOT appear in any daemon log file — relay text is never logged"
+    },
+    {
+      "order": 6,
+      "action": "Send a normal Telegram message from Dave: 'hey BMO, what time is it?'",
+      "expected": "Message is NOT intercepted — flows through normal Telegram handling to Claude session"
+    }
+  ],
+  "created": "2026-02-07T05:00:00Z",
+  "executedAt": "2026-02-07T07:00:00Z",
+  "result": "pass"
+}

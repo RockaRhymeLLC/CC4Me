@@ -147,10 +147,10 @@ async function searchEmails(query, limit = 10) {
 }
 
 // Send email (with optional attachments)
-async function sendEmail(to, subject, body, attachmentPaths = [], cc = [], bcc = []) {
+async function sendEmail(to, subject, body, attachmentPaths = [], cc = [], bcc = [], { html = false } = {}) {
   const message = {
     subject,
-    body: { contentType: 'Text', content: body },
+    body: { contentType: html ? 'HTML' : 'Text', content: body },
     toRecipients: [{ emailAddress: { address: to } }],
     ...(cc.length > 0 ? { ccRecipients: cc.map(addr => ({ emailAddress: { address: addr } })) } : {}),
     ...(bcc.length > 0 ? { bccRecipients: bcc.map(addr => ({ emailAddress: { address: addr } })) } : {}),
@@ -243,22 +243,25 @@ async function main() {
       }
 
       case 'send': {
-        // Parse --cc and --bcc flags from args
+        // Parse --cc, --bcc, and --html flags from args
         const ccAddresses = [];
         const bccAddresses = [];
+        let isHtml = false;
         const remaining = [];
         for (let i = 0; i < args.length; i++) {
           if (args[i] === '--cc' && i + 1 < args.length) {
             ccAddresses.push(args[++i]);
           } else if (args[i] === '--bcc' && i + 1 < args.length) {
             bccAddresses.push(args[++i]);
+          } else if (args[i] === '--html') {
+            isHtml = true;
           } else {
             remaining.push(args[i]);
           }
         }
         const [to, subject, body, ...attachments] = remaining;
-        if (!to || !subject || !body) { console.error('Usage: graph.js send "to" "subject" "body" [--cc addr] [--bcc addr] [attachment1] ...'); process.exit(1); }
-        await sendEmail(to, subject, body, attachments, ccAddresses, bccAddresses);
+        if (!to || !subject || !body) { console.error('Usage: graph.js send "to" "subject" "body" [--html] [--cc addr] [--bcc addr] [attachment1] ...'); process.exit(1); }
+        await sendEmail(to, subject, body, attachments, ccAddresses, bccAddresses, { html: isHtml });
         const attachNote = attachments.length > 0 ? ` with ${attachments.length} attachment(s)` : '';
         const ccNote = ccAddresses.length > 0 ? ` (cc: ${ccAddresses.join(', ')})` : '';
         const bccNote = bccAddresses.length > 0 ? ` (bcc: ${bccAddresses.length} recipient(s))` : '';

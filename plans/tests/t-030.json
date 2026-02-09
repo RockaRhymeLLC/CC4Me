@@ -1,0 +1,44 @@
+{
+  "id": "t-030",
+  "title": "Session timeout warnings and idle detection",
+  "description": "Verify session timeout behavior and idle hand-off reminders",
+  "storyRefs": ["s-b09"],
+  "planRef": "plans/20260206-browser-handoff.plan.md",
+  "type": "story",
+  "status": "pending",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Start a session with a short timeout (e.g., 2 minutes for testing) via sidecar",
+      "expected": "Session starts with the specified timeout"
+    },
+    {
+      "order": 2,
+      "action": "Wait until 30 seconds before timeout (adjust for test timeouts)",
+      "expected": "Sidecar sends a timeout warning message via Telegram: 'Browser session closing in 30 seconds'"
+    },
+    {
+      "order": 3,
+      "action": "Let the timeout expire",
+      "expected": "Session auto-closed. Context saved. Notification sent via Telegram: 'Browser session closed (timeout). Context saved.'"
+    },
+    {
+      "order": 4,
+      "action": "Start a new session and set hand-off active. Do not respond for the configured idle warning period.",
+      "expected": "Idle reminder sent via Telegram: 'Still waiting for your help on [site]...'"
+    },
+    {
+      "order": 5,
+      "action": "Continue to not respond until hand-off idle timeout expires",
+      "expected": "Session closed, context saved, retry todo created. Notification: 'Closed browser session (no response). Will retry when you're available.'"
+    },
+    {
+      "order": 6,
+      "action": "Start a session with hand-off active. Send a type: command during the idle period.",
+      "expected": "Idle timer resets — the interaction counts as Dave being present"
+    }
+  ],
+  "created": "2026-02-07T05:00:00Z",
+  "executedAt": "2026-02-07T08:00:00Z",
+  "result": "pass"
+}

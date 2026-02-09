@@ -11,7 +11,7 @@ import path from 'node:path';
 import { loadConfig, getProjectDir } from './config.js';
 import { initLogger, createLogger } from './logger.js';
 import { runHealthCheck, formatReport } from './health.js';
-import { sessionExists, injectText } from './session-bridge.js';
+import { sessionExists, injectText, updateAgentState } from './session-bridge.js';
 
 // Comms imports (Phase 2)
 import { startTranscriptStream, stopTranscriptStream, onHookNotification } from '../comms/transcript-stream.js';
@@ -163,12 +163,25 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200);
       res.end('ok');
 
+      let hookEvent: string | undefined;
       try {
         const payload = JSON.parse(body);
+        hookEvent = payload.hook_event;
         onHookNotification(payload.transcript_path);
       } catch {
         // No body or invalid JSON — still trigger a read
         onHookNotification();
+      }
+
+      // Update agent state from hook event (replaces pane-scraping heuristics)
+      if (hookEvent) {
+        updateAgentState(hookEvent);
+      }
+
+      // On Stop events, deliver any queued Telegram messages.
+      // This ensures messages arrive between responses, not mid-response.
+      if (hookEvent === 'Stop' && telegramRouter) {
+        telegramRouter.deliverPending();
       }
     });
     return;

@@ -1,0 +1,44 @@
+{
+  "id": "t-007",
+  "title": "Full voice pipeline end-to-end",
+  "description": "Verify the complete flow: audio in → STT → Claude → TTS → audio out",
+  "storyRefs": ["s-v04"],
+  "planRef": "plans/20260204-voice-integration.plan.md",
+  "type": "story",
+  "status": "pass",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Ensure Claude Code is running in tmux session and is idle (not processing)",
+      "expected": "Session exists and isBusy() returns false"
+    },
+    {
+      "order": 2,
+      "action": "POST a WAV file containing 'what time is it' to /voice/transcribe",
+      "expected": "Server begins processing — transcribes audio via whisper.cpp"
+    },
+    {
+      "order": 3,
+      "action": "Observe tmux session",
+      "expected": "Text '[Voice] Dave: what time is it' appears as input in the Claude session"
+    },
+    {
+      "order": 4,
+      "action": "Wait for HTTP response (long-poll, up to 30 seconds)",
+      "expected": "Response received with both transcription text AND audio/wav body"
+    },
+    {
+      "order": 5,
+      "action": "Play the response audio",
+      "expected": "Intelligible speech containing Claude's response to 'what time is it'"
+    },
+    {
+      "order": 6,
+      "action": "Verify temp files cleaned up",
+      "expected": "No orphaned WAV files in temp directory"
+    }
+  ],
+  "created": "2026-02-04T15:00:00Z",
+  "executedAt": "2026-02-04T20:12:00Z",
+  "result": "PASS. Full pipeline verified: TTS-generated WAV (What time is it?) sent to /voice/transcribe → whisper.cpp STT correctly transcribed → text injected into Claude tmux as [Voice] Dave: → voice-pending callback intercepted Claude response → TTS synthesized 537KB WAV. HTTP 200, X-Transcription and X-Response-Text headers present. Total round-trip 33s (includes Claude processing). Busy check works (503 when Claude active). Temp files cleaned up."
+}

@@ -1,0 +1,35 @@
+{
+  "id": "s-v01",
+  "title": "Voice module foundation and config",
+  "description": "Create the voice module directory structure, add VoiceConfig types to config.ts, add the channels.voice section to cc4me.config.yaml, implement the voice client registry for tracking connected laptop clients, and add basic /voice/* route delegation in main.ts. This is the skeleton that all other voice stories build on.",
+  "planRef": "plans/20260204-voice-integration.plan.md",
+  "todoRef": "054",
+  "status": "complete",
+  "priority": 1,
+  "tests": ["t-001", "t-002"],
+  "blockedBy": [],
+  "created": "2026-02-04T15:00:00Z",
+  "updated": "2026-02-04T15:00:00Z",
+  "notes": [
+    {"timestamp": "2026-02-04T13:15:00Z", "content": "All code written: voice-client-registry.ts, voice-server.ts, config.ts types, cc4me.config.yaml section, main.ts route delegation. TypeScript compiles clean. Need to restart daemon and test endpoints."},
+    {"timestamp": "2026-02-04T18:08:00Z", "content": "Tests t-001 and t-002 both PASS. Config loads/validates with defaults, 503 when disabled, client CRUD works, stale pruning works after 60s timeout. Story complete."}
+  ],
+  "files": [
+    "daemon/src/voice/voice-server.ts",
+    "daemon/src/voice/voice-client-registry.ts",
+    "daemon/src/core/config.ts",
+    "daemon/src/core/main.ts",
+    "cc4me.config.yaml"
+  ],
+  "acceptanceCriteria": [
+    "daemon/src/voice/ directory exists with voice-server.ts and voice-client-registry.ts",
+    "VoiceConfig interface added to config.ts with stt, tts, wake_word, client, and initiation sections",
+    "cc4me.config.yaml has channels.voice section (enabled: false by default until models installed)",
+    "POST /voice/register accepts a client callback URL and stores it in the registry",
+    "POST /voice/unregister removes a client from the registry",
+    "GET /voice/status returns whether any voice client is currently connected",
+    "Registry tracks client IP, callback URL, and last-seen timestamp",
+    "Stale clients (no heartbeat in 60s) are automatically pruned",
+    "main.ts delegates /voice/* routes to voice-server.ts handler"
+  ]
+}

@@ -1,10 +1,9 @@
 /**
  * Session Bridge — all tmux interaction in one place.
  *
- * Replaces the 5+ independent "is Claude busy?" checks scattered across
- * scripts with a single implementation. Handles:
+ * Handles:
+ * - Hook-based agent state tracking (idle/busy from Stop/PostToolUse events)
  * - Session existence check
- * - Busy detection (spinner, "esc to interrupt", recent transcript activity)
  * - Text injection into the Claude Code pane
  * - Pane capture for reading current screen content
  */
@@ -17,6 +16,57 @@ import { loadConfig, getProjectDir } from './config.js';
 import { createLogger } from './logger.js';
 
 const log = createLogger('session-bridge');
+
+// ── Hook-based agent state tracking ─────────────────────────
+// Definitive agent state derived from hook events, not pane scraping.
+// Stop → idle, PostToolUse/SubagentStop/UserPromptSubmit → busy.
+
+let _agentState: 'idle' | 'busy' = 'idle';
+let _agentStateUpdatedAt: number = 0;
+
+const STALE_STATE_MS = 10 * 60 * 1000; // 10 minutes
+
+/**
+ * Update agent state from a hook event.
+ * Called by the /hook/response handler in main.ts.
+ */
+export function updateAgentState(hookEvent: string): void {
+  const prev = _agentState;
+  if (hookEvent === 'Stop') {
+    _agentState = 'idle';
+  } else {
+    // PostToolUse, SubagentStop, UserPromptSubmit, etc. — agent is working
+    _agentState = 'busy';
+  }
+  _agentStateUpdatedAt = Date.now();
+  if (prev !== _agentState) {
+    log.info(`Agent state: ${prev} → ${_agentState} (hook: ${hookEvent})`);
+  }
+}
+
+/**
+ * Check if the agent is idle based on hook events.
+ * Returns true if the last hook event was Stop (agent finished responding).
+ * Falls back to true if no hook events received yet (fresh daemon start)
+ * or if the last state update is stale (>10min — hooks may have stopped firing).
+ */
+export function isAgentIdle(): boolean {
+  // If no hook events yet, assume idle (daemon just started)
+  if (_agentStateUpdatedAt === 0) return true;
+
+  // Staleness guard: if no hooks for 10 minutes, fall back to idle.
+  // Prevents stuck-busy state if hooks stop firing (daemon restart,
+  // hook script failure, etc.)
+  if (Date.now() - _agentStateUpdatedAt > STALE_STATE_MS) {
+    if (_agentState === 'busy') {
+      log.info('Agent state stale (>10min) — falling back to idle');
+      _agentState = 'idle';
+    }
+    return true;
+  }
+
+  return _agentState === 'idle';
+}
 
 /**
  * Get the Claude Code transcript directory for a project path.
@@ -70,112 +120,6 @@ export function capturePane(): string {
   }
 }
 
-/**
- * Check if Claude is actively generating a response (pane indicators only).
- * Looks for spinner characters and "esc to interrupt" text in a small
- * **recent window** of the pane — only the last 10 content lines,
- * excluding the bottom 3 lines (status line / input bar which have
- * decorative Unicode that triggers false positives).
- *
- * This avoids two sources of false positives:
- * 1. Status line Unicode chars matching the spinner regex
- * 2. Historical spinner output in scroll-back (e.g. "✻ Worked for 51s")
- *
- * Used by the scheduler to avoid interrupting mid-response.
- */
-export function isActivelyProcessing(): boolean {
-  if (!sessionExists()) return false;
-
-  const pane = capturePane();
-
-  // Split into lines, exclude the bottom 3 (status bar + input prompt),
-  // then only check the last 10 content lines (where current activity shows).
-  // This avoids matching historical spinner chars in scroll-back.
-  const lines = pane.split('\n');
-  const contentLines = lines.slice(0, Math.max(lines.length - 3, 0));
-  const recentLines = contentLines.slice(-10);
-  const content = recentLines.join('\n');
-
-  // Check for "esc to interrupt" — Claude is processing
-  if (content.includes('esc to interrupt')) {
-    log.debug('ActivelyProcessing: "esc to interrupt" visible');
-    return true;
-  }
-
-  // Check for Unicode spinner characters in recent content only
-  if (/[✶✷✸✹✺✻✼✽✾✿❀❁❂❃⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/.test(content)) {
-    log.debug('ActivelyProcessing: spinner visible');
-    return true;
-  }
-
-  return false;
-}
-
-/**
- * Check if Claude Code is idle — waiting for user input.
- * Looks for the `❯` input prompt in the pane, which only appears
- * when Claude Code is waiting for the next message (not processing,
- * not mid-response, not running tools).
- *
- * Use this for tasks that should only run when the assistant has
- * nothing to do (e.g., todo reminders, proactive nudges).
- */
-export function isIdle(): boolean {
-  if (!sessionExists()) return false;
-
-  const pane = capturePane();
-
-  // The ❯ prompt appears on its own line when Claude Code is waiting for input.
-  // Check the last few non-empty lines for the prompt character.
-  const lines = pane.split('\n').filter(l => l.trim().length > 0);
-  const lastLines = lines.slice(-5);
-
-  for (const line of lastLines) {
-    const trimmed = line.trim();
-    // The prompt is ❯ possibly followed by user-typed text
-    if (trimmed === '❯' || trimmed.startsWith('❯ ')) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-/**
- * Check if Claude is busy (includes transcript recency).
- * Includes all pane indicator checks PLUS recent transcript modification.
- * Use this for scheduler tasks where you want to avoid interrupting
- * an active conversation, even between responses.
- */
-export function isBusy(): boolean {
-  if (isActivelyProcessing()) return true;
-
-  // Check if transcript was modified in the last 10 seconds
-  const projectDir = getProjectDir();
-  const transcriptDir = getTranscriptDir(projectDir);
-
-  try {
-    const files = fs.readdirSync(transcriptDir)
-      .filter(f => f.endsWith('.jsonl'))
-      .map(f => ({
-        path: path.join(transcriptDir, f),
-        mtime: fs.statSync(path.join(transcriptDir, f)).mtimeMs,
-      }))
-      .sort((a, b) => b.mtime - a.mtime);
-
-    if (files.length > 0) {
-      const age = Date.now() - files[0]!.mtime;
-      if (age < 10_000) {
-        log.debug(`Busy: transcript modified ${Math.round(age / 1000)}s ago`);
-        return true;
-      }
-    }
-  } catch {
-    // Transcript dir might not exist yet
-  }
-
-  return false;
-}
 
 /**
  * Inject text into the Claude Code session.

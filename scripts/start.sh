@@ -11,11 +11,11 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
-# Find claude binary - check common locations, fall back to PATH
-if command -v claude >/dev/null 2>&1; then
-    CLAUDE="$(command -v claude)"
-elif [ -x "$HOME/.local/bin/claude" ]; then
+# Find claude binary - check known install location first, then PATH
+if [ -x "$HOME/.local/bin/claude" ]; then
     CLAUDE="$HOME/.local/bin/claude"
+elif command -v claude >/dev/null 2>&1; then
+    CLAUDE="$(command -v claude)"
 else
     echo "Error: claude not found. Install Claude Code first." >&2
     exit 1

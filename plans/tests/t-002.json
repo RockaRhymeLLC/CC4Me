@@ -1,0 +1,44 @@
+{
+  "id": "t-002",
+  "title": "Voice client registry tracks and prunes clients",
+  "description": "Verify the voice client registry correctly registers, deregisters, and prunes stale voice clients",
+  "storyRefs": ["s-v01"],
+  "planRef": "plans/20260204-voice-integration.plan.md",
+  "type": "story",
+  "status": "pass",
+  "steps": [
+    {
+      "order": 1,
+      "action": "POST /voice/register with body {callbackUrl: 'http://192.168.1.50:8088/voice', clientId: 'daves-macbook'}",
+      "expected": "200 OK, client stored in registry"
+    },
+    {
+      "order": 2,
+      "action": "GET /voice/status",
+      "expected": "Returns {connected: true, clients: [{clientId: 'daves-macbook', callbackUrl: '...', lastSeen: '...'}]}"
+    },
+    {
+      "order": 3,
+      "action": "POST /voice/register again with same clientId (heartbeat)",
+      "expected": "200 OK, lastSeen timestamp updated"
+    },
+    {
+      "order": 4,
+      "action": "POST /voice/unregister with body {clientId: 'daves-macbook'}",
+      "expected": "200 OK, client removed from registry"
+    },
+    {
+      "order": 5,
+      "action": "GET /voice/status after unregister",
+      "expected": "Returns {connected: false, clients: []}"
+    },
+    {
+      "order": 6,
+      "action": "Register a client, then wait 65 seconds without heartbeat",
+      "expected": "Client automatically pruned from registry. GET /voice/status shows connected: false"
+    }
+  ],
+  "created": "2026-02-04T15:00:00Z",
+  "executedAt": "2026-02-04T18:08:00Z",
+  "result": "All 6 steps pass. Register 200, status shows client, heartbeat updates lastSeen (registeredAt unchanged), unregister removes, status empty, stale client pruned after 60s+15s prune cycle."
+}

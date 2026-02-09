@@ -1,0 +1,39 @@
+{
+  "id": "t-004",
+  "title": "Audio upload and temp file management",
+  "description": "Verify the /voice/transcribe endpoint correctly receives audio data and temp files are managed properly",
+  "storyRefs": ["s-v02"],
+  "planRef": "plans/20260204-voice-integration.plan.md",
+  "type": "story",
+  "status": "pass",
+  "steps": [
+    {
+      "order": 1,
+      "action": "POST a WAV file to /voice/transcribe with Content-Type: audio/wav",
+      "expected": "Server receives audio data, saves to temp file"
+    },
+    {
+      "order": 2,
+      "action": "Check temp directory during processing",
+      "expected": "Temp WAV file exists with unique name"
+    },
+    {
+      "order": 3,
+      "action": "Wait for response to complete",
+      "expected": "Temp file cleaned up after processing (regardless of success/failure)"
+    },
+    {
+      "order": 4,
+      "action": "POST invalid data (not a WAV file) to /voice/transcribe",
+      "expected": "Returns 400 error with descriptive message, no temp file left behind"
+    },
+    {
+      "order": 5,
+      "action": "POST a very large file (>10MB) to /voice/transcribe",
+      "expected": "Request rejected with 413 (payload too large) before saving to disk"
+    }
+  ],
+  "created": "2026-02-04T15:00:00Z",
+  "executedAt": "2026-02-04T18:17:00Z",
+  "result": "All 5 steps pass. WAV upload returns 200, temp files created and cleaned up (verified no stale files), invalid data returns 400 with no temp file, >10MB returns 413 (fixed: drain body before responding, initial req.destroy() broke the response)."
+}

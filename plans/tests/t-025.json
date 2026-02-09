@@ -1,0 +1,39 @@
+{
+  "id": "t-025",
+  "title": "Context listing and management",
+  "description": "Verify context listing, deletion, and atomic write behavior",
+  "storyRefs": ["s-b05"],
+  "planRef": "plans/20260206-browser-handoff.plan.md",
+  "type": "story",
+  "status": "pending",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Ensure browser-contexts.json has at least one test context entry (from t-024 or manually seeded)",
+      "expected": "JSON file exists with at least one context entry"
+    },
+    {
+      "order": 2,
+      "action": "GET /contexts",
+      "expected": "Returns JSON array of context objects with name, browserbase_context_id, last_used, last_verified, domain fields"
+    },
+    {
+      "order": 3,
+      "action": "Verify the context store uses atomic writes (write to temp file, then rename)",
+      "expected": "Inspect context-store.ts code: uses writeFileSync to temp path, then renameSync to final path"
+    },
+    {
+      "order": 4,
+      "action": "DELETE /contexts/:name for a test context",
+      "expected": "Returns 200. Context removed from JSON manifest. Browserbase API context deletion attempted (may 404 if already cleaned up)."
+    },
+    {
+      "order": 5,
+      "action": "DELETE /contexts/:name for a non-existent context",
+      "expected": "Returns 404 with descriptive error"
+    }
+  ],
+  "created": "2026-02-07T05:00:00Z",
+  "executedAt": null,
+  "result": null
+}

@@ -45,24 +45,43 @@ export interface EmailChannelConfig {
 }
 
 export interface VoiceSttConfig {
-  model?: string;           // Whisper model name (e.g., "small.en")
-  model_path?: string;      // Full path to model file
-  language?: string;        // Language code (default: "en")
+  engine: string;        // e.g. 'whisper-cpp'
+  model: string;         // e.g. 'small.en'
+  language: string;
 }
 
 export interface VoiceTtsConfig {
-  port?: number;            // TTS worker port (default: 3848)
-  engine?: string;          // TTS engine name
-  model?: string;           // TTS model path
-  speaker?: string;         // Voice name
-  voice?: string;           // Voice ID/name
-  instruct_prompt?: string; // TTS style instruction
+  engine: string;        // e.g. 'qwen3-tts-mlx'
+  model: string;         // e.g. 'Qwen/Qwen3-TTS-0.6B'
+  voice: string;
+  speed: number;
+}
+
+export interface VoiceWakeWordConfig {
+  engine: string;        // e.g. 'openwakeword'
+  phrase: string;        // e.g. 'Hey BMO'
+}
+
+export interface VoiceClientConfig {
+  listen_after_response: number;   // seconds of conversation mode
+  chime_timeout: number;           // seconds to wait for voice confirmation
+  confirmation_phrases: string[];
+  rejection_phrases: string[];
+}
+
+export interface VoiceInitiationConfig {
+  calendar_reminders: boolean;
+  urgent_emails: boolean;
+  todo_nudges: boolean;
 }
 
 export interface VoiceChannelConfig {
   enabled: boolean;
   stt: VoiceSttConfig;
   tts: VoiceTtsConfig;
+  wake_word: VoiceWakeWordConfig;
+  client: VoiceClientConfig;
+  initiation: VoiceInitiationConfig;
 }
 
 export interface ChannelsConfig {
@@ -171,6 +190,19 @@ const DEFAULTS: CC4MeConfig = {
   channels: {
     telegram: { enabled: false, webhook_path: '/telegram' },
     email: { enabled: false, providers: [] },
+    voice: {
+      enabled: false,
+      stt: { engine: 'whisper-cpp', model: 'small.en', language: 'en' },
+      tts: { engine: 'qwen3-tts-mlx', model: 'Qwen/Qwen3-TTS-0.6B', voice: 'default', speed: 1.0 },
+      wake_word: { engine: 'openwakeword', phrase: 'Hey BMO' },
+      client: {
+        listen_after_response: 3,
+        chime_timeout: 5,
+        confirmation_phrases: ['yeah', 'yes', "what's up", 'go ahead', 'what', 'hey'],
+        rejection_phrases: ['not now', 'later', 'no', 'busy'],
+      },
+      initiation: { calendar_reminders: true, urgent_emails: true, todo_nudges: false },
+    },
   },
   'agent-comms': {
     enabled: false,

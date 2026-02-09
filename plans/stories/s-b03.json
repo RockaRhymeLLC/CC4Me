@@ -1,0 +1,30 @@
+{
+  "id": "s-b03",
+  "title": "Sidecar HTTP server + session endpoints",
+  "description": "Build the browser sidecar as a standalone Node.js HTTP server (port 3849). This is the main entry point that daemon communicates with. Follows TTS worker patterns: stdout READY signal, /health endpoint, single-session model.\n\nEndpoints:\n- GET /health — returns 200 with status JSON\n- POST /session/start — create session with optional context, return live view URL + initial screenshot\n- POST /session/stop — close session, optionally save context\n- GET /session/status — current session info or 'no active session'\n- GET /session/screenshot — capture and return current screenshot\n\nBehavior:\n- Prints READY to stdout when HTTP server is listening (daemon watches for this)\n- Only one active session at a time (concurrent session guard)\n- Reads Browserbase credentials from Keychain at startup, passes to session manager\n- Sidecar lives in top-level browser-sidecar/ directory with its own package.json\n- Auto-screenshots on session start (should-have from spec)\n- Clean error responses with descriptive messages",
+  "planRef": "plans/20260206-browser-handoff.plan.md",
+  "todoRef": "065",
+  "status": "complete",
+  "priority": 3,
+  "tests": ["t-021", "t-022"],
+  "blockedBy": ["s-b02"],
+  "created": "2026-02-07T05:00:00Z",
+  "updated": "2026-02-07T06:00:00Z",
+  "notes": ["2026-02-07: main.ts complete. HTTP server on port 3849, READY signal, Keychain credential reading, /health, /session/start, /session/stop, /session/status, /session/screenshot. All t-021 and t-022 test steps passed against live API. Concurrent session guard (409) works. SIGTERM graceful shutdown works."],
+  "files": [
+    "browser-sidecar/src/main.ts",
+    "browser-sidecar/package.json",
+    "browser-sidecar/tsconfig.json"
+  ],
+  "acceptanceCriteria": [
+    "HTTP server starts on configured port and prints READY to stdout",
+    "GET /health returns 200 with JSON status",
+    "POST /session/start creates a Browserbase session and returns live view URL + screenshot",
+    "POST /session/stop closes the active session and optionally saves context",
+    "GET /session/status returns active session info or 'no active session'",
+    "GET /session/screenshot returns PNG screenshot of active session",
+    "Concurrent session guard: /session/start returns 409 if a session is already active",
+    "Sidecar has its own package.json with SDK + playwright-core dependencies",
+    "Clean error responses for all failure modes (no session, provider error, etc.)"
+  ]
+}

@@ -18,7 +18,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { getTelegramBotToken, getTelegramChatId, getShortcutAuthToken } from '../../core/keychain.js';
 import { resolveProjectPath, loadConfig } from '../../core/config.js';
-import { sessionExists, startSession, injectText, isBusy } from '../../core/session-bridge.js';
+import { sessionExists, startSession, injectText } from '../../core/session-bridge.js';
 import { registerTelegramHandler, setChannel } from '../channel-router.js';
 import { createLogger } from '../../core/logger.js';
 import { getSidecarPort, isSidecarReady } from '../../browser/browser-sidecar.js';
@@ -60,89 +60,105 @@ const _handoff: HandoffState = {
  * When active, safe sender messages matching hand-off patterns
  * are intercepted and routed to the browser sidecar.
  *
- * @param replyChatId Optional chat ID override; defaults to _replyChatId or Keychain
- * @returns true if hand-off was activated successfully
+ * Awaits sidecar notification — if sidecar is unreachable, hand-off still activates
+ * but idle timers won't run (degraded timeout protection).
  */
 export async function activateHandoff(replyChatId?: string): Promise<boolean> {
   if (!isSidecarReady()) {
-    log.warn('Cannot activate hand-off: browser sidecar not ready');
+    log.warn('Cannot activate hand-off: sidecar not ready');
     return false;
   }
-
   _handoff.active = true;
-  _handoff.replyChatId = replyChatId ?? _replyChatId ?? getTelegramChatId();
+  _handoff.replyChatId = replyChatId ?? _replyChatId;
   _handoff.startedAt = new Date().toISOString();
+  log.info('Browser hand-off activated', { replyChatId: _handoff.replyChatId });
 
-  // Tell the sidecar hand-off is active (for idle timeout tracking)
+  // Notify sidecar — this starts idle timers on the sidecar side
   try {
-    const port = getSidecarPort();
-    const body = JSON.stringify({ active: true });
-    await new Promise<void>((resolve, reject) => {
-      const req = http.request({
-        hostname: 'localhost',
-        port,
-        path: '/handoff/set',
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
-      }, (res) => {
-        res.resume();
-        resolve();
-      });
-      req.on('error', reject);
-      req.write(body);
-      req.end();
-    });
+    await sidecarRequest('POST', '/handoff/set', { active: true });
   } catch (err) {
-    log.warn('Failed to notify sidecar of hand-off start', {
+    log.warn('Failed to notify sidecar of hand-off activation — idle timeout protection is degraded', {
       error: err instanceof Error ? err.message : String(err),
     });
+    sendMessage('Warning: Could not confirm hand-off with browser sidecar. Idle timeout protection may not work.');
   }
 
-  log.info('Browser hand-off activated', { replyChatId: _handoff.replyChatId });
   return true;
 }
 
 /**
  * Deactivate browser hand-off mode.
+ * Awaits sidecar notification to stop idle timers. Best-effort if sidecar is unreachable.
  */
 export async function deactivateHandoff(): Promise<void> {
+  const wasActive = _handoff.active;
   _handoff.active = false;
   _handoff.replyChatId = null;
   _handoff.startedAt = null;
-
-  // Tell the sidecar hand-off is over
-  try {
-    const port = getSidecarPort();
-    const body = JSON.stringify({ active: false });
-    await new Promise<void>((resolve, reject) => {
-      const req = http.request({
-        hostname: 'localhost',
-        port,
-        path: '/handoff/set',
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
-      }, (res) => {
-        res.resume();
-        resolve();
-      });
-      req.on('error', reject);
-      req.write(body);
-      req.end();
-    });
-  } catch (err) {
-    log.warn('Failed to notify sidecar of hand-off stop', {
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
-
   log.info('Browser hand-off deactivated');
+
+  // Notify sidecar to stop idle timers
+  if (wasActive) {
+    try {
+      await sidecarRequest('POST', '/handoff/set', { active: false });
+    } catch (err) {
+      log.warn('Failed to notify sidecar of hand-off deactivation (may already be dead)', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
 }
 
 export function isHandoffActive(): boolean {
   return _handoff.active;
 }
 
-// ── Telegram types ──────────────────────────────────────────
+// ── Sidecar HTTP helpers ───────────────────────────────────
+
+function sidecarRequest(method: string, path: string, body?: unknown): Promise<{ status: number; data: unknown }> {
+  return new Promise((resolve, reject) => {
+    const port = getSidecarPort();
+    const payload = body ? JSON.stringify(body) : undefined;
+
+    const req = http.request({
+      hostname: 'localhost',
+      port,
+      path,
+      method,
+      headers: payload
+        ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) }
+        : undefined,
+    }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (chunk: Buffer) => chunks.push(chunk));
+      res.on('end', () => {
+        const raw = Buffer.concat(chunks);
+        const contentType = res.headers['content-type'] ?? '';
+        if (contentType.includes('image/png')) {
+          resolve({ status: res.statusCode ?? 200, data: raw });
+        } else {
+          try {
+            resolve({ status: res.statusCode ?? 200, data: JSON.parse(raw.toString()) });
+          } catch {
+            resolve({ status: res.statusCode ?? 200, data: raw.toString() });
+          }
+        }
+      });
+    });
+
+    req.on('error', reject);
+    req.setTimeout(10_000, () => { req.destroy(new Error('Sidecar request timeout')); });
+    if (payload) req.write(payload);
+    req.end();
+  });
+}
+
+function sidecarScreenshot(): Promise<Buffer | null> {
+  return sidecarRequest('GET', '/session/screenshot').then(({ status, data }) => {
+    if (status === 200 && Buffer.isBuffer(data)) return data;
+    return null;
+  }).catch(() => null);
+}
 
 interface TelegramUpdate {
   update_id?: number;
@@ -475,202 +491,6 @@ export function sendPhoto(photoBuffer: Buffer, chatId?: string, caption?: string
   req.end();
 }
 
-// ── Browser hand-off command relay ──────────────────────────
-
-/**
- * Forward a hand-off command to the browser sidecar.
- * Returns the result to send back to the user via Telegram.
- */
-async function relayHandoffCommand(command: string, args?: string): Promise<void> {
-  const port = getSidecarPort();
-  const chatId = _handoff.replyChatId ?? _replyChatId ?? getTelegramChatId() ?? '';
-
-  try {
-    if (command === 'type') {
-      // Forward text to the sidecar's type endpoint
-      // IMPORTANT: Do NOT log the text — it may contain passwords
-      const body = JSON.stringify({ text: args ?? '' });
-      const result = await sidecarRequest('POST', '/session/type', body);
-      if (result.screenshot) {
-        sendPhoto(Buffer.from(result.screenshot, 'base64'), chatId);
-      }
-    } else if (command === 'click') {
-      const body = JSON.stringify({ text: args ?? '' });
-      const result = await sidecarRequest('POST', '/session/click', body);
-      if (result.screenshot) {
-        sendPhoto(Buffer.from(result.screenshot, 'base64'), chatId);
-      }
-    } else if (command === 'scroll') {
-      const direction = args?.toLowerCase().includes('up') ? 'up' : 'down';
-      const body = JSON.stringify({ direction });
-      const result = await sidecarRequest('POST', '/session/scroll', body);
-      if (result.screenshot) {
-        sendPhoto(Buffer.from(result.screenshot, 'base64'), chatId);
-      }
-    } else if (command === 'screenshot') {
-      const result = await sidecarRequest('GET', '/session/screenshot');
-      if (result.screenshot) {
-        sendPhoto(Buffer.from(result.screenshot, 'base64'), chatId);
-      } else {
-        sendMessage('Could not take screenshot.', chatId);
-      }
-    } else if (command === 'done' || command === 'all yours') {
-      await deactivateHandoff();
-      sendMessage('Hand-off complete. Resuming autonomous browsing.', chatId);
-      // Notify Claude session
-      if (sessionExists()) {
-        injectText('[Browser] Hand-off complete. The human has finished their part. You can resume browsing.');
-      }
-    } else if (command === 'abort') {
-      // Close the session entirely
-      try {
-        await sidecarRequest('POST', '/session/stop', JSON.stringify({ saveContext: false }));
-      } catch { /* session may already be closed */ }
-      await deactivateHandoff();
-      sendMessage('Session aborted and closed.', chatId);
-      if (sessionExists()) {
-        injectText('[Browser] Hand-off aborted by human. Browser session closed.');
-      }
-    } else if (command === 'navigate' || command === 'goto' || command === 'go') {
-      if (!args) {
-        sendMessage('Usage: navigate <url>', chatId);
-        return;
-      }
-      const body = JSON.stringify({ url: args });
-      const result = await sidecarRequest('POST', '/session/navigate', body);
-      if (result.screenshot) {
-        sendPhoto(Buffer.from(result.screenshot, 'base64'), chatId);
-      }
-    } else {
-      sendMessage(
-        `Unknown command: "${command}"\n\n` +
-        `Available commands:\n` +
-        `• type: <text> — type into focused field\n` +
-        `• click: <text or selector> — click element\n` +
-        `• scroll up/down — scroll the page\n` +
-        `• screenshot — take a screenshot\n` +
-        `• navigate <url> — go to a URL\n` +
-        `• done / all yours — complete hand-off\n` +
-        `• abort — close session`,
-        chatId,
-      );
-    }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    log.error('Hand-off command failed', { command, error: msg });
-    sendMessage(`Command failed: ${msg}`, chatId);
-  }
-}
-
-/**
- * Make an HTTP request to the browser sidecar.
- */
-function sidecarRequest(method: string, path: string, body?: string): Promise<Record<string, unknown>> {
-  const port = getSidecarPort();
-  return new Promise((resolve, reject) => {
-    const headers: Record<string, string | number> = { 'Content-Type': 'application/json' };
-    if (body) headers['Content-Length'] = Buffer.byteLength(body);
-
-    const req = http.request({
-      hostname: 'localhost',
-      port,
-      path,
-      method,
-      headers,
-    }, (res) => {
-      const chunks: Buffer[] = [];
-      res.on('data', (chunk: Buffer) => chunks.push(chunk));
-      res.on('end', () => {
-        const raw = Buffer.concat(chunks);
-
-        // For screenshots, the response may be binary (image/png)
-        const contentType = res.headers['content-type'] ?? '';
-        if (contentType.includes('image/')) {
-          resolve({ screenshot: raw.toString('base64') });
-          return;
-        }
-
-        try {
-          const json = JSON.parse(raw.toString('utf-8'));
-          if (res.statusCode && res.statusCode >= 400) {
-            reject(new Error(json.error ?? `HTTP ${res.statusCode}`));
-          } else {
-            resolve(json);
-          }
-        } catch {
-          // Non-JSON response
-          if (res.statusCode && res.statusCode >= 400) {
-            reject(new Error(`HTTP ${res.statusCode}`));
-          } else {
-            resolve({});
-          }
-        }
-      });
-    });
-    req.on('error', reject);
-    if (body) req.write(body);
-    req.end();
-  });
-}
-
-/**
- * Check if a message from a safe sender should be intercepted as a hand-off command.
- * Returns true if the message was handled as a hand-off command.
- */
-function tryHandoffIntercept(text: string): boolean {
-  if (!_handoff.active) return false;
-
-  const lower = text.toLowerCase().trim();
-
-  // "type: <text>" — relay to browser, NEVER log the text
-  if (lower.startsWith('type:') || lower.startsWith('type ')) {
-    const payload = text.substring(text.indexOf(':') >= 0 && text.indexOf(':') <= 5 ? text.indexOf(':') + 1 : 5).trim();
-    relayHandoffCommand('type', payload);
-    return true;
-  }
-
-  // "click: <selector or text>"
-  if (lower.startsWith('click:') || lower.startsWith('click ')) {
-    const payload = text.substring(text.indexOf(':') >= 0 && text.indexOf(':') <= 6 ? text.indexOf(':') + 1 : 6).trim();
-    relayHandoffCommand('click', payload);
-    return true;
-  }
-
-  // "scroll up" / "scroll down"
-  if (lower.startsWith('scroll')) {
-    relayHandoffCommand('scroll', text);
-    return true;
-  }
-
-  // "screenshot" — take and send screenshot
-  if (lower === 'screenshot' || lower === 'ss') {
-    relayHandoffCommand('screenshot');
-    return true;
-  }
-
-  // "done" / "all yours" — complete hand-off
-  if (lower === 'done' || lower === 'all yours' || lower === 'allyours') {
-    relayHandoffCommand('done');
-    return true;
-  }
-
-  // "abort" — cancel and close session
-  if (lower === 'abort' || lower === 'cancel') {
-    relayHandoffCommand('abort');
-    return true;
-  }
-
-  // "navigate <url>" / "goto <url>" / "go <url>"
-  if (lower.startsWith('navigate ') || lower.startsWith('goto ') || lower.startsWith('go ')) {
-    const url = text.split(/\s+/).slice(1).join(' ').trim();
-    relayHandoffCommand('navigate', url);
-    return true;
-  }
-
-  // Not a hand-off command
-  return false;
-}
-
 // ── Incoming message handling ───────────────────────────────
 
 // State for session wake-up
@@ -847,6 +667,106 @@ function handleReaction(reaction: MessageReactionUpdated): void {
   }
 }
 
+/**
+ * Handle a browser hand-off command from a safe sender.
+ * Returns true if the message was a hand-off command (consumed), false otherwise.
+ */
+async function handleHandoffCommand(text: string, replyChatId: string): Promise<boolean> {
+  const lower = text.toLowerCase().trim();
+
+  // type: [text] — relay text to browser (takes priority over other matches)
+  if (lower.startsWith('type:')) {
+    const relayText = text.slice(5).trimStart(); // Preserve original case after "type:"
+    if (!relayText) {
+      // "type:" with nothing after — ignore
+      return true;
+    }
+
+    try {
+      // Security: DO NOT log relayText — it may contain passwords
+      log.info('Hand-off: relaying typed text to sidecar');
+      await sidecarRequest('POST', '/session/type', { text: relayText });
+      sendMessage('Typed.', replyChatId);
+    } catch (err) {
+      log.error('Hand-off type relay failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      sendMessage('Failed to type text into browser.', replyChatId);
+    }
+    return true;
+  }
+
+  // screenshot — capture and send back via Telegram
+  if (lower === 'screenshot') {
+    try {
+      const screenshot = await sidecarScreenshot();
+      if (screenshot) {
+        sendPhoto(screenshot, replyChatId, 'Browser screenshot');
+      } else {
+        sendMessage('Could not capture screenshot.', replyChatId);
+      }
+    } catch (err) {
+      log.error('Hand-off screenshot failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      sendMessage('Screenshot failed.', replyChatId);
+    }
+    return true;
+  }
+
+  // done / all yours / go ahead — hand-off completion
+  if (lower === 'done' || lower === 'all yours' || lower === 'go ahead') {
+    await deactivateHandoff();
+
+    // Take a fresh screenshot for Claude's context (non-fatal if it fails)
+    try {
+      const screenshot = await sidecarScreenshot();
+      if (screenshot && screenshot.length <= 2 * 1024 * 1024) {
+        const screenshotDir = resolveProjectPath(MEDIA_DIR_REL);
+        fs.mkdirSync(screenshotDir, { recursive: true });
+        const screenshotPath = path.join(screenshotDir, `handoff_done_${Date.now()}.png`);
+        fs.writeFileSync(screenshotPath, screenshot);
+        injectText(`[Browser] Dave completed hand-off. Screenshot saved: ${screenshotPath}`);
+      } else {
+        if (screenshot) {
+          log.warn('Hand-off done screenshot too large, skipping save', { bytes: screenshot.length });
+        }
+        injectText(`[Browser] Dave completed hand-off.`);
+      }
+    } catch (err) {
+      log.error('Hand-off done screenshot failed', { error: err instanceof Error ? err.message : String(err) });
+      injectText(`[Browser] Dave completed hand-off.`);
+    }
+
+    sendMessage('Hand-off complete. BMO is back in control.', replyChatId);
+    log.info('Hand-off completed by user');
+    return true;
+  }
+
+  // abort / cancel — close session and abort (always works, even if sidecar is dead)
+  if (lower === 'abort' || lower === 'cancel') {
+    // Deactivate daemon-side hand-off state first (always succeeds)
+    await deactivateHandoff();
+
+    // Best-effort sidecar stop — don't fail if sidecar is dead
+    try {
+      await sidecarRequest('POST', '/session/stop', { saveContext: true });
+    } catch (err) {
+      log.warn('Hand-off abort: sidecar stop failed (may already be dead)', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    injectText(`[Browser] Dave aborted hand-off. Session closed.`);
+    sendMessage('Hand-off aborted. Session closed.', replyChatId);
+    log.info('Hand-off aborted by user');
+    return true;
+  }
+
+  // Not a hand-off command
+  return false;
+}
+
 async function processIncomingMessage(text: string, senderId: string, replyChatId: string, firstName: string): Promise<void> {
   // Classify the sender by their user ID (works for both DMs and groups)
   const tier: SenderTier = classifySender(senderId, 'telegram');
@@ -866,8 +786,31 @@ async function processIncomingMessage(text: string, senderId: string, replyChatI
       return;
     }
 
-    // Check if this is a hand-off command (safe senders only)
-    if (tryHandoffIntercept(text)) {
+    // Check if browser hand-off is active
+    if (_handoff.active) {
+      // /ask escape hatch — passes through to Claude even during hand-off
+      if (text.startsWith('/ask ')) {
+        const question = text.slice(5).trim();
+        if (question) {
+          await injectWithSessionWakeup(question, senderId, replyChatId, firstName, false);
+          return;
+        }
+      }
+
+      const handled = await handleHandoffCommand(text, replyChatId);
+      if (handled) return;
+
+      // Not a recognized command — treat as text to type into the focused field
+      try {
+        log.info('Hand-off: relaying message as typed text');
+        await sidecarRequest('POST', '/session/type', { text });
+        sendMessage('Typed.', replyChatId);
+      } catch (err) {
+        log.error('Hand-off type relay failed', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+        sendMessage('Failed to type. Commands: done, abort, screenshot, /ask [question]', replyChatId);
+      }
       return;
     }
 
@@ -972,15 +915,52 @@ async function injectWithSessionWakeup(text: string, senderId: string, replyChat
   doInject(text, senderId, replyChatId, firstName, isThirdParty);
 }
 
+// ── Message queue (prevents interrupting mid-response) ─────
+// Instead of injecting immediately with Enter (which interrupts Claude),
+// messages are queued and delivered when the Stop hook fires (Claude just
+// finished a response) or after a short fallback timer (for when idle).
+
+const _pendingInjections: string[] = [];
+let _injectionTimer: ReturnType<typeof setTimeout> | null = null;
+const INJECTION_FALLBACK_MS = 2000; // Deliver after 2s if no Stop event
+
+/**
+ * Deliver all queued messages to the Claude session.
+ * Called by the /hook/response handler on Stop events, or by the fallback timer.
+ */
+export function deliverPendingMessages(): void {
+  if (_pendingInjections.length === 0) return;
+
+  // Cancel fallback timer since we're delivering now
+  if (_injectionTimer) {
+    clearTimeout(_injectionTimer);
+    _injectionTimer = null;
+  }
+
+  // Join all queued messages and inject as one
+  const combined = _pendingInjections.splice(0).join('\n');
+  const ok = injectText(combined, true);
+  if (ok) {
+    log.info(`Delivered ${combined.split('\n').length} queued message(s)`);
+  }
+}
+
 function doInject(text: string, _senderId: string, _targetChatId: string, firstName: string, isThirdParty: boolean): void {
   setChannel('telegram');
 
   const prefix = isThirdParty ? '[3rdParty][Telegram]' : '[Telegram]';
   const formatted = `${prefix} ${firstName}: ${text}`;
-  const ok = injectText(formatted);
-  if (ok) {
-    log.info(`Injected ${isThirdParty ? '3rd-party ' : ''}message from ${firstName} (${text.substring(0, 50)}...)`);
-  }
+
+  // Queue the message instead of injecting immediately
+  _pendingInjections.push(formatted);
+  log.info(`Queued ${isThirdParty ? '3rd-party ' : ''}message from ${firstName} (${text.substring(0, 50)}...)`);
+
+  // Reset fallback timer — delivers if no Stop event within 2s (idle case)
+  if (_injectionTimer) clearTimeout(_injectionTimer);
+  _injectionTimer = setTimeout(() => {
+    _injectionTimer = null;
+    deliverPendingMessages();
+  }, INJECTION_FALLBACK_MS);
 }
 
 // ── Public API ──────────────────────────────────────────────
@@ -989,6 +969,8 @@ export interface TelegramRouter {
   handleUpdate: (update: TelegramUpdate) => Promise<void>;
   handleShortcut: (data: { text?: string; token?: string }) => Promise<{ status: number; body: Record<string, unknown> }>;
   stopTyping: () => void;
+  /** Deliver queued messages. Called by /hook/response on Stop events. */
+  deliverPending: () => void;
 }
 
 export function createTelegramRouter(): TelegramRouter {
@@ -1119,6 +1101,10 @@ export function createTelegramRouter(): TelegramRouter {
 
     stopTyping() {
       stopTypingLoop();
+    },
+
+    deliverPending() {
+      deliverPendingMessages();
     },
   };
 }

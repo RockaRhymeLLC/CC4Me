@@ -1,0 +1,44 @@
+{
+  "id": "t-011",
+  "title": "Laptop client registration and reconnection",
+  "description": "Verify the client properly handles registration, heartbeats, and network disconnection/reconnection",
+  "storyRefs": ["s-v05"],
+  "planRef": "plans/20260204-voice-integration.plan.md",
+  "type": "story",
+  "status": "partial",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Start bmo_voice.py",
+      "expected": "Client registers with daemon — POST /voice/register. Daemon shows client as connected"
+    },
+    {
+      "order": 2,
+      "action": "Wait 35 seconds",
+      "expected": "Client sends heartbeat (re-register). Daemon's lastSeen timestamp updated"
+    },
+    {
+      "order": 3,
+      "action": "Disconnect laptop from network (WiFi off)",
+      "expected": "Client detects connection loss, logs warning, enters reconnection mode"
+    },
+    {
+      "order": 4,
+      "action": "Wait 65 seconds (stale timeout on daemon side)",
+      "expected": "Daemon prunes client from registry. GET /voice/status shows connected: false"
+    },
+    {
+      "order": 5,
+      "action": "Reconnect laptop to network (WiFi on)",
+      "expected": "Client re-registers with daemon within 10 seconds. Voice becomes available again"
+    },
+    {
+      "order": 6,
+      "action": "Gracefully stop bmo_voice.py (SIGTERM or Ctrl+C)",
+      "expected": "Client sends POST /voice/unregister before exiting"
+    }
+  ],
+  "created": "2026-02-04T15:00:00Z",
+  "executedAt": "2026-02-04T21:59:00Z",
+  "result": "PARTIAL — verified steps 1, 2, 6 on Mac Mini. (1) Register: POST /voice/register returns 200, status shows connected=true with correct clientId and callbackUrl. (2) Heartbeat: re-register returns 200, lastSeen timestamp updated. (6) Unregister: POST /voice/unregister returns 200 removed=true, status shows connected=false. Steps 3-5 (network disconnect/reconnect) require laptop with WiFi toggle."
+}

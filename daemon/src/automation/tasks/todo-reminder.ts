@@ -6,7 +6,7 @@
 
 import fs from 'node:fs';
 import { resolveProjectPath } from '../../core/config.js';
-import { injectText, isIdle, sessionExists } from '../../core/session-bridge.js';
+import { injectText, isAgentIdle, sessionExists } from '../../core/session-bridge.js';
 import { createLogger } from '../../core/logger.js';
 import { registerTask } from '../scheduler.js';
 
@@ -14,8 +14,7 @@ const log = createLogger('todo-reminder');
 
 async function run(): Promise<void> {
   // We handle our own session/idle checks (requiresSession: false bypasses
-  // the scheduler's isActivelyProcessing guard, which has false-positive
-  // issues with the status line Unicode).
+  // the scheduler's idle gate so we can check sessionExists separately).
 
   if (!sessionExists()) {
     log.debug('Skipping reminder: no tmux session');
@@ -39,9 +38,8 @@ async function run(): Promise<void> {
   }
 
   // Only remind when idle — don't interrupt active work.
-  // isIdle() checks for the ❯ prompt which is definitive "waiting for input".
-  if (!isIdle()) {
-    log.debug(`Skipping reminder: not idle (${openCount} open todos)`);
+  if (!isAgentIdle()) {
+    log.debug(`Skipping reminder: agent busy (${openCount} open todos)`);
     return;
   }
 

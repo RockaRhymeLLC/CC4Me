@@ -1,0 +1,33 @@
+{
+  "id": "s-v02",
+  "title": "STT pipeline (whisper.cpp)",
+  "description": "Install whisper.cpp and the small.en model on the Mac Mini. Create stt.ts wrapper that accepts a WAV file path, invokes whisper.cpp CLI with CoreML/Metal acceleration, and returns transcribed text. Create audio-utils.ts for temp file management (write incoming audio to temp, clean up after). Wire the /voice/transcribe endpoint to accept multipart audio upload, save to temp, run STT, and return transcribed text.",
+  "planRef": "plans/20260204-voice-integration.plan.md",
+  "todoRef": "054",
+  "status": "complete",
+  "priority": 2,
+  "tests": ["t-003", "t-004"],
+  "blockedBy": ["s-v01"],
+  "created": "2026-02-04T15:00:00Z",
+  "updated": "2026-02-04T15:00:00Z",
+  "notes": [
+    "R2 review: beam_size > 1 causes extreme slowdowns on M4 (whisper.cpp GitHub #3493). Must use greedy decoding. CoreML acceleration available for 2-3x speedup but requires Xcode or pre-built CoreML models — nice-to-have for later.",
+    "2026-02-04T18:17: whisper-cpp 1.8.3 installed, small.en model (488MB) downloaded. stt.ts, audio-utils.ts created, /voice/transcribe endpoint wired. Metal GPU acceleration active on M4. 11s audio transcribed in 1.2s. Fixed parseRawBody to drain body before 413 response. Tests t-003 and t-004 pass. Known: whisper hallucinates on silence."
+  ],
+  "files": [
+    "daemon/src/voice/stt.ts",
+    "daemon/src/voice/audio-utils.ts",
+    "daemon/src/voice/voice-server.ts"
+  ],
+  "acceptanceCriteria": [
+    "whisper.cpp installed via Homebrew and small.en model downloaded",
+    "stt.ts exports transcribe(wavPath: string): Promise<string> function",
+    "transcribe() invokes whisper-cpp CLI with --model small.en, --language en, --output-txt flags, using greedy decoding (beam_size=1 — required on M4, see whisper.cpp #3493)",
+    "transcribe() returns cleaned text (trimmed, timestamps stripped)",
+    "transcribe() rejects with clear error if whisper.cpp not found or model missing",
+    "audio-utils.ts exports saveTempAudio(buffer: Buffer): string and cleanupTemp(path: string): void",
+    "Temp files saved to OS temp dir with unique names, deleted after processing",
+    "POST /voice/transcribe accepts raw audio body (Content-Type: audio/wav), saves to temp, runs STT",
+    "Transcription of 5s audio completes in under 1 second on M4"
+  ]
+}

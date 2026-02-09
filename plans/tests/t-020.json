@@ -1,0 +1,44 @@
+{
+  "id": "t-020",
+  "title": "Browserbase session lifecycle (live API)",
+  "description": "Verify session create, connect, screenshot, and close work end-to-end against live Browserbase API",
+  "storyRefs": ["s-b02"],
+  "planRef": "plans/20260206-browser-handoff.plan.md",
+  "type": "story",
+  "status": "pending",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Create a BrowserbaseProvider instance with Keychain credentials",
+      "expected": "Provider instantiates without errors"
+    },
+    {
+      "order": 2,
+      "action": "Call createSession() with a URL (e.g., https://example.com)",
+      "expected": "Returns SessionInfo with sessionId, connectUrl, and liveViewUrl. Session status is RUNNING."
+    },
+    {
+      "order": 3,
+      "action": "Call getScreenshot() on the active session",
+      "expected": "Returns a non-empty PNG buffer. Buffer starts with PNG magic bytes (0x89504E47)."
+    },
+    {
+      "order": 4,
+      "action": "Call getLiveViewUrl() for the session",
+      "expected": "Returns a valid URL containing 'debuggerFullscreenUrl' path"
+    },
+    {
+      "order": 5,
+      "action": "Call closeSession() with saveContext=false",
+      "expected": "Session status changes to COMPLETED or REQUEST_RELEASE. No errors."
+    },
+    {
+      "order": 6,
+      "action": "Simulate CDP disconnect by closing WebSocket, then verify reconnection attempt",
+      "expected": "Provider logs reconnection attempts. After 3 failures, throws an error with descriptive message."
+    }
+  ],
+  "created": "2026-02-07T05:00:00Z",
+  "executedAt": null,
+  "result": null
+}

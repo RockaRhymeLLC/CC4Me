@@ -1,0 +1,49 @@
+{
+  "id": "t-023",
+  "title": "Navigation primitives work on live page",
+  "description": "Verify navigate, click, type, and scroll endpoints work against a real web page",
+  "storyRefs": ["s-b04"],
+  "planRef": "plans/20260206-browser-handoff.plan.md",
+  "type": "story",
+  "status": "pending",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Start a session and navigate to a test page with forms and links (e.g., httpbin.org/forms/post)",
+      "expected": "Session active, initial screenshot shows the form page"
+    },
+    {
+      "order": 2,
+      "action": "POST /session/click with { \"selector\": \"input[name='custname']\" } to focus the name field",
+      "expected": "Returns screenshot. The input field is focused (cursor visible or highlighted)."
+    },
+    {
+      "order": 3,
+      "action": "POST /session/type with { \"text\": \"Test User\" }",
+      "expected": "Returns screenshot showing 'Test User' typed into the name field. Text is NOT present in sidecar logs."
+    },
+    {
+      "order": 4,
+      "action": "POST /session/scroll with { \"direction\": \"down\" }",
+      "expected": "Returns screenshot showing the page has scrolled down (different viewport than before)"
+    },
+    {
+      "order": 5,
+      "action": "POST /session/navigate with { \"url\": \"https://example.com\" }",
+      "expected": "Returns screenshot of example.com (completely different page from the form)"
+    },
+    {
+      "order": 6,
+      "action": "POST /session/click with { \"text\": \"More information...\" }",
+      "expected": "Returns screenshot showing navigation to the linked page (or error if element not found)"
+    },
+    {
+      "order": 7,
+      "action": "POST /session/type with no active session (after stopping)",
+      "expected": "Returns 404 with descriptive error"
+    }
+  ],
+  "created": "2026-02-07T05:00:00Z",
+  "executedAt": null,
+  "result": null
+}

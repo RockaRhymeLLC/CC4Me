@@ -1,0 +1,33 @@
+{
+  "id": "s-v06",
+  "title": "BMO-initiated voice (chime system)",
+  "description": "Enable BMO to initiate voice conversations. When a notification fires (calendar reminder, urgent email), the daemon checks if a voice client is connected. If yes, it POSTs to the client's callback URL with a chime request. The client plays a chime sound and listens for ~5 seconds for voice confirmation ('yeah?', 'what's up?') OR rejection ('not now', 'later'). If confirmation detected, the client sends audio to the daemon, which speaks the notification. If rejection detected, daemon sends via Telegram instead. If no response or client unavailable, falls back to Telegram text. Integrate with existing scheduler tasks so they can use voice when available. (R2 review: added negative phrase detection alongside confirmation.)",
+  "planRef": "plans/20260204-voice-integration.plan.md",
+  "todoRef": "054",
+  "status": "complete",
+  "priority": 6,
+  "tests": ["t-012", "t-013", "t-014"],
+  "blockedBy": ["s-v05"],
+  "created": "2026-02-04T15:00:00Z",
+  "updated": "2026-02-04T22:10:00Z",
+  "notes": ["R2 review: added negative phrase detection. Dave might say 'not now' or 'later' instead of just ignoring the chime — detect and handle gracefully.", "Full chime flow tested: daemon→client chime→confirmation→TTS→audio push. 176KB WAV delivered in ~4s. Added /voice/stt endpoint for confirmation classification. Added /voice/notify endpoint for testing. Confirmation classification uses STT→phrase matching with fallback to energy-based detection."],
+  "files": [
+    "voice-client/bmo_voice.py",
+    "daemon/src/voice/voice-server.ts",
+    "daemon/src/voice/voice-client-registry.ts"
+  ],
+  "acceptanceCriteria": [
+    "Daemon can POST chime request to registered voice client's callback URL",
+    "Chime request includes notification text and notification type",
+    "Client plays distinctive chime sound on receiving chime request",
+    "Client listens for ~5 seconds after chime for voice confirmation",
+    "Confirmation phrases detected: 'yeah', 'yes', 'what's up', 'go ahead', 'what', 'hey'",
+    "Rejection phrases detected: 'not now', 'later', 'no', 'busy' — falls back to Telegram",
+    "On confirmation: client sends audio to daemon, daemon speaks the notification via TTS",
+    "On rejection: client reports rejection, daemon falls back to Telegram text",
+    "On timeout (no voice in 5s): client reports timeout, daemon falls back to Telegram",
+    "If no voice client connected: daemon immediately falls back to Telegram",
+    "Configurable which events use voice initiation (calendar_reminders, urgent_emails, todo_nudges)",
+    "Scheduler tasks can call a voice notification function instead of only injecting text"
+  ]
+}

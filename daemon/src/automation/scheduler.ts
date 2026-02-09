@@ -1,14 +1,14 @@
 /**
- * Scheduler — cron/interval task runner with built-in busy checks.
+ * Scheduler — cron/interval task runner.
  *
  * Replaces 5+ launchd jobs with a single in-process scheduler.
  * Each task gets its own interval or cron schedule from config.
- * Tasks run when Claude is not actively processing (no spinner/esc-to-interrupt).
- * Individual tasks handle their own busy-state logic internally if needed.
+ * Tasks only run when the agent is idle (based on hook-event state tracking).
+ * Individual tasks can opt out via requiresSession: false.
  */
 
 import { loadConfig, parseInterval, type TaskScheduleConfig } from '../core/config.js';
-import { isActivelyProcessing, sessionExists } from '../core/session-bridge.js';
+import { isAgentIdle, sessionExists } from '../core/session-bridge.js';
 import { createLogger } from '../core/logger.js';
 import { CronExpressionParser } from 'cron-parser';
 
@@ -17,6 +17,8 @@ const log = createLogger('scheduler');
 export interface ScheduledTask {
   name: string;
   run: () => Promise<void>;
+  /** If false, task handles session checks internally (e.g. has a fallback). Default: true. */
+  requiresSession?: boolean;
 }
 
 interface RunningTask {
@@ -43,17 +45,17 @@ export function registerTask(task: ScheduledTask): void {
  * Returns true if the task actually ran, false if skipped.
  */
 async function executeTask(running: RunningTask): Promise<boolean> {
-  // Skip if Claude is actively processing (mid-response)
-  // Individual tasks handle their own busy-state logic if they need
-  // the stricter check (e.g., context-watchdog uses isBusy() internally)
-  if (isActivelyProcessing()) {
-    log.debug(`Skipping ${running.task.name}: Claude is actively processing`);
+  // Skip if Claude is busy (based on hook events, not pane scraping)
+  const needsSession = running.task.requiresSession !== false;
+
+  if (needsSession && !isAgentIdle()) {
+    log.info(`Skipping ${running.task.name}: agent is busy`);
     return false;
   }
 
   // Skip if no session (for tasks that need to inject)
-  if (!sessionExists()) {
-    log.debug(`Skipping ${running.task.name}: no session`);
+  if (needsSession && !sessionExists()) {
+    log.warn(`Skipping ${running.task.name}: no tmux session`);
     return false;
   }
 

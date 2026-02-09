@@ -1,0 +1,39 @@
+{
+  "id": "t-024",
+  "title": "Context create, save, and reuse across sessions",
+  "description": "Verify context persistence saves cookies and reuses them in subsequent sessions",
+  "storyRefs": ["s-b05"],
+  "planRef": "plans/20260206-browser-handoff.plan.md",
+  "type": "story",
+  "status": "pending",
+  "steps": [
+    {
+      "order": 1,
+      "action": "POST /session/start with { \"url\": \"https://httpbin.org/cookies/set/testcookie/hello\", \"context\": \"httpbin-test\" }",
+      "expected": "Session starts. Context 'httpbin-test' created (new entry in browser-contexts.json). Page sets a cookie."
+    },
+    {
+      "order": 2,
+      "action": "POST /session/navigate to https://httpbin.org/cookies to verify cookie is set",
+      "expected": "Screenshot shows the cookies JSON with testcookie: hello"
+    },
+    {
+      "order": 3,
+      "action": "POST /session/stop with { \"saveContext\": true }",
+      "expected": "Session closed. browser-contexts.json updated with httpbin-test entry including browserbase_context_id, last_used, domain. File written atomically."
+    },
+    {
+      "order": 4,
+      "action": "Wait 5 seconds (context sync), then POST /session/start with { \"url\": \"https://httpbin.org/cookies\", \"context\": \"httpbin-test\" }",
+      "expected": "New session starts using saved context. Screenshot shows the cookie is still present (testcookie: hello) — persisted across sessions"
+    },
+    {
+      "order": 5,
+      "action": "POST /session/stop with { \"saveContext\": false }. Clean up test context via DELETE /contexts/httpbin-test",
+      "expected": "Session closed without saving changes. Context deleted from manifest and Browserbase API."
+    }
+  ],
+  "created": "2026-02-07T05:00:00Z",
+  "executedAt": null,
+  "result": null
+}
