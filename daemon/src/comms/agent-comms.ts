@@ -13,7 +13,7 @@ import crypto from 'node:crypto';
 import { loadConfig, resolveProjectPath } from '../core/config.js';
 import type { AgentMessage, AgentMessageResponse, AgentCommsPeerConfig } from '../core/config.js';
 import { validateAgentCommsAuth, getAgentCommsSecret } from '../core/keychain.js';
-import { isBusy, injectText } from '../core/session-bridge.js';
+import { isAgentIdle, injectText } from '../core/session-bridge.js';
 import { createLogger } from '../core/logger.js';
 
 const log = createLogger('agent-comms');
@@ -348,7 +348,7 @@ export function getAgentStatus(): { agent: string; status: 'idle' | 'busy'; upti
   const config = loadConfig();
   return {
     agent: config.agent.name,
-    status: isBusy() ? 'busy' : 'idle',
+    status: isAgentIdle() ? 'idle' : 'busy',
     uptime: process.uptime(),
   };
 }

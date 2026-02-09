@@ -11,7 +11,7 @@
 
 import { execSync } from 'node:child_process';
 import { getProjectDir } from '../../core/config.js';
-import { isBusy, injectText } from '../../core/session-bridge.js';
+import { isAgentIdle, injectText } from '../../core/session-bridge.js';
 import { createLogger } from '../../core/logger.js';
 import { registerTask } from '../scheduler.js';
 
@@ -98,8 +98,8 @@ async function run(): Promise<void> {
 
   log.info(`Upstream sync: ${upstreamCommits.length} upstream new, ${forkCommits.length} fork-only`);
 
-  if (isBusy()) {
-    log.info('Claude is busy — deferring upstream sync report to next run');
+  if (!isAgentIdle()) {
+    log.info('Agent is busy — deferring upstream sync report to next run');
     return;
   }
 

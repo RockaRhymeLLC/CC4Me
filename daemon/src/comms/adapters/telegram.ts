@@ -17,7 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { getTelegramBotToken, getTelegramChatId, getShortcutAuthToken } from '../../core/keychain.js';
 import { resolveProjectPath, loadConfig } from '../../core/config.js';
-import { sessionExists, startSession, injectText, isBusy } from '../../core/session-bridge.js';
+import { sessionExists, startSession, injectText } from '../../core/session-bridge.js';
 import { registerTelegramHandler, setChannel } from '../channel-router.js';
 import { createLogger } from '../../core/logger.js';
 import { getSidecarPort, isSidecarReady } from '../../browser/browser-sidecar.js';
@@ -915,15 +915,52 @@ async function injectWithSessionWakeup(text: string, senderId: string, replyChat
   doInject(text, senderId, replyChatId, firstName, isThirdParty);
 }
 
+// ── Message queue (prevents interrupting mid-response) ─────
+// Instead of injecting immediately with Enter (which interrupts Claude),
+// messages are queued and delivered when the Stop hook fires (Claude just
+// finished a response) or after a short fallback timer (for when idle).
+
+const _pendingInjections: string[] = [];
+let _injectionTimer: ReturnType<typeof setTimeout> | null = null;
+const INJECTION_FALLBACK_MS = 2000; // Deliver after 2s if no Stop event
+
+/**
+ * Deliver all queued messages to the Claude session.
+ * Called by the /hook/response handler on Stop events, or by the fallback timer.
+ */
+export function deliverPendingMessages(): void {
+  if (_pendingInjections.length === 0) return;
+
+  // Cancel fallback timer since we're delivering now
+  if (_injectionTimer) {
+    clearTimeout(_injectionTimer);
+    _injectionTimer = null;
+  }
+
+  // Join all queued messages and inject as one
+  const combined = _pendingInjections.splice(0).join('\n');
+  const ok = injectText(combined, true);
+  if (ok) {
+    log.info(`Delivered ${combined.split('\n').length} queued message(s)`);
+  }
+}
+
 function doInject(text: string, _senderId: string, _targetChatId: string, firstName: string, isThirdParty: boolean): void {
   setChannel('telegram');
 
   const prefix = isThirdParty ? '[3rdParty][Telegram]' : '[Telegram]';
   const formatted = `${prefix} ${firstName}: ${text}`;
-  const ok = injectText(formatted);
-  if (ok) {
-    log.info(`Injected ${isThirdParty ? '3rd-party ' : ''}message from ${firstName} (${text.substring(0, 50)}...)`);
-  }
+
+  // Queue the message instead of injecting immediately
+  _pendingInjections.push(formatted);
+  log.info(`Queued ${isThirdParty ? '3rd-party ' : ''}message from ${firstName} (${text.substring(0, 50)}...)`);
+
+  // Reset fallback timer — delivers if no Stop event within 2s (idle case)
+  if (_injectionTimer) clearTimeout(_injectionTimer);
+  _injectionTimer = setTimeout(() => {
+    _injectionTimer = null;
+    deliverPendingMessages();
+  }, INJECTION_FALLBACK_MS);
 }
 
 // ── Public API ──────────────────────────────────────────────
@@ -932,6 +969,8 @@ export interface TelegramRouter {
   handleUpdate: (update: TelegramUpdate) => Promise<void>;
   handleShortcut: (data: { text?: string; token?: string }) => Promise<{ status: number; body: Record<string, unknown> }>;
   stopTyping: () => void;
+  /** Deliver queued messages. Called by /hook/response on Stop events. */
+  deliverPending: () => void;
 }
 
 export function createTelegramRouter(): TelegramRouter {
@@ -1062,6 +1101,10 @@ export function createTelegramRouter(): TelegramRouter {
 
     stopTyping() {
       stopTypingLoop();
+    },
+
+    deliverPending() {
+      deliverPendingMessages();
     },
   };
 }
