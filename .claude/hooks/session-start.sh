@@ -7,7 +7,7 @@
 #
 # v2 changes:
 # - No longer starts transcript watcher (daemon handles that now)
-# - Loads memory briefing instead of full memory.md
+# - Memory is accessed on-demand via /memory skill (individual files in memories/)
 #
 # Fires on: startup, resume, clear, compact
 
