@@ -651,3 +651,95 @@ export function stopTranscriptStream(): void {
 
   log.info('Transcript stream stopped');
 }
+
+// ── Delivery stats ──────────────────────────────────────────
+
+export interface DeliveryStats {
+  totalDelivered: number;
+  totalDedup: number;
+  totalRetryExhausted: number;
+  byLayer: Record<string, number>;
+  byHookEvent: Record<string, number>;
+  avgRetryLatencyMs: number | null;
+  avgMessageLen: number;
+  timeSinceLastDelivery: number | null;  // ms, null if no deliveries
+  entries: number;  // total log entries analyzed
+}
+
+/**
+ * Read the delivery log and compute aggregate stats.
+ */
+export function getDeliveryStats(): DeliveryStats {
+  const logPath = getDeliveryLogPath();
+  const stats: DeliveryStats = {
+    totalDelivered: 0,
+    totalDedup: 0,
+    totalRetryExhausted: 0,
+    byLayer: {},
+    byHookEvent: {},
+    avgRetryLatencyMs: null,
+    avgMessageLen: 0,
+    timeSinceLastDelivery: null,
+    entries: 0,
+  };
+
+  let entries: DeliveryLogEntry[] = [];
+  try {
+    const content = fs.readFileSync(logPath, 'utf8');
+    const lines = content.split('\n').filter(l => l.trim());
+    entries = lines.map(l => JSON.parse(l) as DeliveryLogEntry);
+  } catch {
+    return stats;
+  }
+
+  stats.entries = entries.length;
+  if (entries.length === 0) return stats;
+
+  let totalLen = 0;
+  let retryLatencies: number[] = [];
+  let lastDeliveryTs = 0;
+
+  for (const e of entries) {
+    // Count by event type
+    if (e.event === 'delivered') stats.totalDelivered++;
+    else if (e.event === 'dedup') stats.totalDedup++;
+    else if (e.event === 'retry-exhausted') stats.totalRetryExhausted++;
+
+    // Count by layer
+    if (e.layer) {
+      stats.byLayer[e.layer] = (stats.byLayer[e.layer] || 0) + 1;
+    }
+
+    // Count by hook event
+    const hookKey = e.hookEvent || 'background';
+    stats.byHookEvent[hookKey] = (stats.byHookEvent[hookKey] || 0) + 1;
+
+    // Aggregate message length
+    totalLen += e.len || 0;
+
+    // Collect retry latencies
+    if (e.elapsed != null && e.elapsed > 0) {
+      retryLatencies.push(e.elapsed);
+    }
+
+    // Track last delivery time
+    if (e.event === 'delivered' && e.ts) {
+      const ts = new Date(e.ts).getTime();
+      if (ts > lastDeliveryTs) lastDeliveryTs = ts;
+    }
+  }
+
+  stats.avgMessageLen = Math.round(totalLen / entries.length);
+
+  if (retryLatencies.length > 0) {
+    stats.avgRetryLatencyMs = Math.round(
+      retryLatencies.reduce((a, b) => a + b, 0) / retryLatencies.length
+    );
+  }
+
+  if (lastDeliveryTs > 0) {
+    stats.timeSinceLastDelivery = Date.now() - lastDeliveryTs;
+  }
+
+  return stats;
+}

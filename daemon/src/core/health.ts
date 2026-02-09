@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { loadConfig, resolveProjectPath, getProjectDir } from './config.js';
 import { sessionExists } from './session-bridge.js';
+import { getDeliveryStats } from '../comms/transcript-stream.js';
 import { createLogger } from './logger.js';
 
 const log = createLogger('health');
@@ -223,6 +224,29 @@ function checkState(): HealthResult[] {
   return results;
 }
 
+function checkDelivery(): HealthResult[] {
+  const results: HealthResult[] = [];
+  const stats = getDeliveryStats();
+
+  if (stats.entries === 0) {
+    results.push({ severity: 'ok', category: 'Delivery', message: 'No delivery log entries yet' });
+    return results;
+  }
+
+  // Overall delivery success rate
+  const failRate = stats.totalRetryExhausted / stats.entries;
+  const severity: Severity = failRate > 0.1 ? 'error' : failRate > 0 ? 'warn' : 'ok';
+  const topLayer = Object.entries(stats.byLayer).sort((a, b) => b[1] - a[1])[0];
+  results.push({
+    severity,
+    category: 'Delivery',
+    message: `${stats.totalDelivered} delivered, ${stats.totalDedup} deduped, ${stats.totalRetryExhausted} failed`,
+    detail: topLayer ? `Primary: ${topLayer[0]} (${Math.round(topLayer[1] / stats.entries * 100)}%)` : undefined,
+  });
+
+  return results;
+}
+
 // ── Public API ───────────────────────────────────────────────
 
 /**
@@ -238,6 +262,7 @@ export async function runHealthCheck(): Promise<HealthReport> {
     ...networkResults,
     ...peerResults,
     ...checkState(),
+    ...checkDelivery(),
   ];
 
   const summary = {

@@ -14,7 +14,7 @@ import { runHealthCheck, formatReport } from './health.js';
 import { sessionExists, injectText, updateAgentState } from './session-bridge.js';
 
 // Comms imports (Phase 2)
-import { startTranscriptStream, stopTranscriptStream, onHookNotification } from '../comms/transcript-stream.js';
+import { startTranscriptStream, stopTranscriptStream, onHookNotification, getDeliveryStats } from '../comms/transcript-stream.js';
 import { initChannelRouter } from '../comms/channel-router.js';
 import { createTelegramRouter } from '../comms/adapters/telegram.js';
 
@@ -142,6 +142,14 @@ const server = http.createServer(async (req, res) => {
       session: sessionExists() ? 'active' : 'stopped',
       uptime: process.uptime(),
     }));
+    return;
+  }
+
+  // Delivery stats endpoint
+  if (req.method === 'GET' && url.pathname === '/delivery-stats') {
+    const stats = getDeliveryStats();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(stats, null, 2));
     return;
   }
 
