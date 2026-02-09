@@ -1,0 +1,39 @@
+{
+  "id": "t-009",
+  "title": "Laptop client wake word and capture",
+  "description": "Verify the Python voice client detects wake word and captures audio correctly",
+  "storyRefs": ["s-v05"],
+  "planRef": "plans/20260204-voice-integration.plan.md",
+  "type": "story",
+  "status": "partial",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Start bmo_voice.py on the laptop",
+      "expected": "Client starts, logs 'Listening for wake word...', no errors"
+    },
+    {
+      "order": 2,
+      "action": "Say 'Hey BMO' clearly",
+      "expected": "Client logs 'Wake word detected', plays 'listening' feedback sound"
+    },
+    {
+      "order": 3,
+      "action": "Say a short phrase ('what's the weather like') then stop speaking",
+      "expected": "Client captures audio, VAD detects silence after ~1s, recording stops"
+    },
+    {
+      "order": 4,
+      "action": "Verify captured audio file",
+      "expected": "Valid WAV, 16kHz, 16-bit, mono. Contains the spoken phrase"
+    },
+    {
+      "order": 5,
+      "action": "Check CPU and memory usage while client is idle",
+      "expected": "CPU <1%, RAM <50MB"
+    }
+  ],
+  "created": "2026-02-04T15:00:00Z",
+  "executedAt": "2026-02-04T21:55:00Z",
+  "result": "PARTIAL — verified on headless Mac Mini. (1) bmo_voice.py imports, parses, and BMOVoiceClient instantiates correctly. (2) openWakeWord hey_jarvis model loads and runs inference on silent audio (score=0.0 as expected). (3) WAV generation produces valid 16kHz 16-bit mono RIFF/WAVE files. (4) Daemon registration, heartbeat, and unregister all work (200 OK). Steps 2-3 (actual mic capture + wake word detection) and step 5 (CPU/RAM) require laptop with mic — scheduled for Dave's laptop test."
+}

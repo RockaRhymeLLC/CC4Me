@@ -1,0 +1,39 @@
+{
+  "id": "t-018",
+  "title": "Mobile live view UX validation (pre-implementation gate)",
+  "description": "Validate that Browserbase live view is usable on Dave's phone before writing any code",
+  "storyRefs": ["s-b01"],
+  "planRef": "plans/20260206-browser-handoff.plan.md",
+  "type": "story",
+  "status": "pending",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Create Browserbase free tier account and store API key as credential-browserbase-api-key and project ID as credential-browserbase-project-id in Keychain",
+      "expected": "Credentials stored and retrievable via security find-generic-password"
+    },
+    {
+      "order": 2,
+      "action": "Write and run a minimal Node.js script that creates a Browserbase session, navigates to a form-heavy test page (e.g., httpbin.org/forms/post), and retrieves the debuggerFullscreenUrl",
+      "expected": "Session created, URL retrieved, script completes without errors"
+    },
+    {
+      "order": 3,
+      "action": "Send the live view URL to Dave via Telegram with instructions: 'Test this on your phone — try tapping links, scrolling, typing in form fields, and interacting with buttons'",
+      "expected": "Dave receives the URL and can open it in mobile Safari or Chrome"
+    },
+    {
+      "order": 4,
+      "action": "Dave tests mobile interaction: tap targets, scroll behavior, keyboard/typing, and overall responsiveness",
+      "expected": "Dave confirms mobile UX is acceptable for hand-off scenarios (tapping, scrolling, and typing all work)"
+    },
+    {
+      "order": 5,
+      "action": "Record go/no-go decision. Close test session.",
+      "expected": "Decision documented. If GO: proceed to s-b02. If NO-GO: revisit approach."
+    }
+  ],
+  "created": "2026-02-07T05:00:00Z",
+  "executedAt": null,
+  "result": null
+}

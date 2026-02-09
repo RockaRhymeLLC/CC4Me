@@ -59,7 +59,7 @@ The daemon scheduler runs these tasks automatically (configured in `cc4me.config
 | `email-check` | Every 15m | Check for unread emails |
 | `nightly-todo` | 10pm daily | Self-assigned creative todo |
 | `health-check` | Mon 8am | System health check |
-| `memory-consolidation` | 5am daily | Cascade 24hr→30day→yearly summaries, extract memories |
+| `memory-consolidation` | 5am daily | Rotate stale 24hr entries to timeline/ daily files, extract memories |
 
 ### Environment Knowledge
 
@@ -89,8 +89,7 @@ Your persistent state lives in `.claude/state/`. Know this directory well — it
 |------|---------|---------------|
 | `memory/memories/*.md` | Individual memory files with YAML frontmatter | Use Grep to search by keyword/tag/category |
 | `memory/summaries/24hr.md` | Rolling 24-hour state log (appended on save-state, compact, restart) | For recent history — "what was I doing earlier?" |
-| `memory/summaries/30day.md` | Condensed daily summaries from nightly consolidation | For recent weeks — "what did we do last Tuesday?" |
-| `memory/summaries/2026.md` | Yearly archive with monthly summaries | For long-term reference — "when did we set up X?" |
+| `memory/timeline/*.md` | Daily files with YAML frontmatter (date, topics, todos, highlights) | Grep frontmatter for "what happened on X?" or "when did we work on Y?" |
 | `calendar.md` | Scheduled events, reminders, to-do due dates (linked via `[todo:id]`) | At session start and when scheduling |
 | `assistant-state.md` | Saved work context from before compaction/restart | At session start to resume work |
 | `autonomy.json` | Current autonomy mode (yolo/confident/cautious/supervised) | Before taking actions that need permission |
@@ -112,32 +111,14 @@ Your persistent state lives in `.claude/state/`. Know this directory well — it
 |-----------|---------|
 | `todos/` | Individual to-do JSON files. Naming: `{priority}-{status}-{id}-{slug}.json`. Counter in `.counter` file. See `/todo` skill for details |
 | `memory/memories/` | Individual memory files. Naming: `YYYYMMDD-HHMM-slug.md` with YAML frontmatter |
-| `memory/summaries/` | Cascading time-based summaries: `24hr.md`, `30day.md`, yearly (`2026.md`, etc.) |
+| `memory/summaries/` | Rolling state log: `24hr.md` (ephemeral, rotates to timeline/ nightly) |
+| `memory/timeline/` | Daily files with YAML frontmatter. Append-only, no compression. Scan frontmatter with Grep or Read with limit |
 | `research/` | Research documents and deliverables (`.md` and `.docx`). Long-form analysis, reports, and generated documents that persist across sessions |
 | `telegram-media/` | Photos and documents received via Telegram. Files named by Telegram's file ID |
 
 ### Templates
 
 Files ending in `.template` are defaults from the upstream CC4Me project. Your live state files are the non-template versions.
-
-## Knowledge Base
-
-Reference documentation lives in `.claude/knowledge/`:
-
-### Integrations (`.claude/knowledge/integrations/`)
-
-| File | Covers |
-|------|--------|
-| `telegram.md` | Telegram bot setup, gateway architecture, webhook config, API patterns |
-| `fastmail.md` | Fastmail/JMAP email setup, API token config, sending/receiving |
-| `microsoft-graph.md` | Microsoft Graph API for M365 email, OAuth client credentials flow, Azure app setup |
-| `keychain.md` | macOS Keychain credential storage, naming conventions (`credential-*`, `pii-*`, `financial-*`) |
-
-### macOS (`.claude/knowledge/macos/`)
-
-| File | Covers |
-|------|--------|
-| `automation.md` | launchd jobs, plist templates, scheduled tasks, system automation |
 
 ## Core Behaviors
 
@@ -147,23 +128,13 @@ When the channel (`.claude/state/channel.txt`) is `telegram`, the **daemon's tra
 
 Only use `telegram-send.sh` directly when the channel is `silent` and you need to proactively reach the user.
 
-### Agent-to-Agent Communication
-
-Use `/agent-comms` or `scripts/agent-send.sh` to message peer agents (e.g., BMO) on the local network. Messages go through the daemon's HTTP endpoints with shared-secret auth.
-
-**Use agent-comms for**: task coordination (claim/release), status pings, PR notifications, quick technical questions, context handoffs.
-
-**Don't use for**: anything needing human attention (use Telegram), long-form specs (use email), anything requiring a human paper trail (use email).
-
-**Etiquette**: Keep messages concise, batch updates, trust the queue, acknowledge coordination claims promptly.
-
-See `.claude/skills/agent-comms/SKILL.md` for full details.
+**When channel is `telegram`**: Don't use `AskUserQuestion` or other interactive TUI elements — they render as widgets in the terminal but don't get captured in the transcript JSONL, so the user on Telegram never sees them. Instead, ask questions as plain text in your response.
 
 ### Check Memory First
 
 **Before asking the user for information**, check memory:
 1. Use Grep to search `.claude/state/memory/memories/` by keyword, tag, or category
-2. For recent history, check `.claude/state/memory/summaries/24hr.md` or `30day.md`
+2. For recent history, check `.claude/state/memory/summaries/24hr.md` or scan `memory/timeline/` frontmatter
 
 If the information isn't there, ask and then store it with `/memory add "fact"`.
 
@@ -190,22 +161,30 @@ Proactively mention relevant upcoming events.
 
 Use review mechanisms to catch problems early:
 
-1. **Devil's Advocate Sub-Agent** — For any non-trivial work (specs, plans, or to-dos), spawn a sub-agent with clean context to challenge your approach. It only sees the documents, not your assumptions. Runs automatically via `/review` and `/todo`.
+1. **Bob** (devil's advocate sub-agent) — For any non-trivial work (specs, plans, or to-dos), spawn a sub-agent with clean context to challenge your approach. It only sees the documents, not your assumptions. Runs automatically via `/review` and `/todo`.
 
-2. **Peer Review** — For shared work (new skills, daemon features, upstream pipeline, agent-comms), request your peer agent's review via agent-comms. Their different experience catches things you'd miss. See `/review` Peer Review Protocol for when to trigger.
+2. **R2 Peer Review** — For shared work (new skills, daemon features, upstream pipeline, agent-comms), request R2's review via agent-comms. Her different experience catches things you'd miss. See `/review` Peer Review Protocol for when to trigger.
 
 The workflow integrates review at multiple points:
 ```
-/spec → [peer review if shared] → /plan → /review (devil's advocate + peer) → /build
-/todo pickup → [devil's advocate check] → work → [peer review if shared]
+/spec → [peer review if shared] → /plan → /review (Bob + R2) → /build
+/todo pickup → [Bob check] → work → [R2 review if shared]
 ```
 
-### Save State Proactively
+### Manage Context Proactively
 
-Monitor context usage. When approaching limits:
-1. Use `/save-state` to capture current work
-2. Suggest compaction to the user
-3. The SessionStart hook will restore context after
+Context is a finite resource. Don't wait for the watchdog — be situationally aware.
+
+**Check before big tasks**: Before starting multi-step work (implementation, refactoring, research), read `.claude/state/context-usage.json` to check `remaining_percentage`. If below 50%, save state and `/clear` before starting — it's better to start fresh than get halfway through and hit the wall.
+
+**Save early, save often**: Use `/save-state` at natural breakpoints — after completing a task, before switching topics, before anything that might use a lot of context. The watchdog at 35% is a safety net, not a strategy.
+
+**The save-clear-restore cycle**:
+1. `/save-state` — writes current context to `assistant-state.md`, appends to 24hr log
+2. `/clear` — clears conversation context (triggers SessionStart hook)
+3. SessionStart hook — loads state back from `assistant-state.md`, auto-resumes
+
+**When the watchdog fires** (context < 35%): It sets flag files that the Stop hook picks up to inject `/save-state` then `/clear` automatically. You don't need to do anything — but it's better to manage context yourself before it gets that low.
 
 ## Autonomy Modes
 
@@ -247,7 +226,7 @@ Credentials use naming convention:
 - `pii-{type}` - Personal identifiable information
 - `financial-{type}-{identifier}` - Payment/banking
 
-See `.claude/knowledge/integrations/keychain.md`.
+See the `keychain` skill for full reference.
 
 ## 3rd Party Interaction Policy
 
@@ -320,38 +299,50 @@ When a 3rd party interaction reveals an opportunity to improve your capabilities
 
 ### Skills Available
 
-Each skill has detailed instructions in `.claude/skills/{name}/SKILL.md`.
+Each skill has detailed instructions in `.claude/skills/{name}/SKILL.md` (canonical source). This table is a quick reference — see each SKILL.md for full details.
+
+**User-invocable skills** (triggered via `/command`):
 
 | Skill | Purpose |
 |-------|---------|
 | `/todo` | Manage persistent to-dos (auto-incrementing IDs, JSON files) |
-| `/memory` | Store and lookup facts in `memory/memories/` (v2) |
-| `/calendar` | Manage schedule and reminders |
+| `/memory` | Store and lookup facts in `memory/memories/` |
+| `/calendar` | Manage schedule, events, and reminders |
 | `/mode` | View/change autonomy level |
 | `/save-state` | Save context before compaction |
 | `/restart` | Restart Claude Code session gracefully |
-| `/setup` | Configure the assistant (first-time setup wizard) |
+| `/setup` | Configure the assistant (first-time setup wizard, prerequisites, troubleshooting) |
 | `/email` | Read and send email via Fastmail (JMAP) or Microsoft 365 (Graph) |
-| `/telegram` | Telegram integration reference and patterns |
+| `/remind` | Set timed reminders delivered via Telegram |
 | `/hooks` | Create and manage Claude Code hooks |
 | `/skill-create` | Create new skills following best practices |
+| `/agent-comms` | Send messages to peer agents and check status |
 | `/spec` | Create feature specifications |
 | `/plan` | Create implementation plans with stories/tests |
-| `/review` | Pre-build design review with devil's advocate sub-agent + peer review |
+| `/review` | Pre-build design review with Bob (devil's advocate) + R2 peer review |
 | `/build` | Implement features (test-driven) |
 | `/validate` | Verify spec-plan-implementation alignment |
 | `/upstream` | Contribute changes back to upstream CC4Me |
-| `/delivery-stats` | Analyze Telegram delivery logs (success rates, retries, failures) |
-| `/agent-comms` | Send messages to peer agents (BMO) on the local network |
+| `/playwright-cli` | Browser automation for testing, screenshots, and data extraction |
+
+**Reference skills** (loaded automatically when relevant, not directly invoked):
+
+| Skill | Purpose |
+|-------|---------|
+| `browser` | Browser automation SOP — Playwright (local) vs Browserbase (cloud) |
+| `email-compose` | Compose professional HTML emails with responsive layouts |
+| `telegram` | Telegram integration reference, gateway architecture, API patterns |
+| `keychain` | macOS Keychain credential storage — naming conventions, operations, security |
+| `macos-automation` | macOS automation — AppleScript, accessibility, clipboard, window management |
 
 ### Software Development
 
 For building software, use the spec-driven workflow:
 
 ```
-/spec feature-name    → Create specification (+ peer review if shared)
+/spec feature-name    → Create specification (+ R2 peer review if shared)
 /plan specs/....md    → Create plan with stories and tests
-/review plans/....md  → Devil's advocate sub-agent + peer review for shared work
+/review plans/....md  → Bob (devil's advocate) + R2 peer review for shared work
 /build plans/....md   → Implement (stories + regression testing)
 /validate             → Verify alignment
 ```
@@ -375,7 +366,7 @@ Test changes before committing.
 
 ### Integrations
 
-Reference `.claude/knowledge/integrations/` for detailed setup and API docs. See the Knowledge Base section above for a full listing.
+Integration reference docs live in each skill's folder (e.g., `skills/email/fastmail-reference.md`). See the Reference Skills table in the Capabilities section for a full listing.
 
 ## Configuration
 

@@ -51,6 +51,14 @@ How do we know this is done and working?
 ## Technical Considerations
 [Any technical notes, dependencies, or architectural considerations]
 
+## Documentation Impact
+Which docs will need updating when this feature ships?
+
+- [ ] `CLAUDE.md` — [what section/why]
+- [ ] `SKILL.md` — [which skill, what changes]
+- [ ] `README.md` — [what section/why]
+- [ ] None expected
+
 ## Open Questions
 - [ ] Question 1?
 - [ ] Question 2?

@@ -8,6 +8,56 @@ argument-hint: [start | identity | autonomy | integrations | all]
 
 Interactive wizard to configure the assistant after cloning the CC4Me template.
 
+## Pre-Setup Installation
+
+Before running the setup wizard, the user needs to complete these steps (guide them if needed):
+
+### Prerequisites
+
+| Tool | Required | Install |
+|------|----------|---------|
+| macOS (Ventura 13+) | Yes | - |
+| Homebrew | Yes | `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"` |
+| Node.js v18+ | Yes | `brew install node` |
+| Claude Code CLI | Yes | `npm install -g @anthropic-ai/claude-code` |
+| Claude Pro or Max subscription | Yes | [claude.ai](https://claude.ai) — Max recommended for heavy autonomous use |
+| tmux | Yes | `brew install tmux` |
+| jq | Yes | `brew install jq` |
+| Git | Yes | `brew install git` |
+| Cloudflared (for Telegram) | Optional | `brew install cloudflare/cloudflare/cloudflared` |
+
+### Installation Steps
+
+```bash
+# 1. Clone the template
+git clone https://github.com/RockaRhyme/CC4Me.git my-assistant
+cd my-assistant
+
+# 2. Run initialization (checks prerequisites, makes scripts executable)
+./scripts/init.sh
+
+# 3. Build the daemon
+cd daemon && npm install && npm run build && cd ..
+
+# 4. Copy and customize config
+cp cc4me.config.yaml.template cc4me.config.yaml
+# Edit cc4me.config.yaml: set agent.name, tmux.session, enable channels as needed
+
+# 5. Set up daemon as background service
+cp launchd/com.assistant.daemon.plist.template ~/Library/LaunchAgents/com.assistant.daemon.plist
+# Edit plist: replace __PROJECT_DIR__ and __HOME_DIR__ with actual paths
+launchctl load ~/Library/LaunchAgents/com.assistant.daemon.plist
+
+# 6. Verify daemon is running
+curl http://localhost:3847/health
+
+# 7. Start Claude Code
+./scripts/start.sh
+
+# 8. Run the setup wizard
+> /setup
+```
+
 ## Usage
 
 - `/setup` or `/setup start` - Run full setup wizard
@@ -81,7 +131,7 @@ Creates: `.claude/state/safe-senders.json`
    - `credential-graph-user-email`
 6. Test: `node scripts/email/graph.js inbox`
 
-See `.claude/knowledge/integrations/microsoft-graph.md` for detailed Azure setup.
+See `.claude/skills/email/graph-reference.md` for detailed Azure setup.
 
 #### Persistent Session
 1. Explain tmux-based persistent sessions
@@ -237,6 +287,78 @@ To use the system prompt, start Claude with:
 ```bash
 ./scripts/start.sh
 ```
+
+## Troubleshooting
+
+### Daemon won't start
+- Verify Node.js 18+: `node --version`
+- Check daemon is built: `ls daemon/dist/core/main.js`
+- If missing, build it: `cd daemon && npm install && npm run build`
+- Check plist paths are correct: `cat ~/Library/LaunchAgents/com.assistant.daemon.plist`
+- Check logs: `tail -f logs/daemon-stderr.log`
+
+### tmux session won't start
+- Check if session exists: `tmux ls`
+- Kill stuck session: `tmux kill-session -t assistant`
+- Try again: `./scripts/start-tmux.sh --detach`
+
+### Telegram messages not arriving
+- Check daemon is running: `curl http://localhost:3847/health`
+- Verify tunnel is active: `cloudflared tunnel list`
+- Check bot token: `security find-generic-password -s "credential-telegram-bot" -w`
+- Review daemon logs: `tail -f logs/daemon-stderr.log`
+
+### Email sending fails
+- Verify credentials: `security find-generic-password -s "credential-fastmail-token" -w`
+- For M365: check Azure app permissions in portal.azure.com
+- Check daemon status: `curl http://localhost:3847/status`
+
+### Scripts not executable
+Run: `chmod +x scripts/*.sh .claude/hooks/*.sh`
+
+### Keychain access issues
+- Keychain may need to be unlocked after restart
+- Check permissions in Keychain Access app
+- Re-store credentials if needed
+
+## Verification
+
+After setup, verify everything works:
+
+```bash
+# Check tmux session
+tmux ls
+
+# Check daemon health
+curl http://localhost:3847/health
+
+# Inside Claude Code:
+> /todo list           # Should show empty list
+> /memory              # Should show empty memory
+> /mode                # Should show current autonomy mode
+```
+
+## Updating CC4Me
+
+```bash
+# Add upstream remote (one time)
+git remote add upstream https://github.com/RockaRhyme/CC4Me.git
+
+# Fetch and merge updates
+git fetch upstream
+git merge upstream/main
+
+# Re-run init if scripts changed
+./scripts/init.sh
+```
+
+## Customization
+
+- **Personality**: Edit `.claude/state/system-prompt.txt`
+- **Behavior rules**: Edit `.claude/CLAUDE.md`
+- **Autonomy**: `/mode <level>` or edit `.claude/state/autonomy.json`
+- **Skills**: Add new skills in `.claude/skills/` or use `/skill-create`
+- **Hooks**: Configure in `.claude/settings.json` — see `/hooks` skill
 
 ## Notes
 

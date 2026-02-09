@@ -6,11 +6,12 @@
  */
 
 import http from 'node:http';
+import fs from 'node:fs';
 import path from 'node:path';
 import { loadConfig, getProjectDir } from './config.js';
 import { initLogger, createLogger } from './logger.js';
 import { runHealthCheck, formatReport } from './health.js';
-import { sessionExists } from './session-bridge.js';
+import { sessionExists, injectText, updateAgentState } from './session-bridge.js';
 
 // Comms imports (Phase 2)
 import { startTranscriptStream, stopTranscriptStream, onHookNotification } from '../comms/transcript-stream.js';
@@ -23,6 +24,10 @@ import { initAgentComms, stopAgentComms, handleAgentMessage, getAgentStatus, sen
 // Voice imports
 import { handleVoiceRequest, initVoiceServer, stopVoiceServer } from '../voice/voice-server.js';
 
+// Browser sidecar imports
+import { initBrowserSidecar, stopBrowserSidecar } from '../browser/browser-sidecar.js';
+import { activateHandoff, deactivateHandoff, isHandoffActive, sendMessage as sendTelegramMessage } from '../comms/adapters/telegram.js';
+
 // Automation imports (Phase 3)
 import { startScheduler, stopScheduler } from '../automation/scheduler.js';
 
@@ -34,6 +39,8 @@ import '../automation/tasks/nightly-todo.js';
 import '../automation/tasks/health-check.js';
 import '../automation/tasks/memory-consolidation.js';
 import '../automation/tasks/approval-audit.js';
+import '../automation/tasks/morning-briefing.js';
+import '../automation/tasks/upstream-sync.js';
 import '../automation/tasks/peer-heartbeat.js';
 
 // ── Bootstrap ────────────────────────────────────────────────
@@ -50,6 +57,57 @@ log.info(`CC4Me daemon starting`, {
   port: config.daemon.port,
   projectDir,
 });
+
+// ── Retry To-Do Creation ─────────────────────────────────────
+
+/**
+ * Create a to-do programmatically when a hand-off times out,
+ * so the assistant can retry the browser task later.
+ */
+function createRetryTodo(url?: string, contextName?: string): void {
+  if (!url) return; // Nothing to retry without a URL
+
+  const todosDir = path.join(getProjectDir(), '.claude', 'state', 'todos');
+  const counterPath = path.join(todosDir, '.counter');
+
+  try {
+    // Read and increment counter
+    let counter = 1;
+    try {
+      counter = parseInt(fs.readFileSync(counterPath, 'utf-8').trim(), 10) || 1;
+    } catch { /* first todo */ }
+
+    const id = String(counter).padStart(3, '0');
+    const slug = `retry-browser-${(contextName ?? 'session').replace(/[^a-z0-9]/gi, '-').toLowerCase()}`.slice(0, 30);
+    const filename = `3-medium-open-${id}-${slug}.json`;
+    const now = new Date().toISOString();
+
+    const todo = {
+      id,
+      title: `Retry browser task: ${url}`,
+      description: `Hand-off timed out before the human could complete it. Retry browsing ${url}${contextName ? ` (context: ${contextName})` : ''} when the human is available.`,
+      priority: 'medium',
+      status: 'open',
+      created: now,
+      updated: now,
+      actions: [
+        {
+          type: 'created',
+          timestamp: now,
+          note: `Auto-created by daemon: hand-off idle timeout on ${url}`,
+        },
+      ],
+    };
+
+    fs.writeFileSync(path.join(todosDir, filename), JSON.stringify(todo, null, 2));
+    fs.writeFileSync(counterPath, String(counter + 1));
+    log.info('Created retry to-do for timed-out hand-off', { id, url });
+  } catch (err) {
+    log.error('Failed to create retry to-do', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
 
 // ── HTTP Server ──────────────────────────────────────────────
 
@@ -87,6 +145,14 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Session clear endpoint — injects /clear into the tmux session
+  if (req.method === 'POST' && url.pathname === '/session/clear') {
+    const ok = injectText('/clear');
+    res.writeHead(ok ? 200 : 503, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok, injected: '/clear' }));
+    return;
+  }
+
   // Typing-done endpoint (used by transcript stream to stop typing)
   if (req.method === 'POST' && url.pathname === '/typing-done') {
     if (telegramRouter) {
@@ -105,13 +171,21 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200);
       res.end('ok');
 
+      let hookEvent: string | undefined;
       try {
         const payload = JSON.parse(body);
-        onHookNotification(payload.transcript_path, payload.hook_event);
+        hookEvent = payload.hook_event;
+        onHookNotification(payload.transcript_path, hookEvent);
       } catch {
         // No body or invalid JSON — still trigger a read
         onHookNotification();
       }
+
+      // Update agent state from hook event (replaces pane-scraping heuristics)
+      if (hookEvent) {
+        updateAgentState(hookEvent);
+      }
+
     });
     return;
   }
@@ -167,6 +241,85 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Voice endpoints: /voice/*
+  if (url.pathname.startsWith('/voice/')) {
+    const handled = await handleVoiceRequest(req, res, url.pathname);
+    if (handled) return;
+  }
+
+  // Browser timeout: POST /browser/timeout-warning — forward timeout warnings to Telegram and Claude
+  if (req.method === 'POST' && url.pathname === '/browser/timeout-warning') {
+    let body = '';
+    req.on('data', (c: Buffer) => { body += c.toString(); });
+    req.on('end', async () => {
+      res.writeHead(200);
+      res.end('ok');
+
+      try {
+        const data = JSON.parse(body) as { type: string; message: string; url?: string; contextName?: string };
+        log.info('Browser timeout warning', { type: data.type });
+
+        // Forward to Telegram
+        if (config.channels.telegram.enabled) {
+          sendTelegramMessage(data.message);
+        }
+
+        // Inject into Claude session for awareness
+        if (sessionExists()) {
+          injectText(`[Browser] ${data.message}`);
+        }
+
+        // If it's a hand-off idle timeout, deactivate hand-off and create retry to-do
+        if (data.type === 'handoff-idle-timeout') {
+          await deactivateHandoff();
+          createRetryTodo(data.url, data.contextName);
+        }
+
+        // If session died, deactivate hand-off
+        if (data.type === 'session-died') {
+          await deactivateHandoff();
+        }
+      } catch {
+        // Invalid JSON — ignore
+      }
+    });
+    return;
+  }
+
+  // Browser hand-off: POST /browser/handoff/start — activate hand-off mode
+  if (req.method === 'POST' && url.pathname === '/browser/handoff/start') {
+    let body = '';
+    req.on('data', (c: Buffer) => { body += c.toString(); });
+    req.on('end', async () => {
+      let replyChatId: string | undefined;
+      try {
+        const data = JSON.parse(body);
+        replyChatId = data.replyChatId;
+      } catch {
+        // No body or invalid JSON — use default
+      }
+      const ok = await activateHandoff(replyChatId);
+      res.writeHead(ok ? 200 : 503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(ok ? { active: true } : { error: 'Sidecar not ready' }));
+    });
+    return;
+  }
+
+  // Browser hand-off: POST /browser/handoff/stop — deactivate hand-off mode
+  if (req.method === 'POST' && url.pathname === '/browser/handoff/stop') {
+    await deactivateHandoff();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ active: false }));
+    return;
+  }
+
+  // Browser hand-off: GET /browser/handoff/status — check hand-off state
+  if (req.method === 'GET' && url.pathname === '/browser/handoff/status') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ active: isHandoffActive() }));
+    return;
+  }
+
   // Agent comms: POST /agent/message — receive message from peer
   if (req.method === 'POST' && url.pathname === '/agent/message') {
     if (!config['agent-comms'].enabled) {
@@ -174,6 +327,9 @@ const server = http.createServer(async (req, res) => {
       res.end('Agent comms not enabled');
       return;
     }
+
+    const remoteAddr = req.socket.remoteAddress ?? 'unknown';
+    log.info('Inbound agent message', { from: remoteAddr });
 
     let body = '';
     req.on('data', (c: Buffer) => { body += c.toString(); });
@@ -185,6 +341,7 @@ const server = http.createServer(async (req, res) => {
       try {
         parsed = JSON.parse(body);
       } catch {
+        log.warn('Agent message: invalid JSON', { from: remoteAddr });
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Invalid JSON body' }));
         return;
@@ -231,12 +388,6 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Voice endpoints: /voice/*
-  if (url.pathname.startsWith('/voice/')) {
-    const handled = await handleVoiceRequest(req, res, url.pathname);
-    if (handled) return;
-  }
-
   // 404
   res.writeHead(404);
   res.end('Not found');
@@ -254,11 +405,14 @@ server.listen(config.daemon.port, () => {
     log.info('Communications module started');
   }
 
-  // Agent-to-Agent Comms
-  initAgentComms();
-
   // Voice
   initVoiceServer();
+
+  // Browser sidecar
+  initBrowserSidecar();
+
+  // Agent-to-Agent Comms
+  initAgentComms();
 
   // Phase 3: Automation
   startScheduler();
@@ -270,8 +424,9 @@ server.listen(config.daemon.port, () => {
 function shutdown(signal: string) {
   log.info(`Shutting down (${signal})`);
   stopTranscriptStream();
-  stopAgentComms();
   stopVoiceServer();
+  stopBrowserSidecar();
+  stopAgentComms();
   stopScheduler();
   server.close(() => {
     log.info('Daemon stopped');

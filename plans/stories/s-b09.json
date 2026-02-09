@@ -1,0 +1,27 @@
+{
+  "id": "s-b09",
+  "title": "Session timeout + idle warnings",
+  "description": "Add timeout management to the sidecar and integrate with Telegram for warnings.\n\nSession-level timeout:\n- Default 30 minutes per session (configurable via cc4me.config.yaml)\n- Warn Dave at 5 minutes remaining via Telegram\n- Auto-close session and save context on timeout\n\nHand-off idle timeout:\n- When Dave is tagged for a hand-off but hasn't responded:\n  - 10 minutes: send reminder via Telegram ('Still waiting for your help on [site]...')\n  - 30 minutes (configurable): close session, save context, create retry todo\n\nTimeout warnings are sent by the sidecar via a callback to daemon's API (or the sidecar calls the Telegram send script directly as a fallback).\n\nNote: These timeouts only matter on Developer plan (30min+ sessions). Free tier has a hard 15-min limit that Browserbase enforces itself.",
+  "planRef": "plans/20260206-browser-handoff.plan.md",
+  "todoRef": "065",
+  "status": "complete",
+  "priority": 9,
+  "tests": ["t-030"],
+  "blockedBy": ["s-b07"],
+  "created": "2026-02-07T06:00:00Z",
+  "updated": "2026-02-07T08:00:00Z",
+  "notes": ["2026-02-07: Session timeout + idle warnings implemented. Timeout manager in sidecar main.ts: session timeout with warning (configurable via env), hand-off idle warn/timeout timers. Timers reset on user interaction (type, click, scroll, screenshot). Sidecar notifies daemon via POST /browser/timeout-warning. Daemon forwards to Telegram + injects into Claude session. Timeout config passed from daemon via env vars (SESSION_TIMEOUT, SESSION_WARNING, HANDOFF_IDLE_WARN, HANDOFF_IDLE_TIMEOUT). Both compile clean."],
+  "files": [
+    "browser-sidecar/src/main.ts",
+    "daemon/src/browser/browser-sidecar.ts",
+    "daemon/src/core/main.ts"
+  ],
+  "acceptanceCriteria": [
+    "Session timeout warning sent via Telegram at 5 minutes remaining",
+    "Session auto-closed on timeout with context saved",
+    "Hand-off idle reminder sent at 10 minutes of no response",
+    "Session closed after 30 minutes of hand-off idle, retry todo created",
+    "Timeouts configurable via cc4me.config.yaml",
+    "Timeout tracking resets when Dave interacts (type:, screenshot, etc.)"
+  ]
+}

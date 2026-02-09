@@ -8,7 +8,7 @@ user-invocable: false
 
 Reference for working with Telegram.
 
-**See also**: `.claude/knowledge/integrations/telegram.md` for setup instructions and API basics.
+**See also**: [setup.md](setup.md) for setup instructions and API basics.
 
 ## Architecture Overview (v2 — Daemon)
 
@@ -147,6 +147,11 @@ Messages arrive as `[Telegram] Name: content` in the conversation.
 - Each entry has a unique `uuid` and `timestamp`
 
 ## Gotchas
+
+### Interactive UI Elements Don't Forward
+- `AskUserQuestion`, multiple-choice prompts, and other TUI widgets render in the terminal but are NOT captured in the transcript JSONL
+- When channel is `telegram`, the user will never see these — they only see text output from the transcript stream
+- **Rule**: When channel is `telegram`, ask questions as plain text in your response instead of using interactive tools
 
 ### tmux Socket Path
 - Scripts running from launchd need explicit socket path

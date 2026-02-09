@@ -1,116 +1,150 @@
 /**
- * Memory Consolidation — cascading state log summarization.
+ * Memory Consolidation — rotate stale 24hr entries to timeline/ daily files.
  *
- * Checks if consolidation is needed (24hr.md has entries older than 24h,
- * or 30day.md has entries older than 30 days) and injects a prompt for
- * Claude to do the actual summarization work.
+ * Checks if 24hr.md has entries older than 24 hours. If so, injects a prompt
+ * for Claude to:
+ *   1. Read the stale entries
+ *   2. Condense them into timeline/YYYY-MM-DD.md daily files (with frontmatter)
+ *   3. Extract any new persistent facts as individual memory files
+ *   4. Remove processed entries from 24hr.md
  *
- * Claude handles: reviewing entries, extracting memories, writing summaries,
- * cleaning up processed entries. The daemon just schedules and checks.
+ * No more cascade compression (30day→yearly). Timeline files are append-only
+ * with full detail preserved. Facts go in memories/, timeline is the index.
  *
  * If Claude isn't idle when the job fires, defers until next run.
  */
 
 import fs from 'node:fs';
 import { resolveProjectPath } from '../../core/config.js';
-import { isBusy, injectText } from '../../core/session-bridge.js';
+import { isAgentIdle, injectText } from '../../core/session-bridge.js';
 import { createLogger } from '../../core/logger.js';
 import { registerTask } from '../scheduler.js';
 
 const log = createLogger('memory-consolidation');
 
 const SUMMARIES_DIR = '.claude/state/memory/summaries';
+const TIMELINE_DIR = '.claude/state/memory/timeline';
+
+interface EntryInfo {
+  date: Date;
+  header: string;  // Full "### YYYY-MM-DD HH:MM — reason" line
+  dateStr: string;  // Just the date part "YYYY-MM-DD"
+}
 
 /**
- * Parse timestamped entries from a cascade file.
+ * Parse entries from the 24hr log, returning date + header info.
  * Entries are separated by `---` and start with `### YYYY-MM-DD HH:MM`.
  */
-function parseEntryDates(filePath: string): Date[] {
+function parseEntries(filePath: string): EntryInfo[] {
   if (!fs.existsSync(filePath)) return [];
 
   const content = fs.readFileSync(filePath, 'utf8');
-  const dates: Date[] = [];
+  const entries: EntryInfo[] = [];
 
   // Match entry headers: ### 2026-02-03 09:15 — reason
-  const headerPattern = /^### (\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2})?)/gm;
+  const headerPattern = /^(### (\d{4}-\d{2}-\d{2})(?: (\d{2}:\d{2}))?(?: — (.*))?)/gm;
   let match;
   while ((match = headerPattern.exec(content)) !== null) {
-    const parsed = new Date(match[1]!);
+    const dateStr = match[2]!;
+    const timeStr = match[3] || '00:00';
+    const parsed = new Date(`${dateStr}T${timeStr}`);
     if (!isNaN(parsed.getTime())) {
-      dates.push(parsed);
+      entries.push({ date: parsed, header: match[1]!, dateStr });
     }
   }
 
-  return dates;
+  return entries;
 }
 
 /**
  * Check if any entries in a file are older than the given age in milliseconds.
  */
 function hasStaleEntries(filePath: string, maxAgeMs: number): boolean {
-  const dates = parseEntryDates(filePath);
-  if (dates.length === 0) return false;
+  const entries = parseEntries(filePath);
+  if (entries.length === 0) return false;
 
   const cutoff = Date.now() - maxAgeMs;
-  return dates.some(d => d.getTime() < cutoff);
+  return entries.some(e => e.date.getTime() < cutoff);
+}
+
+/**
+ * Build a pre-filtered summary of stale entries, grouped by date.
+ * Gives Claude a concise overview instead of making it read the full file.
+ */
+function summarizeStaleEntries(filePath: string, maxAgeMs: number): string {
+  const entries = parseEntries(filePath);
+  const cutoff = Date.now() - maxAgeMs;
+  const stale = entries.filter(e => e.date.getTime() < cutoff);
+  const fresh = entries.filter(e => e.date.getTime() >= cutoff);
+
+  // Group stale entries by date
+  const byDate = new Map<string, EntryInfo[]>();
+  for (const e of stale) {
+    const existing = byDate.get(e.dateStr) || [];
+    existing.push(e);
+    byDate.set(e.dateStr, existing);
+  }
+
+  // Check which dates already have timeline files
+  const lines: string[] = [];
+  for (const [date, dateEntries] of byDate) {
+    const timelinePath = resolveProjectPath(TIMELINE_DIR, `${date}.md`);
+    const exists = fs.existsSync(timelinePath);
+    lines.push(`  - ${date}: ${dateEntries.length} entries${exists ? ' (timeline file exists — append)' : ' (new timeline file)'}`);
+  }
+  lines.push(`  - (${fresh.length} recent entries to keep)`);
+
+  return lines.join('\n');
 }
 
 async function run(): Promise<void> {
   const hr24Path = resolveProjectPath(SUMMARIES_DIR, '24hr.md');
-  const day30Path = resolveProjectPath(SUMMARIES_DIR, '30day.md');
 
   const DAY_MS = 24 * 60 * 60 * 1000;
-  const MONTH_MS = 30 * DAY_MS;
 
-  const needs24hConsolidation = hasStaleEntries(hr24Path, DAY_MS);
-  const needs30dConsolidation = hasStaleEntries(day30Path, MONTH_MS);
+  const needsConsolidation = hasStaleEntries(hr24Path, DAY_MS);
 
-  if (!needs24hConsolidation && !needs30dConsolidation) {
+  if (!needsConsolidation) {
     log.debug('No consolidation needed — all entries are fresh');
     return;
   }
 
-  log.info(`Consolidation needed: 24h=${needs24hConsolidation}, 30d=${needs30dConsolidation}`);
+  log.info('Consolidation needed: stale entries found in 24hr.md');
 
-  if (isBusy()) {
-    log.info('Claude is busy — deferring consolidation to next run');
+  if (!isAgentIdle()) {
+    log.info('Agent is busy — deferring consolidation to next run');
     return;
   }
 
-  // Build the consolidation prompt based on what needs processing
-  const parts: string[] = [
-    '[System] Nightly memory consolidation is due. Please process the following:',
-  ];
-
-  if (needs24hConsolidation) {
-    parts.push(
-      '',
-      '1. Review `.claude/state/memory/summaries/24hr.md` for entries older than 24 hours:',
-      '   - Summarize each day\'s entries into 2-4 sentences in `30day.md` (highlights, decisions, accomplishments — skip routine ops)',
-      '   - Include snapshot count in header: e.g., "### 2026-02-03 (from 8 snapshots)"',
-      '   - Extract any important new facts (people, decisions, tools, preferences) as individual memory files in `memories/`',
-      '   - Add back-references: `[mem:YYYYMMDD-HHMM-slug]` in summaries, `source:` field in memory frontmatter',
-      '   - Remove the processed entries from `24hr.md` (keep the file header and any entries from the last 24 hours)',
-    );
+  // Ensure timeline directory exists
+  const timelineDir = resolveProjectPath(TIMELINE_DIR);
+  if (!fs.existsSync(timelineDir)) {
+    fs.mkdirSync(timelineDir, { recursive: true });
   }
 
-  if (needs30dConsolidation) {
-    parts.push(
-      '',
-      `${needs24hConsolidation ? '2' : '1'}. Review \`.claude/state/memory/summaries/30day.md\` for entries older than 30 days:`,
-      '   - Summarize each month\'s entries into 3-5 sentences in the yearly file (e.g., `2026.md`)',
-      '   - Focus on themes, milestones, and significant changes',
-      '   - Reference key memory files',
-      '   - Remove the processed entries from `30day.md`',
-    );
-  }
+  const summary = summarizeStaleEntries(hr24Path, DAY_MS);
 
-  parts.push(
+  const prompt = [
+    '[System] Nightly memory consolidation is due. Rotate stale 24hr entries to timeline/ daily files.',
     '',
-    'This is a high-priority maintenance task. Complete it before moving to other work.',
-  );
-
-  const prompt = parts.join('\n');
+    'Entries to process:',
+    summary,
+    '',
+    'Steps:',
+    '1. Read the stale entries from `.claude/state/memory/summaries/24hr.md` (only the dates listed above)',
+    '2. For each date, create or append to `.claude/state/memory/timeline/YYYY-MM-DD.md`:',
+    '   - If creating a new file, add YAML frontmatter: date, sessions (count of entries), topics (key areas), todos (IDs worked on), highlights (one-line summary)',
+    '   - If appending to existing file, update the frontmatter (increment sessions, merge topics/todos, update highlights if needed)',
+    '   - Condense each entry into 2-3 sentences in the body: `### HH:MM — description`',
+    '   - Preserve key details: what was done, decisions made, outcomes',
+    '3. Extract any important NEW facts (people, decisions, tools, preferences) as individual memory files in `memories/`',
+    '   - New memory files MUST include all frontmatter: date, category, importance, subject, tags, confidence, source',
+    '   - Set `source: nightly-consolidation`',
+    '   - Check for duplicates before writing',
+    '4. Remove the processed entries from `24hr.md` (keep the file header and entries from the last 24 hours)',
+    '',
+    'This is a maintenance task. Complete it efficiently.',
+  ].join('\n');
 
   log.info('Injecting consolidation prompt');
   injectText(prompt);

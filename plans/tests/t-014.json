@@ -1,0 +1,34 @@
+{
+  "id": "t-014",
+  "title": "BMO chime falls back when client disconnected",
+  "description": "Verify BMO immediately falls back to Telegram when no voice client is connected",
+  "storyRefs": ["s-v06"],
+  "planRef": "plans/20260204-voice-integration.plan.md",
+  "type": "story",
+  "status": "pass",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Stop the voice client (or ensure none is registered)",
+      "expected": "GET /voice/status shows connected: false"
+    },
+    {
+      "order": 2,
+      "action": "Trigger a notification event that has voice initiation enabled",
+      "expected": "Daemon checks voice registry — no client connected"
+    },
+    {
+      "order": 3,
+      "action": "Check Telegram",
+      "expected": "Notification delivered immediately via Telegram text — no delay waiting for voice"
+    },
+    {
+      "order": 4,
+      "action": "Check daemon logs",
+      "expected": "Log entry: 'No voice client connected, falling back to Telegram'"
+    }
+  ],
+  "created": "2026-02-04T15:00:00Z",
+  "executedAt": "2026-02-04T22:05:00Z",
+  "result": "PASS. Tested: (1) No voice client registered. (2) POST /voice/notify returns immediately: delivered=false, method=fallback, reason='No voice client connected'. (3) No delay — daemon checks registry and returns instantly."
+}

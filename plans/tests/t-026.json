@@ -1,0 +1,39 @@
+{
+  "id": "t-026",
+  "title": "Daemon starts and manages sidecar lifecycle",
+  "description": "Verify daemon spawns the sidecar, monitors health, and handles crashes",
+  "storyRefs": ["s-b06"],
+  "planRef": "plans/20260206-browser-handoff.plan.md",
+  "type": "story",
+  "status": "pending",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Set integrations.browserbase.enabled: true in cc4me.config.yaml and restart daemon",
+      "expected": "Daemon log shows 'Starting browser sidecar...' followed by 'Browser sidecar ready' after READY signal"
+    },
+    {
+      "order": 2,
+      "action": "Check daemon /health endpoint",
+      "expected": "Health response includes browser sidecar status (healthy/unhealthy)"
+    },
+    {
+      "order": 3,
+      "action": "Kill the sidecar process (simulate crash)",
+      "expected": "Daemon log shows sidecar exit detected. Within 30 seconds, daemon restarts sidecar and logs 'Browser sidecar restarted'"
+    },
+    {
+      "order": 4,
+      "action": "Kill the sidecar process 3 times rapidly to exhaust retries",
+      "expected": "After 3 restart attempts, daemon logs 'Browser sidecar max retries reached' and stops restarting"
+    },
+    {
+      "order": 5,
+      "action": "Send SIGTERM to daemon (graceful shutdown)",
+      "expected": "Daemon sends SIGTERM to sidecar before exiting. Sidecar process is not orphaned."
+    }
+  ],
+  "created": "2026-02-07T05:00:00Z",
+  "executedAt": null,
+  "result": null
+}

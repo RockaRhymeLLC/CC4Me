@@ -99,7 +99,7 @@ This protocol governs how and when agents use agent-to-agent comms.
 ### Etiquette
 - Keep messages concise — both agents are context-limited
 - Batch related updates when possible
-- Trust the queue when the other agent is busy
+- Trust delivery when the other agent is busy — tmux buffers input natively
 - Acknowledge receipt on important coordination messages
 - One topic per message when practical
 - Respond to coordination claims promptly

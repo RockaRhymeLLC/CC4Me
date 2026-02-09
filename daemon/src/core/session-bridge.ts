@@ -1,10 +1,9 @@
 /**
  * Session Bridge — all tmux interaction in one place.
  *
- * Replaces the 5+ independent "is Claude busy?" checks scattered across
- * scripts with a single implementation. Handles:
+ * Handles:
+ * - Hook-based agent state tracking (idle/busy from Stop/PostToolUse events)
  * - Session existence check
- * - Busy detection (spinner, "esc to interrupt", recent transcript activity)
  * - Text injection into the Claude Code pane
  * - Pane capture for reading current screen content
  */
@@ -17,6 +16,57 @@ import { loadConfig, getProjectDir } from './config.js';
 import { createLogger } from './logger.js';
 
 const log = createLogger('session-bridge');
+
+// ── Hook-based agent state tracking ─────────────────────────
+// Definitive agent state derived from hook events, not pane scraping.
+// Stop → idle, PostToolUse/SubagentStop/UserPromptSubmit → busy.
+
+let _agentState: 'idle' | 'busy' = 'idle';
+let _agentStateUpdatedAt: number = 0;
+
+const STALE_STATE_MS = 10 * 60 * 1000; // 10 minutes
+
+/**
+ * Update agent state from a hook event.
+ * Called by the /hook/response handler in main.ts.
+ */
+export function updateAgentState(hookEvent: string): void {
+  const prev = _agentState;
+  if (hookEvent === 'Stop') {
+    _agentState = 'idle';
+  } else {
+    // PostToolUse, SubagentStop, UserPromptSubmit, etc. — agent is working
+    _agentState = 'busy';
+  }
+  _agentStateUpdatedAt = Date.now();
+  if (prev !== _agentState) {
+    log.info(`Agent state: ${prev} → ${_agentState} (hook: ${hookEvent})`);
+  }
+}
+
+/**
+ * Check if the agent is idle based on hook events.
+ * Returns true if the last hook event was Stop (agent finished responding).
+ * Falls back to true if no hook events received yet (fresh daemon start)
+ * or if the last state update is stale (>10min — hooks may have stopped firing).
+ */
+export function isAgentIdle(): boolean {
+  // If no hook events yet, assume idle (daemon just started)
+  if (_agentStateUpdatedAt === 0) return true;
+
+  // Staleness guard: if no hooks for 10 minutes, fall back to idle.
+  // Prevents stuck-busy state if hooks stop firing (daemon restart,
+  // hook script failure, etc.)
+  if (Date.now() - _agentStateUpdatedAt > STALE_STATE_MS) {
+    if (_agentState === 'busy') {
+      log.info('Agent state stale (>10min) — falling back to idle');
+      _agentState = 'idle';
+    }
+    return true;
+  }
+
+  return _agentState === 'idle';
+}
 
 /**
  * Get the Claude Code transcript directory for a project path.
@@ -70,71 +120,16 @@ export function capturePane(): string {
   }
 }
 
-/**
- * Check if Claude is actively generating a response (pane indicators only).
- * Looks for spinner characters and "esc to interrupt" text.
- * Used by the scheduler to avoid interrupting mid-response.
- * Only checks pane indicators, not recent activity.
- */
-export function isActivelyProcessing(): boolean {
-  if (!sessionExists()) return false;
-
-  const pane = capturePane();
-
-  // Check for "esc to interrupt" — Claude is processing
-  if (pane.includes('esc to interrupt')) {
-    log.debug('ActivelyProcessing: "esc to interrupt" visible');
-    return true;
-  }
-
-  // Check for Unicode spinner characters
-  if (/[✶✷✸✹✺✻✼✽✾✿❀❁❂❃⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/.test(pane)) {
-    log.debug('ActivelyProcessing: spinner visible');
-    return true;
-  }
-
-  return false;
-}
-
-/**
- * Check if Claude is busy (includes transcript recency).
- * Includes all pane indicator checks PLUS recent transcript modification.
- * Use this for scheduler tasks where you want to avoid interrupting
- * an active conversation, even between responses.
- */
-export function isBusy(): boolean {
-  if (isActivelyProcessing()) return true;
-
-  // Check if transcript was modified in the last 10 seconds
-  const projectDir = getProjectDir();
-  const transcriptDir = getTranscriptDir(projectDir);
-
-  try {
-    const files = fs.readdirSync(transcriptDir)
-      .filter(f => f.endsWith('.jsonl'))
-      .map(f => ({
-        path: path.join(transcriptDir, f),
-        mtime: fs.statSync(path.join(transcriptDir, f)).mtimeMs,
-      }))
-      .sort((a, b) => b.mtime - a.mtime);
-
-    if (files.length > 0) {
-      const age = Date.now() - files[0]!.mtime;
-      if (age < 10_000) {
-        log.debug(`Busy: transcript modified ${Math.round(age / 1000)}s ago`);
-        return true;
-      }
-    }
-  } catch {
-    // Transcript dir might not exist yet
-  }
-
-  return false;
-}
 
 /**
  * Inject text into the Claude Code session.
  * Sends the text followed by Enter to submit it.
+ *
+ * Pre-injection cleanup: sends Escape (dismiss any autocomplete/menu)
+ * and Ctrl-U (clear any partial input) before typing new text.
+ *
+ * Enter is sent with retry logic — if the text is still visible in
+ * the pane after the first Enter, we retry up to 2 more times.
  *
  * @param text - Text to inject (will be escaped for tmux)
  * @param pressEnter - Whether to press Enter after (default: true)
@@ -156,18 +151,33 @@ export function injectText(text: string, pressEnter = true): boolean {
     });
 
     if (pressEnter) {
-      // Small delay to ensure text is fully written before pressing Enter.
-      // Without this, rapid send-keys calls can race on macOS, causing
-      // the Enter to fire before text lands or not fire at all.
-      execSync('sleep 0.1', { stdio: ['pipe', 'pipe', 'pipe'] });
+      // Longer delay before Enter to ensure text is fully rendered
+      execSync('sleep 0.3', { stdio: ['pipe', 'pipe', 'pipe'] });
 
-      execSync(`${tmux} send-keys -t ${session} Enter`, {
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
+      // Send Enter with retry — sometimes the first one doesn't register
+      const MAX_ENTER_ATTEMPTS = 3;
+      for (let attempt = 1; attempt <= MAX_ENTER_ATTEMPTS; attempt++) {
+        execSync(`${tmux} send-keys -t ${session} Enter`, {
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
 
-      // Verify Enter was sent by retrying once if needed
-      // (belt-and-suspenders for the "messages sitting unsent" bug)
-      execSync('sleep 0.1', { stdio: ['pipe', 'pipe', 'pipe'] });
+        // Wait and verify the text was submitted (pane should no longer
+        // contain our injected text on the input line)
+        execSync('sleep 0.3', { stdio: ['pipe', 'pipe', 'pipe'] });
+
+        if (attempt < MAX_ENTER_ATTEMPTS) {
+          // Check if text is still sitting in the input line
+          const pane = capturePane();
+          const lines = pane.split('\n').filter(l => l.trim().length > 0);
+          const lastLines = lines.slice(-5);
+          const textStillPending = lastLines.some(l => l.includes(text.slice(0, 40)));
+
+          if (!textStillPending) {
+            break; // Text was submitted successfully
+          }
+          log.warn(`Enter attempt ${attempt} may not have fired — retrying`);
+        }
+      }
     }
 
     log.debug(`Injected text (${text.length} chars)`);

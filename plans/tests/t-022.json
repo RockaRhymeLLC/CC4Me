@@ -1,0 +1,39 @@
+{
+  "id": "t-022",
+  "title": "Session start/stop via sidecar HTTP API (live API)",
+  "description": "Verify full session lifecycle through the sidecar HTTP endpoints",
+  "storyRefs": ["s-b03"],
+  "planRef": "plans/20260206-browser-handoff.plan.md",
+  "type": "story",
+  "status": "pending",
+  "steps": [
+    {
+      "order": 1,
+      "action": "POST /session/start with { \"url\": \"https://example.com\" }",
+      "expected": "Returns 200 with JSON containing sessionId, liveViewUrl, and screenshot (base64 PNG). Session is active."
+    },
+    {
+      "order": 2,
+      "action": "GET /session/status while session is active",
+      "expected": "Returns 200 with session info: sessionId, liveViewUrl, startedAt, contextName (null if none)"
+    },
+    {
+      "order": 3,
+      "action": "POST /session/start while a session is already active",
+      "expected": "Returns 409 Conflict with message indicating a session is already active"
+    },
+    {
+      "order": 4,
+      "action": "GET /session/screenshot while session is active",
+      "expected": "Returns 200 with PNG image of example.com"
+    },
+    {
+      "order": 5,
+      "action": "POST /session/stop with { \"saveContext\": false }",
+      "expected": "Returns 200 with confirmation. GET /session/status now shows no active session."
+    }
+  ],
+  "created": "2026-02-07T05:00:00Z",
+  "executedAt": null,
+  "result": null
+}

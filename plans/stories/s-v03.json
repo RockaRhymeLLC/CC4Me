@@ -1,0 +1,34 @@
+{
+  "id": "s-v03",
+  "title": "TTS pipeline (Qwen3-TTS via MLX)",
+  "description": "Install mlx-audio and Qwen3-TTS model on the Mac Mini. Create tts-worker.py as a PERSISTENT localhost HTTP microservice (Flask/FastAPI on a Unix socket) that loads the model once on startup and serves TTS requests with sub-500ms latency. Create tts.ts Node.js wrapper that sends requests to the persistent worker and returns generated audio. The daemon starts tts-worker.py on boot, health-checks it, and restarts if it crashes. Add POST /voice/speak endpoint for standalone TTS. (R2 review: per-request spawning would add 3-5s model load time, blowing the 2s latency target.)",
+  "planRef": "plans/20260204-voice-integration.plan.md",
+  "todoRef": "054",
+  "status": "complete",
+  "priority": 3,
+  "tests": ["t-005", "t-006"],
+  "blockedBy": ["s-v01"],
+  "created": "2026-02-04T15:00:00Z",
+  "updated": "2026-02-04T20:06:00Z",
+  "notes": ["R2 review: persistent worker is essential, not premature optimization. Loading 1.2GB model per request would add 3-5s latency. MLX caches model in memory across calls in persistent process. Zero memory savings from per-request spawning since model stays in memory either way."],
+  "files": [
+    "daemon/src/voice/tts.ts",
+    "daemon/src/voice/tts-worker.py",
+    "daemon/src/voice/voice-server.ts"
+  ],
+  "acceptanceCriteria": [
+    "mlx-audio installed via pip and Qwen3-TTS model downloaded (~1.2GB)",
+    "tts-worker.py runs as a persistent HTTP microservice on a Unix socket",
+    "tts-worker.py loads Qwen3-TTS model once on startup, serves POST /synthesize requests",
+    "tts-worker.py uses MLX framework for Apple Silicon acceleration",
+    "tts-worker.py has a GET /health endpoint for daemon health checks",
+    "tts.ts exports synthesize(text: string): Promise<Buffer> function",
+    "synthesize() sends HTTP request to persistent tts-worker.py, reads response audio",
+    "tts.ts exports startWorker() and stopWorker() for lifecycle management",
+    "Daemon starts tts-worker.py on boot, restarts if it crashes (max 3 retries)",
+    "synthesize() rejects with clear error if worker not running, Python, mlx-audio, or model missing",
+    "POST /voice/speak accepts JSON body {text: string}, returns audio/wav response",
+    "TTS begins generating audio within 500ms for short sentences on M4",
+    "Generated audio is 16kHz or higher sample rate, intelligible speech"
+  ]
+}

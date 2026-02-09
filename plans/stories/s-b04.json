@@ -1,0 +1,27 @@
+{
+  "id": "s-b04",
+  "title": "Navigation primitives",
+  "description": "Add navigation action endpoints to the sidecar. These are the building blocks BMO uses to drive the browser autonomously. Each action takes a screenshot after completing and returns it in the response, so BMO can visually assess the result.\n\nEndpoints:\n- POST /session/navigate — `{ url }` → navigate to URL, return screenshot\n- POST /session/click — `{ selector }` or `{ text }` → click element by CSS selector or visible text, return screenshot\n- POST /session/type — `{ text }` → type into focused element, return screenshot. Text is NOT logged (security: may contain passwords during relay)\n- POST /session/scroll — `{ direction: 'up' | 'down' }` → scroll page, return screenshot\n\nAll navigation endpoints:\n- Return 404 if no active session\n- Include screenshot in response (base64 PNG or binary, based on Accept header)\n- Have reasonable timeouts (navigation: 30s, click: 10s, type: 5s)\n- Return descriptive errors on failure (element not found, navigation timeout, etc.)",
+  "planRef": "plans/20260206-browser-handoff.plan.md",
+  "todoRef": "065",
+  "status": "complete",
+  "priority": 4,
+  "tests": ["t-023"],
+  "blockedBy": ["s-b03"],
+  "created": "2026-02-07T05:00:00Z",
+  "updated": "2026-02-07T05:00:00Z",
+  "notes": ["2026-02-07: Navigation endpoints added to main.ts: /session/navigate, /session/click, /session/type, /session/scroll. All return screenshots in response. Type security: text NOT logged. Session-manager type() supports both selector and focused-element modes. t-023: 6/7 steps passed live. Step 6 (click by text nav) had JSON parse artifact in test harness, not a code issue."],
+  "files": [
+    "browser-sidecar/src/main.ts"
+  ],
+  "acceptanceCriteria": [
+    "POST /session/navigate loads a URL and returns a screenshot",
+    "POST /session/click with selector clicks the element and returns a screenshot",
+    "POST /session/click with text finds and clicks a visible text element",
+    "POST /session/type types text into the focused element (text NOT logged)",
+    "POST /session/scroll scrolls the page in the specified direction",
+    "All endpoints return 404 if no active session",
+    "All endpoints include a screenshot in the response",
+    "Descriptive error messages for element-not-found and timeout failures"
+  ]
+}

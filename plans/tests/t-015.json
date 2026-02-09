@@ -1,0 +1,39 @@
+{
+  "id": "t-015",
+  "title": "Conversation mode follow-up without wake word",
+  "description": "Verify Dave can ask follow-up questions immediately after BMO responds without repeating the wake word",
+  "storyRefs": ["s-v07"],
+  "planRef": "plans/20260204-voice-integration.plan.md",
+  "type": "story",
+  "status": "partial",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Complete a normal voice interaction ('Hey BMO, what's on my calendar?')",
+      "expected": "BMO responds with audio through speakers"
+    },
+    {
+      "order": 2,
+      "action": "Immediately after BMO finishes speaking, say 'and what about tomorrow?' (no wake word)",
+      "expected": "Client is still in listening mode, captures the follow-up audio"
+    },
+    {
+      "order": 3,
+      "action": "Wait for response",
+      "expected": "Follow-up sent to daemon and processed as normal voice query. BMO responds with tomorrow's calendar"
+    },
+    {
+      "order": 4,
+      "action": "Stay silent after BMO's second response for 4+ seconds",
+      "expected": "Client exits conversation mode, returns to idle wake-word-only listening"
+    },
+    {
+      "order": 5,
+      "action": "Try saying a question without the wake word (while in idle mode)",
+      "expected": "No response — client only responds to wake word in idle mode"
+    }
+  ],
+  "created": "2026-02-04T15:00:00Z",
+  "executedAt": "2026-02-04T22:15:00Z",
+  "result": "PARTIAL — code verified. (1) _voice_interaction_loop supports follow-up: after playback, listens for follow_up_duration (3s default) for speech. (2) If speech detected, processes as new query without wake word. (3) If silence, returns to idle. (4) One level of follow-up per wake word cycle. Full test needs laptop with mic/speakers."
+}

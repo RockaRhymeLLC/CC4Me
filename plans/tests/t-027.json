@@ -1,0 +1,29 @@
+{
+  "id": "t-027",
+  "title": "Sidecar disabled when config says so",
+  "description": "Verify sidecar does not start when browserbase integration is disabled",
+  "storyRefs": ["s-b06"],
+  "planRef": "plans/20260206-browser-handoff.plan.md",
+  "type": "story",
+  "status": "pending",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Set integrations.browserbase.enabled: false in cc4me.config.yaml and restart daemon",
+      "expected": "Daemon starts without spawning the browser sidecar. No 'Starting browser sidecar' in logs."
+    },
+    {
+      "order": 2,
+      "action": "Check daemon /health endpoint",
+      "expected": "Health response does not include browser sidecar section, or shows it as 'disabled'"
+    },
+    {
+      "order": 3,
+      "action": "Verify Keychain accessor functions exist but are not called when disabled",
+      "expected": "getBrowserbaseApiKey() and getBrowserbaseProjectId() defined in keychain.ts. No Keychain access attempted during startup when disabled."
+    }
+  ],
+  "created": "2026-02-07T05:00:00Z",
+  "executedAt": null,
+  "result": null
+}

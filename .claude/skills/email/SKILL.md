@@ -31,6 +31,7 @@ Parse the arguments to determine action:
 - `/email send "user@example.com" "Hello" "Message body here"`
 - `/email send "user@example.com" "Hello" "Body" --cc "other@example.com"`
 - `/email send "user@example.com" "Hello" "Body" --cc "a@ex.com" --bcc "b@ex.com"`
+- `/email send "user@example.com" "Hello" "<html>...</html>" --html` - Send HTML email
 
 ## Account Configuration
 

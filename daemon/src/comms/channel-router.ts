@@ -171,12 +171,16 @@ export function routeOutgoingMessage(text: string, thinking?: string): void {
     case 'silent':
     case 'voice':
       // No external delivery (voice responses are captured via voice-pending callback above)
+      log.debug(`Channel is ${channel}, not forwarding: ${text.length} chars`);
       return;
 
     case 'telegram':
+      log.info(`Routing to telegram: ${text.length} chars, handler=${!!_telegramHandler}`);
       if (_telegramHandler) {
         try {
+          log.info('Calling telegram handler now');
           _telegramHandler(text);
+          log.info('Telegram handler returned');
         } catch (err) {
           log.error('Telegram handler error', { error: err instanceof Error ? err.message : String(err) });
         }

@@ -1,0 +1,39 @@
+{
+  "id": "t-010",
+  "title": "Laptop client full round-trip",
+  "description": "Verify the client completes a full voice interaction: wake word → capture → upload → playback",
+  "storyRefs": ["s-v05"],
+  "planRef": "plans/20260204-voice-integration.plan.md",
+  "type": "story",
+  "status": "partial",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Start bmo_voice.py with config pointing to Mac Mini daemon",
+      "expected": "Client starts and registers with daemon (POST /voice/register)"
+    },
+    {
+      "order": 2,
+      "action": "Say 'Hey BMO, what's on my calendar today?'",
+      "expected": "Wake word detected, audio captured, POST to /voice/transcribe"
+    },
+    {
+      "order": 3,
+      "action": "Wait for response",
+      "expected": "Response audio received from daemon"
+    },
+    {
+      "order": 4,
+      "action": "Listen to speakers",
+      "expected": "BMO speaks Claude's response through laptop speakers"
+    },
+    {
+      "order": 5,
+      "action": "Verify total latency (wake word to start of audio playback)",
+      "expected": "Audio processing under 2 seconds (excluding Claude thinking time)"
+    }
+  ],
+  "created": "2026-02-04T15:00:00Z",
+  "executedAt": "2026-02-04T21:58:00Z",
+  "result": "PARTIAL — verified from Mac Mini. (1) Client registers with daemon (200 OK, shows connected=true). (2) Sent synthetic 2s WAV to /voice/transcribe — daemon received, whisper transcribed as '[Music]' (correct for sine waves), injected '[Voice] Dave: [Music]' into Claude session. (3) Pipeline timed out waiting for Claude (30s) because BMO is the active session — can't respond to self. Proves: STT, injection, and voice-pending all work. Full round-trip needs laptop with mic + separate Claude session."
+}

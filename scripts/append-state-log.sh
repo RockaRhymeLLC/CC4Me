@@ -3,14 +3,15 @@
 #
 # Called by: save-state skill, pre-compact hook, restart skill
 #
-# Throttling: Skips append if the last entry was added less than 15 minutes ago,
-# unless force flag is set. This prevents near-identical snapshots from piling up
-# when the context watchdog fires frequently.
+# Three layers of protection against bloat:
+# 1. Time throttle: Skips if last entry was < 15 minutes ago (unless --force)
+# 2. Condensing: Extracts key sections, limits each to a few lines
+# 3. Content dedup: Skips if condensed content matches last entry (even with --force)
 #
 # Usage:
 #   source scripts/append-state-log.sh && append_state_log [reason]
 #   ./scripts/append-state-log.sh [reason]           # direct invocation
-#   ./scripts/append-state-log.sh --force [reason]   # skip throttle check
+#   ./scripts/append-state-log.sh --force [reason]   # skip throttle (still checks content)
 #
 # Examples:
 #   ./scripts/append-state-log.sh "Auto-save: context at 72% used"
@@ -60,9 +61,67 @@ append_state_log() {
     fi
   fi
 
-  # Read current state
-  local state_content
+  # Read and condense current state.
+  # Full state stays in assistant-state.md — the 24hr log gets a slim version.
+  # Keeps: current task (1 line), completed (5 items), next steps (3),
+  # context (3 lines), blockers (2). Drops: open todos (in todo files),
+  # notes, follow-ups, verbose metadata.
+  local state_content condensed
   state_content=$(cat "$STATE_FILE")
+  condensed=$(awk '
+    BEGIN { section=""; count=0; limit=3 }
+    /^## Current Task/           { section="task";  count=0; limit=1; print; next }
+    /^## Completed/              { section="done";  count=0; limit=5; print; next }
+    /^## Next Step/              { section="next";  count=0; limit=3; print; next }
+    /^## Blocker/                { section="block"; count=0; limit=2; print; next }
+    /^## Context/                { section="ctx";   count=0; limit=3; print; next }
+    /^## /                       { section="skip";  next }
+    /^# /                        { next }
+    /^\*\*(Saved|Reason|Session)\*\*/ { next }
+    section == "skip"            { next }
+    section != "" && /^$/        { next }
+    section != "" && count < limit  { print; count++ }
+    section != "" && count == limit { section="skip" }
+  ' <<< "$state_content")
+
+  # Content dedup: skip if condensed content matches last entry (even with --force).
+  # Compares md5 of the condensed "Completed" section (most likely to change).
+  if [ -f "$LOG_FILE" ]; then
+    local new_hash last_hash
+    local new_section
+    new_section=$(echo "$condensed" | sed -n '/^## Completed/,/^## /p' | head -10)
+    if [ -z "$new_section" ]; then
+      new_section="$condensed"
+    fi
+    new_hash=$(echo "$new_section" | md5 -q 2>/dev/null || echo "$new_section" | md5sum | cut -d' ' -f1)
+
+    # Extract last entry from log: find last ### header, take content after it
+    local last_entry
+    last_entry=$(awk '
+      /^### / { last_start = NR }
+      { lines[NR] = $0 }
+      END {
+        if (last_start) {
+          for (i = last_start+1; i <= NR; i++) {
+            if (lines[i] != "---") print lines[i]
+          }
+        }
+      }
+    ' "$LOG_FILE")
+
+    if [ -n "$last_entry" ]; then
+      local last_section
+      last_section=$(echo "$last_entry" | sed -n '/^## Completed/,/^## /p' | head -10)
+      if [ -z "$last_section" ]; then
+        last_section="$last_entry"
+      fi
+      last_hash=$(echo "$last_section" | md5 -q 2>/dev/null || echo "$last_section" | md5sum | cut -d' ' -f1)
+
+      if [ "$new_hash" = "$last_hash" ]; then
+        return 0  # Content unchanged — skip duplicate
+      fi
+    fi
+  fi
 
   # Build timestamped entry
   local timestamp
@@ -71,7 +130,7 @@ append_state_log() {
   local entry="---
 ### ${timestamp} — ${reason}
 
-${state_content}
+${condensed}
 
 ---
 "

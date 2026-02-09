@@ -21,7 +21,7 @@ import {
 import { transcribe } from './stt.js';
 import { saveTempAudio, cleanupTemp } from './audio-utils.js';
 import { synthesize, startWorker, stopWorker } from './tts.js';
-import { injectText, isActivelyProcessing } from '../core/session-bridge.js';
+import { injectText } from '../core/session-bridge.js';
 import { registerVoicePending, clearVoicePending, isVoicePending, getChannel, startTypingIndicator } from '../comms/channel-router.js';
 
 const log = createLogger('voice-server');
@@ -29,8 +29,6 @@ const log = createLogger('voice-server');
 const MAX_AUDIO_BYTES = 10 * 1024 * 1024; // 10MB max upload
 const MAX_TTS_CHARS = 500; // Max chars per TTS request (prevents OOM on long text)
 const VOICE_RESPONSE_TIMEOUT_MS = 30_000; // Max wait for Claude's response
-const BUSY_WAIT_MAX_MS = 10_000; // Max time to wait for Claude to become idle
-const BUSY_POLL_INTERVAL_MS = 500; // Poll interval when waiting for idle
 
 /**
  * Parse JSON body from an incoming request.

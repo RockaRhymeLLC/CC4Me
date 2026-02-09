@@ -89,6 +89,34 @@ session_exists() {
     [ -n "$TMUX_BIN" ] && $TMUX_CMD has-session -t "$SESSION_NAME" 2>/dev/null
 }
 
+# Check if claude is actually running inside the tmux session pane
+# Returns 0 if alive, 1 if session exists but claude is dead
+# Handles both direct exec (claude IS the pane process) and watchdog
+# (claude is a descendant of the pane process)
+claude_alive() {
+    if ! session_exists; then
+        return 1
+    fi
+    local pane_pid
+    pane_pid=$($TMUX_CMD list-panes -t "$SESSION_NAME" -F '#{pane_pid}' 2>/dev/null | head -1)
+    if [ -z "$pane_pid" ]; then
+        return 1
+    fi
+    # Check if the pane process itself is claude
+    local pane_cmd
+    pane_cmd=$(ps -o comm= -p "$pane_pid" 2>/dev/null)
+    if [[ "$pane_cmd" == *claude* ]]; then
+        return 0
+    fi
+    # Check descendants (watchdog mode: claude is a child/grandchild)
+    pgrep -a -P "$pane_pid" 2>/dev/null | grep -q 'claude' && return 0
+    # Also check grandchildren (watchdog -> start.sh -> claude)
+    for child in $(pgrep -P "$pane_pid" 2>/dev/null); do
+        pgrep -a -P "$child" 2>/dev/null | grep -q 'claude' && return 0
+    done
+    return 1
+}
+
 # Log with timestamp
 cc4me_log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"

@@ -38,24 +38,31 @@ AUTO_PROMPT="Session auto-started. Check todos, calendar, and any saved state. W
 
 # Check if session already exists
 if session_exists; then
-    if $DETACH; then
-        echo "Session '$SESSION_NAME' already running"
-        exit 0
+    if claude_alive; then
+        # Session exists AND claude is running — all good
+        if $DETACH; then
+            echo "Session '$SESSION_NAME' already running (claude alive)"
+            exit 0
+        else
+            exec $TMUX_CMD attach-session -t "$SESSION_NAME"
+        fi
     else
-        # Attach to existing session
-        exec $TMUX_CMD attach-session -t "$SESSION_NAME"
+        # Session exists but claude is dead — kill stale session and recreate
+        echo "Session '$SESSION_NAME' exists but claude is not running — restarting"
+        $TMUX_CMD kill-session -t "$SESSION_NAME" 2>/dev/null
     fi
 fi
 
-# Build the claude command
-CLAUDE_CMD="'$BASE_DIR/scripts/start.sh'"
+# Build the claude arguments to pass through
+CLAUDE_ARGS=()
 if $SKIP_PERMISSIONS; then
-    CLAUDE_CMD="'$BASE_DIR/scripts/start.sh' --dangerously-skip-permissions"
+    CLAUDE_ARGS+=("--dangerously-skip-permissions")
 fi
 
 if $DETACH; then
-    # Start detached session (for launchd)
-    $TMUX_CMD new-session -d -s "$SESSION_NAME" -c "$BASE_DIR" "$CLAUDE_CMD"
+    # Start detached session with watchdog (auto-restarts Claude on exit)
+    $TMUX_CMD new-session -d -s "$SESSION_NAME" -c "$BASE_DIR" \
+        "'$BASE_DIR/scripts/watchdog.sh' ${CLAUDE_ARGS[*]}"
 
     # Wait for Claude to initialize, then send auto-prompt
     sleep 8
@@ -63,8 +70,9 @@ if $DETACH; then
     sleep 1
     $TMUX_CMD send-keys -t "$SESSION_NAME" Enter
 
-    echo "Started session '$SESSION_NAME' (detached, auto-prompted)"
+    echo "Started session '$SESSION_NAME' (detached, watchdog enabled, auto-prompted)"
 else
-    # Start and attach interactively (no auto-prompt)
-    exec $TMUX_CMD new-session -s "$SESSION_NAME" -c "$BASE_DIR" "$CLAUDE_CMD"
+    # Start and attach interactively (no watchdog, no auto-prompt)
+    exec $TMUX_CMD new-session -s "$SESSION_NAME" -c "$BASE_DIR" \
+        "'$BASE_DIR/scripts/start.sh' ${CLAUDE_ARGS[*]}"
 fi

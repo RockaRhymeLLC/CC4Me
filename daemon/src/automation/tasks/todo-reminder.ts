@@ -6,32 +6,60 @@
 
 import fs from 'node:fs';
 import { resolveProjectPath } from '../../core/config.js';
-import { injectText } from '../../core/session-bridge.js';
+import { injectText, isAgentIdle, sessionExists } from '../../core/session-bridge.js';
 import { createLogger } from '../../core/logger.js';
 import { registerTask } from '../scheduler.js';
 
 const log = createLogger('todo-reminder');
 
 async function run(): Promise<void> {
+  // We handle our own session/idle checks (requiresSession: false bypasses
+  // the scheduler's idle gate so we can check sessionExists separately).
+
+  if (!sessionExists()) {
+    log.debug('Skipping reminder: no tmux session');
+    return;
+  }
+
   const todosDir = resolveProjectPath('.claude', 'state', 'todos');
 
   if (!fs.existsSync(todosDir)) return;
 
   // Count open and in-progress todos
   const files = fs.readdirSync(todosDir);
-  const openCount = files.filter(f =>
+  const openTodos = files.filter(f =>
     (f.includes('-open-') || f.includes('-in-progress-')) && f.endsWith('.json'),
-  ).length;
+  );
+  const openCount = openTodos.length;
 
   if (openCount === 0) {
     log.debug('No open todos');
     return;
   }
 
+  // Only remind when idle — don't interrupt active work.
+  if (!isAgentIdle()) {
+    log.debug(`Skipping reminder: agent busy (${openCount} open todos)`);
+    return;
+  }
+
+  // Find the highest priority todo to suggest
+  let suggestion = '';
+  try {
+    const sorted = openTodos.sort(); // Files sort by priority prefix (1-, 2-, 3-, 4-)
+    const topFile = sorted[0];
+    if (topFile) {
+      const todo = JSON.parse(fs.readFileSync(`${todosDir}/${topFile}`, 'utf8'));
+      suggestion = ` Highest priority: [${todo.id}] ${todo.title}`;
+    }
+  } catch {
+    // Ignore parse errors, just omit the suggestion
+  }
+
   log.info(`Reminding about ${openCount} open todo(s)`);
 
-  const reminder = `[System] You have ${openCount} open todo(s). Run /todo list, pick the highest priority one, and start working on it now.`;
+  const reminder = `[System] You have ${openCount} open todo(s).${suggestion} Run /todo list, pick one, and start working on it now.`;
   injectText(reminder);
 }
 
-registerTask({ name: 'todo-reminder', run });
+registerTask({ name: 'todo-reminder', run, requiresSession: false });

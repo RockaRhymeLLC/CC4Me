@@ -1,0 +1,27 @@
+{
+  "id": "s-b02",
+  "title": "Browserbase session manager",
+  "description": "Build the session manager module that wraps Browserbase SDK calls in clean, well-named functions. This is the foundation layer — all browser operations go through this module.\n\nThe module (session-manager.ts) provides:\n- Session lifecycle: createSession (with optional context), connect via CDP, closeSession (with optional context save)\n- Live view: getLiveViewUrl for active session\n- Navigation: navigateTo, click (by selector or text), type, scroll\n- Screenshots: capture current page as PNG buffer\n- CDP resilience: reconnection with exponential backoff (2s → 5s → 10s, 3 attempts)\n- Orphan management: listActiveSessions, closeSession for orphan cleanup\n\nThis module IS the provider boundary. If we ever swap Browserbase for another cloud browser, we rewrite this one file. No formal interface needed.\n\nImplementation details:\n- Uses `@browserbasehq/sdk` for session/context API\n- Uses `playwright-core` `chromium.connectOverCDP()` for browser control\n- Reads credentials from config passed at initialization (not directly from Keychain)\n- Always uses `browser.contexts()[0]` (never `newContext()`) per SDK requirements\n- Session close via `bb.sessions.update(id, { status: 'REQUEST_RELEASE' })`\n- Handles API errors (429 rate limit, 500 server error, missing credentials) with descriptive errors",
+  "planRef": "plans/20260206-browser-handoff.plan.md",
+  "todoRef": "065",
+  "status": "complete",
+  "priority": 2,
+  "tests": ["t-019", "t-020"],
+  "blockedBy": ["s-b01"],
+  "created": "2026-02-07T05:00:00Z",
+  "updated": "2026-02-07T06:00:00Z",
+  "notes": ["2026-02-07: session-manager.ts complete. Clean compile. Live API test passed all 7 steps (create, navigate, screenshot, live view URL, list sessions, close). Module contract verified (t-019): all 9 functions exported with correct signatures, init pattern, descriptive error wrapping. closeSession returns contextSaved flag for s-b05."],
+  "files": [
+    "browser-sidecar/src/session-manager.ts"
+  ],
+  "acceptanceCriteria": [
+    "session-manager.ts provides createSession, closeSession, getScreenshot, getLiveViewUrl, navigateTo, click, type, scroll, listActiveSessions functions",
+    "Session creation returns session ID, connect URL, and live view URL",
+    "CDP connection established via playwright-core connectOverCDP using browser.contexts()[0]",
+    "Screenshot returns PNG buffer of current page",
+    "CDP reconnection retries 3 times with exponential backoff before failing",
+    "Session close properly releases via REQUEST_RELEASE API",
+    "Module reads credentials from config object (not directly from Keychain)",
+    "API errors (429, 500, missing credentials) produce descriptive error messages"
+  ]
+}

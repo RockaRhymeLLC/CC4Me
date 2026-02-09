@@ -1,0 +1,39 @@
+{
+  "id": "t-012",
+  "title": "BMO chime with Dave available",
+  "description": "Verify BMO can initiate a voice conversation via chime when Dave is at his desk",
+  "storyRefs": ["s-v06"],
+  "planRef": "plans/20260204-voice-integration.plan.md",
+  "type": "story",
+  "status": "partial",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Ensure voice client is running and registered with daemon",
+      "expected": "GET /voice/status shows connected: true"
+    },
+    {
+      "order": 2,
+      "action": "Trigger a calendar reminder event in the daemon (or manually call the voice notification function)",
+      "expected": "Daemon POSTs chime request to voice client's callback URL"
+    },
+    {
+      "order": 3,
+      "action": "Listen at the laptop",
+      "expected": "Distinctive chime sound plays through speakers"
+    },
+    {
+      "order": 4,
+      "action": "Say 'yeah?' or 'what's up?' within 5 seconds",
+      "expected": "Client captures audio, sends to daemon for confirmation detection"
+    },
+    {
+      "order": 5,
+      "action": "Listen for BMO's response",
+      "expected": "BMO speaks the notification (e.g., 'Hey Dave, Ladew Gardens camp registration opens at 9.')"
+    }
+  ],
+  "created": "2026-02-04T15:00:00Z",
+  "executedAt": "2026-02-04T22:08:00Z",
+  "result": "PARTIAL — tested full flow on Mac Mini with mock client. (1) Client registered, status shows connected. (2) POST /voice/notify triggers chime to client callback. (3) Mock client confirms chime. (4) TTS synthesizes 176KB WAV. (5) Audio pushed to client /play endpoint. Result: delivered=true, method=voice. Steps 3-5 (actual chime sound + human confirmation) need laptop with speakers/mic."
+}

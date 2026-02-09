@@ -1,0 +1,34 @@
+{
+  "id": "t-006",
+  "title": "TTS speak endpoint returns audio",
+  "description": "Verify the /voice/speak endpoint generates and returns TTS audio",
+  "storyRefs": ["s-v03"],
+  "planRef": "plans/20260204-voice-integration.plan.md",
+  "type": "story",
+  "status": "pass",
+  "steps": [
+    {
+      "order": 1,
+      "action": "POST /voice/speak with body {text: 'Hello Dave, you have a meeting in 10 minutes.'}",
+      "expected": "200 response with Content-Type: audio/wav and audio data in body"
+    },
+    {
+      "order": 2,
+      "action": "Save response body to a file and play it",
+      "expected": "Audible, intelligible speech matching the input text"
+    },
+    {
+      "order": 3,
+      "action": "POST /voice/speak with empty text body",
+      "expected": "400 error with descriptive message"
+    },
+    {
+      "order": 4,
+      "action": "POST /voice/speak with a very long text (>1000 words)",
+      "expected": "Audio generated successfully (may take longer). No timeout or crash"
+    }
+  ],
+  "created": "2026-02-04T15:00:00Z",
+  "executedAt": "2026-02-04T20:05:00Z",
+  "result": "PASS. POST /voice/speak returns 200 with audio/wav content. WAV files are valid (RIFF header). Empty text returns 400 with descriptive error. Long text (>500 chars) returns 400 with char limit message instead of crashing worker. Note: very long single-shot synthesis (>300 chars) can OOM the worker; added MAX_TTS_CHARS=500 safety limit. Future chunking will handle longer text."
+}

@@ -3,7 +3,7 @@
  * Replaces health-check.sh with a structured, programmatic implementation.
  */
 
-import { execSync } from 'node:child_process';
+import { execSync, execFile } from 'node:child_process';
 import https from 'node:https';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -157,6 +157,44 @@ function checkNetwork(): Promise<HealthResult[]> {
   });
 }
 
+/**
+ * Check connectivity to configured agent-comms peers.
+ * Uses curl (not Node http) because Node on macOS can't reach LAN IPs.
+ */
+function checkPeers(): Promise<HealthResult[]> {
+  const config = loadConfig();
+  const agentComms = config['agent-comms'];
+
+  if (!agentComms?.enabled || !agentComms.peers?.length) {
+    return Promise.resolve([]);
+  }
+
+  const checks = agentComms.peers.map((peer: { name: string; host: string; port: number }) => {
+    return new Promise<HealthResult>((resolve) => {
+      const url = `http://${peer.host}:${peer.port}/agent/status`;
+      const start = Date.now();
+
+      execFile('curl', ['-s', '--connect-timeout', '5', url], { timeout: 8000 }, (err, stdout) => {
+        const latency = Date.now() - start;
+
+        if (err) {
+          resolve({ severity: 'warn', category: 'Peers', message: `${peer.name} unreachable`, detail: `${peer.host}:${peer.port} (${latency}ms)` });
+          return;
+        }
+
+        try {
+          const data = JSON.parse(stdout) as { agent: string; status: string };
+          resolve({ severity: 'ok', category: 'Peers', message: `${peer.name} reachable (${data.status})`, detail: `${latency}ms` });
+        } catch {
+          resolve({ severity: 'warn', category: 'Peers', message: `${peer.name} bad response`, detail: stdout.slice(0, 100) });
+        }
+      });
+    });
+  });
+
+  return Promise.all(checks);
+}
+
 function checkState(): HealthResult[] {
   const results: HealthResult[] = [];
   const stateDir = resolveProjectPath('.claude', 'state');
@@ -191,13 +229,14 @@ function checkState(): HealthResult[] {
  * Run all health checks and return a structured report.
  */
 export async function runHealthCheck(): Promise<HealthReport> {
-  const networkResults = await checkNetwork();
+  const [networkResults, peerResults] = await Promise.all([checkNetwork(), checkPeers()]);
   const results = [
     ...checkDisk(),
     ...checkMemory(),
     ...checkLogs(),
     ...checkProcesses(),
     ...networkResults,
+    ...peerResults,
     ...checkState(),
   ];
 

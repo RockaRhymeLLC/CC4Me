@@ -1,0 +1,39 @@
+{
+  "id": "t-019",
+  "title": "Session manager module contracts",
+  "description": "Verify session-manager.ts provides all required functions with correct signatures",
+  "storyRefs": ["s-b02"],
+  "planRef": "plans/20260206-browser-handoff.plan.md",
+  "type": "story",
+  "status": "pending",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Inspect browser-sidecar/src/session-manager.ts for exported functions",
+      "expected": "Module exports: createSession, closeSession, getScreenshot, getLiveViewUrl, navigateTo, click, type, scroll, listActiveSessions"
+    },
+    {
+      "order": 2,
+      "action": "Verify createSession accepts optional context ID and keepAlive flag",
+      "expected": "Function signature includes contextId?: string and keepAlive?: boolean parameters"
+    },
+    {
+      "order": 3,
+      "action": "Verify closeSession accepts optional saveContext flag",
+      "expected": "Function signature includes saveContext?: boolean, and implementation calls REQUEST_RELEASE"
+    },
+    {
+      "order": 4,
+      "action": "Verify credentials are passed via init/config, not read directly from Keychain",
+      "expected": "Module has an init function that takes config with apiKey and projectId — no direct Keychain imports"
+    },
+    {
+      "order": 5,
+      "action": "Verify API error handling for 429 (rate limit), 500 (server error), and missing credentials",
+      "expected": "Each error case produces a descriptive error message (not raw SDK error)"
+    }
+  ],
+  "created": "2026-02-07T05:00:00Z",
+  "executedAt": null,
+  "result": null
+}

@@ -1,27 +1,17 @@
 /**
- * Context Watchdog — monitors context usage, nudges Claude to save + clear.
+ * Context Watchdog — monitors context usage with escalating warnings.
  *
- * Replaces: context-watchdog.sh + legacy launchd job
+ * Three tiers of alerts as context fills up:
+ * - 50% used → gentle heads-up
+ * - 65% used → firmer nudge to wrap up
+ * - 80% used → urgent, restart now
  *
- * When context drops below the configured threshold (default 35% remaining):
- * - Sets a flag file (.claude/state/context-save-pending) so the Stop hook
- *   can inject /save-state at the right moment (when Claude is idle)
- * - If Claude is busy: injects a reminder so Claude can find a good
- *   stopping point
- * - If Claude is idle: injects /save-state directly, then sets
- *   clear-pending for the Stop hook
- *
- * The Stop hook (notify-response.sh) checks for these flags after each
- * tool use or stop event and injects /save-state or /clear when Claude
- * is between operations — solving the problem of /clear getting queued
- * as a message when injected during a blocking tool call.
- *
- * Only sends one reminder per low-context episode to avoid spamming.
+ * Each tier fires once per session. BMO decides when to act.
  */
 
 import fs from 'node:fs';
-import { resolveProjectPath, loadConfig } from '../../core/config.js';
-import { isBusy, injectText } from '../../core/session-bridge.js';
+import { resolveProjectPath } from '../../core/config.js';
+import { injectText } from '../../core/session-bridge.js';
 import { createLogger } from '../../core/logger.js';
 import { registerTask } from '../scheduler.js';
 
@@ -29,7 +19,32 @@ const log = createLogger('context-watchdog');
 
 const STALE_SECONDS = 600; // Ignore data older than 10 minutes
 
-let reminderSentForSession: string | null = null;
+interface Tier {
+  threshold: number; // used percentage to trigger
+  message: (used: number, remaining: number) => string;
+}
+
+const TIERS: Tier[] = [
+  {
+    threshold: 50,
+    message: (used, remaining) =>
+      `[System] Context at ${used}% used (${remaining}% remaining). Start thinking about a good save point.`,
+  },
+  {
+    threshold: 65,
+    message: (used, remaining) =>
+      `[System] Context at ${used}% used (${remaining}% remaining). Wrap up your current task, then /save-state and restart.`,
+  },
+  {
+    threshold: 80,
+    message: (used, remaining) =>
+      `[System] Context at ${used}% used (${remaining}% remaining). Save state and restart NOW.`,
+  },
+];
+
+// Track which tiers have fired for the current session
+let firedTiers: Set<number> = new Set();
+let currentSessionId: string | null = null;
 
 async function run(): Promise<void> {
   const stateFile = resolveProjectPath('.claude', 'state', 'context-usage.json');
@@ -42,7 +57,7 @@ async function run(): Promise<void> {
   if (ageSeconds > STALE_SECONDS) return;
 
   // Parse context usage
-  let data: { remaining_percentage?: number; used_percentage?: number; session_id?: string; timestamp?: number };
+  let data: { remaining_percentage?: number; used_percentage?: number; session_id?: string };
   try {
     data = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
   } catch {
@@ -53,68 +68,20 @@ async function run(): Promise<void> {
   const used = data.used_percentage ?? 0;
   const sessionId = data.session_id ?? 'unknown';
 
-  // Get threshold from scheduler config
-  const config = loadConfig();
-  const taskConfig = config.scheduler.tasks.find(t => t.name === 'context-watchdog');
-  const threshold = (taskConfig?.config?.threshold_percent as number) ?? 35;
+  // New session — reset tracking
+  if (sessionId !== currentSessionId) {
+    firedTiers = new Set();
+    currentSessionId = sessionId;
+  }
 
-  // Flag file paths — Stop hook checks these
-  const savePendingFlag = resolveProjectPath('.claude', 'state', 'context-save-pending');
-  const clearPendingFlag = resolveProjectPath('.claude', 'state', 'context-clear-pending');
-
-  if (remaining >= threshold) {
-    // Context is healthy — reset reminder tracking and clean up any stale flags.
-    if (reminderSentForSession !== null) {
-      log.debug('Context healthy again — resetting reminder tracking');
-      reminderSentForSession = null;
+  // Find the highest tier we've crossed that hasn't fired yet
+  for (const tier of TIERS) {
+    if (used >= tier.threshold && !firedTiers.has(tier.threshold)) {
+      log.info(`Context ${used}% used — firing tier ${tier.threshold}%`);
+      injectText(tier.message(used, remaining));
+      firedTiers.add(tier.threshold);
     }
-    // Clean up flags if context recovered (e.g., manual /clear happened)
-    if (fs.existsSync(savePendingFlag)) fs.unlinkSync(savePendingFlag);
-    if (fs.existsSync(clearPendingFlag)) fs.unlinkSync(clearPendingFlag);
-    return;
   }
-
-  log.info(`Context low: ${used}% used, ${remaining}% remaining (threshold: ${threshold}%)`);
-
-  // Check if flags are already set (previous watchdog run set them)
-  if (fs.existsSync(savePendingFlag) || fs.existsSync(clearPendingFlag)) {
-    log.debug('Save/clear flags already pending — waiting for Stop hook to process');
-    return;
-  }
-
-  if (isBusy()) {
-    // Claude is busy — set the save-pending flag for the Stop hook to pick up,
-    // and inject a reminder so Claude knows context is low.
-    if (reminderSentForSession === sessionId) {
-      // Already sent reminder, just set the flag if not already set
-      if (!fs.existsSync(savePendingFlag)) {
-        fs.writeFileSync(savePendingFlag, JSON.stringify({ used, remaining, sessionId, timestamp: Date.now() }));
-        log.info('Set save-pending flag for Stop hook');
-      }
-      return;
-    }
-
-    log.info('Claude is busy — setting save-pending flag and injecting reminder');
-    fs.writeFileSync(savePendingFlag, JSON.stringify({ used, remaining, sessionId, timestamp: Date.now() }));
-    injectText(
-      `[System] Context is at ${used}% used (${remaining}% remaining). ` +
-      `Find a good stopping point, then /save-state and /clear.`,
-    );
-    reminderSentForSession = sessionId;
-    return;
-  }
-
-  // Claude is idle — inject save-state directly, then set clear-pending
-  // for the Stop hook to pick up after save-state completes.
-  log.info('Claude is idle — triggering /save-state and setting clear-pending flag');
-  injectText(`/save-state "Auto-save: context at ${used}% used"`);
-
-  // Set clear-pending flag — the Stop hook will inject /clear after
-  // save-state completes (when the next Stop/PostToolUse fires).
-  fs.writeFileSync(clearPendingFlag, JSON.stringify({ used, remaining, sessionId, timestamp: Date.now() }));
-
-  // Reset reminder tracking (session will change after clear)
-  reminderSentForSession = null;
 }
 
 registerTask({ name: 'context-watchdog', run });

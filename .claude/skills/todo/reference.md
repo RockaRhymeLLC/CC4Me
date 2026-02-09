@@ -59,11 +59,43 @@ Complete JSON schema and examples for to-do files.
 | Type | When Used |
 |------|-----------|
 | `created` | To-do first created |
-| `note` | Progress note added |
+| `note` | Work note / progress update added |
 | `status_change` | Status field changed |
 | `priority_change` | Priority field changed |
 | `completed` | To-do marked complete |
 | `reopened` | Completed to-do reopened |
+
+## Action Schema
+
+All actions have these base fields:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `timestamp` | ISO datetime | Yes | When the action occurred |
+| `type` | string | Yes | One of the action types above |
+| `note` | string | No | Free-form text (progress description, reason, etc.) |
+
+Actions of type `note` may also include reference fields:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `files` | string[] | No | File paths referenced in this note (e.g., `["src/auth/middleware.ts"]`) |
+| `commits` | string[] | No | Commit hashes (e.g., `["6f6f60c", "cec38b0"]`) |
+| `prs` | string[] | No | PR references (e.g., `["#28", "upstream#15"]`) |
+
+These reference fields are auto-extracted from note text when using `/todo note`. They make it easy to find related code changes when resuming work.
+
+### Example: Note with references
+
+```json
+{
+  "timestamp": "2026-02-06T07:15:00-05:00",
+  "type": "note",
+  "note": "Added isIdle() to session-bridge.ts. Wired into todo-reminder.ts as gate. Committed as 6a0b1bf.",
+  "files": ["daemon/src/core/session-bridge.ts", "daemon/src/automation/tasks/todo-reminder.ts"],
+  "commits": ["6a0b1bf"]
+}
+```
 
 ## Priority Mapping
 
