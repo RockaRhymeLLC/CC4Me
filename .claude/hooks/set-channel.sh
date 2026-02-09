@@ -26,6 +26,7 @@ if [[ "$PROMPT" == "[Telegram]"* ]] || [[ "$PROMPT" == "[Voice]"* ]]; then
     echo "telegram" > "$CHANNEL_FILE"
   fi
 elif [[ "$PROMPT" == "Session cleared"* ]] || \
+     [[ "$PROMPT" == "Session auto-started"* ]] || \
      [[ "$PROMPT" == "/save-state"* ]] || \
      [[ "$PROMPT" == "/clear"* ]] || \
      [[ "$PROMPT" == "/restart"* ]] || \

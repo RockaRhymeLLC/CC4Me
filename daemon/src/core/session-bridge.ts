@@ -24,7 +24,7 @@ const log = createLogger('session-bridge');
 let _agentState: 'idle' | 'busy' = 'idle';
 let _agentStateUpdatedAt: number = 0;
 
-const STALE_STATE_MS = 10 * 60 * 1000; // 10 minutes
+const STALE_STATE_MS = 5 * 60 * 1000; // 5 minutes — faster stuck-busy recovery
 
 /**
  * Update agent state from a hook event.
