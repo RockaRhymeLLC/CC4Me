@@ -6,8 +6,8 @@
 # Ensure claude binary is on PATH (hooks inherit a minimal shell environment)
 export PATH="$HOME/.local/bin:$PATH"
 
-LOCK_FILE="/tmp/bmo-memory-extraction.lock"
-PROJECT_DIR="/Users/bmo/CC4Me-BMO"
+LOCK_FILE="/tmp/cc4me-memory-extraction.lock"
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
 MEMORY_DIR="$PROJECT_DIR/.claude/state/memory/memories"
 
 # Prevent concurrent/recursive runs (lock expires after 5 min)
