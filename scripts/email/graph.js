@@ -17,6 +17,7 @@
  *   graph.js unread         - Show unread messages only
  *   graph.js read <id>      - Read a specific email
  *   graph.js mark-read <id>  - Mark an email as read
+ *   graph.js mark-all-read   - Mark all unread inbox emails as read
  *   graph.js search "query" - Search emails
  *   graph.js send "to" "subject" "body" [--cc addr] [--bcc addr] [attachment1] ...
  */
@@ -139,6 +140,19 @@ async function markAsRead(emailId) {
   });
 }
 
+// Mark all unread inbox emails as read
+async function markAllUnreadAsRead() {
+  const emails = await listInbox(100, true);  // Get up to 100 unread
+  if (emails.length === 0) {
+    return { marked: 0 };
+  }
+  // Mark each as read (Graph API doesn't have true batch for this)
+  for (const email of emails) {
+    await markAsRead(email.id);
+  }
+  return { marked: emails.length };
+}
+
 // Search emails
 async function searchEmails(query, limit = 10) {
   const endpoint = `/users/${encodeURIComponent(userEmail)}/messages?$top=${limit}&$search="${encodeURIComponent(query)}"&$select=id,subject,from,receivedDateTime,bodyPreview`;
@@ -230,6 +244,16 @@ async function main() {
         if (!emailId) { console.error('Usage: graph.js mark-read <email_id>'); process.exit(1); }
         await markAsRead(emailId);
         console.log('✅ Marked as read');
+        break;
+      }
+
+      case 'mark-all-read': {
+        const result = await markAllUnreadAsRead();
+        if (result.marked === 0) {
+          console.log('No unread emails to mark.');
+        } else {
+          console.log(`✅ Marked ${result.marked} email(s) as read`);
+        }
         break;
       }
 

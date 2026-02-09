@@ -15,6 +15,7 @@
  *   jmap.js unread         - Show unread messages only
  *   jmap.js read <id>      - Read a specific email
  *   jmap.js mark-read <id>  - Mark an email as read
+ *   jmap.js mark-all-read   - Mark all unread inbox emails as read
  *   jmap.js search "query" - Search emails
  *   jmap.js send "to" "subject" "body" [--cc addr] [--bcc addr] [attachment1] ...
  */
@@ -141,6 +142,41 @@ async function markAsRead(apiUrl, accountId, emailId) {
       update: { [emailId]: { 'keywords/$seen': true } },
     }, 'a'],
   ]);
+}
+
+// Mark all unread inbox emails as read (batch operation)
+async function markAllUnreadAsRead() {
+  const session = await getSession();
+  const apiUrl = session.apiUrl;
+  const accountId = session.primaryAccounts['urn:ietf:params:jmap:mail'];
+  const inboxId = await getInboxId(apiUrl, accountId);
+
+  // Query for all unread emails in inbox
+  const data = await jmapRequest(apiUrl, accountId, [
+    ['Email/query', {
+      accountId,
+      filter: { inMailbox: inboxId, notKeyword: '$seen' },
+      limit: 100,  // reasonable batch size
+    }, 'a'],
+  ]);
+
+  const ids = data.methodResponses[0][1].ids || [];
+  if (ids.length === 0) {
+    return { marked: 0 };
+  }
+
+  // Build batch update object
+  const update = {};
+  for (const id of ids) {
+    update[id] = { 'keywords/$seen': true };
+  }
+
+  // Mark all as read in one call
+  await jmapRequest(apiUrl, accountId, [
+    ['Email/set', { accountId, update }, 'b'],
+  ]);
+
+  return { marked: ids.length };
 }
 
 // Search emails
@@ -358,6 +394,16 @@ async function main() {
         const accountId = session.primaryAccounts['urn:ietf:params:jmap:mail'];
         await markAsRead(apiUrl, accountId, emailId);
         console.log('✅ Marked as read');
+        break;
+      }
+
+      case 'mark-all-read': {
+        const result = await markAllUnreadAsRead();
+        if (result.marked === 0) {
+          console.log('No unread emails to mark.');
+        } else {
+          console.log(`✅ Marked ${result.marked} email(s) as read`);
+        }
         break;
       }
 
