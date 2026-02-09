@@ -9,6 +9,7 @@
  * - Download photos and documents to local media directory
  * - Manage typing indicator loop
  * - Handle Siri Shortcut endpoint
+ * - Browser hand-off command interception and relay
  */
 
 import https from 'node:https';
@@ -79,7 +80,6 @@ export async function activateHandoff(replyChatId?: string): Promise<boolean> {
     log.warn('Failed to notify sidecar of hand-off activation — idle timeout protection is degraded', {
       error: err instanceof Error ? err.message : String(err),
     });
-    // Notify Dave that timeout protection is degraded
     sendMessage('Warning: Could not confirm hand-off with browser sidecar. Idle timeout protection may not work.');
   }
 
@@ -158,73 +158,6 @@ function sidecarScreenshot(): Promise<Buffer | null> {
     if (status === 200 && Buffer.isBuffer(data)) return data;
     return null;
   }).catch(() => null);
-}
-
-// ── Telegram sendPhoto ─────────────────────────────────────
-
-function sendPhoto(imageBuffer: Buffer, chatId?: string, caption?: string): void {
-  const token = getTelegramBotToken();
-  const targetChatId = chatId ?? getTelegramChatId();
-  if (!token || !targetChatId) {
-    log.error('Cannot sendPhoto: missing bot token or chat ID');
-    return;
-  }
-
-  const boundary = '----BMOBoundary' + Date.now();
-  const parts: Buffer[] = [];
-
-  // chat_id field
-  parts.push(Buffer.from(
-    `--${boundary}\r\nContent-Disposition: form-data; name="chat_id"\r\n\r\n${targetChatId}\r\n`
-  ));
-
-  // caption field (optional)
-  if (caption) {
-    parts.push(Buffer.from(
-      `--${boundary}\r\nContent-Disposition: form-data; name="caption"\r\n\r\n${caption}\r\n`
-    ));
-  }
-
-  // photo field
-  parts.push(Buffer.from(
-    `--${boundary}\r\nContent-Disposition: form-data; name="photo"; filename="screenshot.png"\r\nContent-Type: image/png\r\n\r\n`
-  ));
-  parts.push(imageBuffer);
-  parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
-
-  const body = Buffer.concat(parts);
-
-  const req = https.request({
-    hostname: 'api.telegram.org',
-    path: `/bot${token}/sendPhoto`,
-    method: 'POST',
-    headers: {
-      'Content-Type': `multipart/form-data; boundary=${boundary}`,
-      'Content-Length': body.length,
-    },
-  }, (res) => {
-    let responseBody = '';
-    res.on('data', (chunk: Buffer) => { responseBody += chunk.toString(); });
-    res.on('end', () => {
-      try {
-        const result = JSON.parse(responseBody);
-        if (result.ok) {
-          log.debug('Screenshot sent to Telegram');
-        } else {
-          log.error('Telegram sendPhoto failed', { response: responseBody });
-        }
-      } catch {
-        log.error('Telegram sendPhoto: unparseable response');
-      }
-    });
-  });
-
-  req.on('error', (err) => {
-    log.error('Telegram sendPhoto error', { error: err.message });
-  });
-
-  req.write(body);
-  req.end();
 }
 
 interface TelegramUpdate {
@@ -344,7 +277,7 @@ function extractMessageContext(msg: TelegramMessage): MessageContext {
     ? msg.from.id.toString()
     : replyChatId;
 
-  // Only skip our own messages (not other bots — they may be peers like R2)
+  // Only skip our own messages (not other bots — they may be peers)
   const ownBotId = getOwnBotId();
   const isSelf = msg.from?.is_bot === true && msg.from?.id?.toString() === ownBotId;
 
@@ -488,6 +421,73 @@ export function sendMessage(text: string, chatId?: string): void {
   });
 
   req.write(data);
+  req.end();
+}
+
+// ── Send photo (for hand-off screenshots) ────────────────────
+
+export function sendPhoto(photoBuffer: Buffer, chatId?: string, caption?: string): void {
+  const token = getTelegramBotToken();
+  const targetChatId = chatId ?? _handoff.replyChatId ?? _replyChatId ?? getTelegramChatId();
+  if (!token || !targetChatId) {
+    log.error('Cannot send photo: missing bot token or chat ID');
+    return;
+  }
+
+  const boundary = `----FormBoundary${Date.now()}`;
+  const parts: Buffer[] = [];
+
+  // chat_id part
+  parts.push(Buffer.from(
+    `--${boundary}\r\nContent-Disposition: form-data; name="chat_id"\r\n\r\n${targetChatId}\r\n`
+  ));
+
+  // caption part (optional)
+  if (caption) {
+    parts.push(Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="caption"\r\n\r\n${caption}\r\n`
+    ));
+  }
+
+  // photo part
+  parts.push(Buffer.from(
+    `--${boundary}\r\nContent-Disposition: form-data; name="photo"; filename="screenshot.png"\r\nContent-Type: image/png\r\n\r\n`
+  ));
+  parts.push(photoBuffer);
+  parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+
+  const body = Buffer.concat(parts);
+
+  const req = https.request({
+    hostname: 'api.telegram.org',
+    path: `/bot${token}/sendPhoto`,
+    method: 'POST',
+    headers: {
+      'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      'Content-Length': body.length,
+    },
+  }, (res) => {
+    let responseBody = '';
+    res.on('data', (chunk: Buffer) => { responseBody += chunk.toString(); });
+    res.on('end', () => {
+      try {
+        const result = JSON.parse(responseBody);
+        if (result.ok) {
+          log.debug('Sent photo to Telegram');
+        } else {
+          log.error('Telegram sendPhoto failed', { response: responseBody });
+        }
+      } catch {
+        log.error('Telegram sendPhoto: unparseable response');
+      }
+    });
+  });
+
+  req.on('error', (err) => {
+    log.error('Telegram sendPhoto error', { error: err.message });
+  });
+
+  req.write(body);
   req.end();
 }
 
@@ -1010,7 +1010,7 @@ export function createTelegramRouter(): TelegramRouter {
 
       const ctx = extractMessageContext(msg);
 
-      // Skip our own messages to prevent self-loops (but process other bots like R2)
+      // Skip our own messages to prevent self-loops (but process other bots)
       if (ctx.isSelf) {
         log.debug(`Skipping own bot message in chat ${ctx.replyChatId}`);
         return;

@@ -1,5 +1,5 @@
 #!/bin/bash
-# BMO Voice Client — install dependencies
+# CC4Me Voice Client — install dependencies
 #
 # Usage: cd voice-client && ./install.sh
 #
@@ -11,7 +11,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 VENV_DIR="$SCRIPT_DIR/.venv"
 
-echo "=== BMO Voice Client Setup ==="
+echo "=== CC4Me Voice Client Setup ==="
 echo ""
 
 # Check Python version
@@ -57,16 +57,11 @@ echo "=== Setup complete ==="
 echo ""
 echo "To run the voice client:"
 echo "  source $VENV_DIR/bin/activate"
-echo "  python3 bmo_voice.py"
+echo "  python3 voice_client.py"
 echo ""
-echo "Or build the menu bar app (recommended):"
-echo "  ./build-app.sh"
-echo "  cp -r \"dist/BMO Voice.app\" /Applications/"
-echo "  Add to Login Items: System Settings > General > Login Items"
-echo ""
-echo "Or use the launchd plist for headless auto-start:"
-echo "  cp com.bmo.voice-client.plist ~/Library/LaunchAgents/"
-echo "  launchctl load ~/Library/LaunchAgents/com.bmo.voice-client.plist"
+echo "Or use the launchd plist for auto-start:"
+echo "  cp com.cc4me.voice-client.plist ~/Library/LaunchAgents/"
+echo "  launchctl load ~/Library/LaunchAgents/com.cc4me.voice-client.plist"
 echo ""
 echo "NOTE: On first run, macOS will ask for microphone permission."
 echo "      Click 'Allow' when prompted."

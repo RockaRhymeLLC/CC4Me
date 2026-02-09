@@ -7,18 +7,18 @@ Detailed reference for Browserbase cloud browser setup, API endpoints, and troub
 ## Architecture Overview
 
 ```
-BMO (Claude Code)
+Assistant (Claude Code)
   ↕ injects/reads tmux
 Daemon (port 3847)
   ↕ HTTP (localhost)
 Browser Sidecar (port 3849)
   ↕ CDP over WebSocket
-Browserbase Cloud Chrome (us-east-1)
+Browserbase Cloud Chrome
   ↕ live view URL
-Dave's phone/laptop (Telegram link)
+Human's phone/laptop (Telegram link)
 ```
 
-**Key principle**: BMO drives, Dave assists when blocked. The hand-off is an escape valve, not the primary mode.
+**Key principle**: The assistant drives, the human assists when blocked. The hand-off is an escape valve, not the primary mode.
 
 ## Session Lifecycle
 
@@ -36,7 +36,7 @@ POST http://localhost:3849/session/start
 **Returns**: `{ sessionId, liveViewUrl, screenshot? }`
 
 Session creation automatically:
-- Sets region to `us-east-1` (closest to Maryland)
+- Sets region to `us-east-1` (default, configurable)
 - Blocks ads
 - Disables session recording (privacy — banking/password screens)
 - Sets server-side timeout matching config (safety net if sidecar crashes)
@@ -78,7 +78,7 @@ Context names map to Browserbase context IDs in `.claude/state/browser-contexts.
 | Timer | Default | What happens |
 |-------|---------|-------------|
 | Session timeout | 5 min (configurable) | Warning at T-60s, then session auto-closes |
-| Hand-off idle warning | 10 min | Dave gets "still there?" message |
+| Hand-off idle warning | 10 min | Human gets "still there?" message |
 | Hand-off idle timeout | 30 min | Session closes, hand-off deactivated |
 
 Idle timers reset on every `type:`, `click`, `scroll`, or `screenshot` interaction.
@@ -121,7 +121,7 @@ Idle timers reset on every `type:`, `click`, `scroll`, or `screenshot` interacti
 
 ### CAPTCHA not auto-solving
 - Auto-solve works on basic visual CAPTCHAs, takes 5-30 seconds
-- For Cloudflare challenges, reCAPTCHA v3, or complex CAPTCHAs: hand off to Dave
+- For Cloudflare challenges, reCAPTCHA v3, or complex CAPTCHAs: hand off to human
 - Adding proxies (`proxies: true` in session creation) improves CAPTCHA success rates
 
 ### Context/cookies expired
@@ -159,7 +159,6 @@ Idle timers reset on every `type:`, `click`, `scroll`, or `screenshot` interacti
 Stored in macOS Keychain:
 - `credential-browserbase-api-key` — API key
 - `credential-browserbase-project-id` — Project ID
-- `credential-browserbase-password` — Dashboard password (bmo_hurley@fastmail.com)
 
 ## Key Files
 
@@ -173,17 +172,17 @@ Stored in macOS Keychain:
 | `.claude/state/browser-contexts.json` | Context manifest data |
 | `.claude/state/browser-session.json` | Crash recovery state (transient) |
 
-## Audit Findings (2026-02-07)
+## Implementation Notes
 
-Compared implementation against Browserbase docs. Fixed:
-- **Session recording**: Now OFF by default (was ON — privacy violation for banking)
-- **Server-side timeout**: Now passed to Browserbase API (was client-side only)
-- **Region**: Now `us-east-1` (was defaulting to `us-west-2`)
-- **Ad blocking**: Now enabled (was off)
+Compared implementation against Browserbase docs:
+- **Session recording**: OFF by default (privacy for banking/password screens)
+- **Server-side timeout**: Passed to Browserbase API (not just client-side)
+- **Region**: `us-east-1` default (configurable)
+- **Ad blocking**: Enabled
 
-Known gaps (acceptable for Phase 1):
+Known gaps (acceptable for initial release):
 - Context deletion doesn't call Browserbase delete API (local manifest only)
 - Orphan recovery closes rather than reconnects (could improve with keepAlive)
-- No proxy configuration (not needed yet, note: proxy providers block banking domains)
+- No proxy configuration (not needed yet; note: proxy providers block banking domains)
 - No `userMetadata` tagging (nice-to-have for debugging)
 - Stagehand AI integration not used (raw Playwright is more appropriate for current use case)

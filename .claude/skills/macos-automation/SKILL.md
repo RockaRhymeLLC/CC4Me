@@ -12,7 +12,7 @@ Reference for controlling and automating macOS from the command line.
 
 ### Notifications
 ```bash
-osascript -e 'display notification "Message" with title "BMO" sound name "Ping"'
+osascript -e 'display notification "Message" with title "Assistant" sound name "Ping"'
 ```
 
 ### Clipboard

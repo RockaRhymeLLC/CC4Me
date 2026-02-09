@@ -122,7 +122,7 @@ export interface AgentCommsConfig {
 // ── Agent message types ───────────────────────────────────────
 
 export interface AgentMessage {
-  from: string;            // Agent name (e.g., 'r2d2', 'bmo')
+  from: string;            // Agent name
   type: 'text' | 'status' | 'coordination' | 'pr-review';
   text?: string;           // For text messages
   status?: 'idle' | 'busy' | 'offline';           // For status messages

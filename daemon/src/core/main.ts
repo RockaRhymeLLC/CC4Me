@@ -62,7 +62,7 @@ log.info(`CC4Me daemon starting`, {
 
 /**
  * Create a to-do programmatically when a hand-off times out,
- * so BMO can retry the browser task later.
+ * so the assistant can retry the browser task later.
  */
 function createRetryTodo(url?: string, contextName?: string): void {
   if (!url) return; // Nothing to retry without a URL
@@ -85,7 +85,7 @@ function createRetryTodo(url?: string, contextName?: string): void {
     const todo = {
       id,
       title: `Retry browser task: ${url}`,
-      description: `Hand-off timed out before Dave could complete it. Retry browsing ${url}${contextName ? ` (context: ${contextName})` : ''} when Dave is available.`,
+      description: `Hand-off timed out before the human could complete it. Retry browsing ${url}${contextName ? ` (context: ${contextName})` : ''} when the human is available.`,
       priority: 'medium',
       status: 'open',
       created: now,

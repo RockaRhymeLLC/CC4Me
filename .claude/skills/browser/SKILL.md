@@ -27,7 +27,7 @@ The Playwright MCP server provides `mcp__playwright__browser_*` tools directly i
 **Limitations:**
 - Detectable as headless browser (no stealth mode)
 - No CAPTCHA auto-solving
-- No Dave hand-off capability
+- No human hand-off capability
 - No persistent cookies across sessions
 - Blocked by Cloudflare, aggressive anti-bot, headless detection
 
@@ -42,10 +42,10 @@ The Playwright MCP server provides `mcp__playwright__browser_*` tools directly i
 
 ### Option B: Browserbase Cloud (sidecar on port 3849) — METERED
 
-Remote Chrome with stealth mode, CAPTCHA solving, and Dave hand-off. Costs hours from 100 hrs/month budget.
+Remote Chrome with stealth mode, CAPTCHA solving, and human hand-off. Costs hours from 100 hrs/month budget.
 
 **Use when:**
-- Site requires authentication (Dave enters credentials via hand-off)
+- Site requires authentication (human enters credentials via hand-off)
 - Anti-bot protection present (Cloudflare, reCAPTCHA, headless detection)
 - Banking & financial sites (need stealth + security)
 - Utility account management (bill pay, account changes)
@@ -57,7 +57,7 @@ Remote Chrome with stealth mode, CAPTCHA solving, and Dave hand-off. Costs hours
 1. POST http://localhost:3849/session/start { "url": "...", "contextName": "sitename" }
 2. POST /session/navigate, /session/click, /session/type — interact
 3. GET /session/screenshot — visual check
-4. If blocked → hand off to Dave (see Hand-Off below)
+4. If blocked → hand off to human (see Hand-Off below)
 5. POST /session/stop { "saveContext": true } — clean up, save cookies
 ```
 
@@ -76,7 +76,7 @@ Anti-bot protection, CAPTCHA, or headless detection?
   YES → Browserbase
   NO ↓
 
-Need Dave to enter credentials or approve something?
+Need human to enter credentials or approve something?
   YES → Browserbase (hand-off)
   NO ↓
 
@@ -87,41 +87,40 @@ Need persistent cookies across sessions?
 
 ## Hand-Off Protocol (Browserbase only)
 
-When BMO hits a blocker (CAPTCHA, login, MFA, payment approval):
+When the assistant hits a blocker (CAPTCHA, login, MFA, payment approval):
 
 1. **Take screenshot**, assess the blocker
 2. **Start hand-off**: `POST http://localhost:3847/browser/handoff/start`
-3. **Message Dave** on Telegram with:
+3. **Message human** on Telegram with:
    - Live view URL (tappable link)
    - Screenshot of current page
    - Clear description: "I'm stuck on [X] — need you to [Y]"
-4. **Dave interacts** via Telegram commands:
+4. **Human interacts** via Telegram commands:
    - `type: [text]` — types into focused field (NEVER logged — safe for passwords)
    - `screenshot` — sends fresh screenshot
    - `done` / `all yours` — completes hand-off
    - `abort` — cancels and closes session
-5. **BMO resumes** autonomous navigation after `done`
+5. **Assistant resumes** autonomous navigation after `done`
 
 ### Hand-Off Triggers
 - CAPTCHA that auto-solve can't handle
-- Login requiring credentials BMO doesn't have
+- Login requiring credentials the assistant doesn't have
 - Multi-factor authentication (phone/email codes, authenticator)
 - "Are you human?" challenges
-- Payment confirmation (Dave must explicitly approve)
-- Anything BMO can't figure out from screenshots
+- Payment confirmation (human must explicitly approve)
+- Anything the assistant can't figure out from screenshots
 
 ## Security Rules
 
 1. **`type:` relay text is NEVER logged** — passwords, SSNs, account numbers are safe
 2. **Live view URLs only sent via private Telegram DM** — never in group chats or logs
-3. **Financial transactions require explicit Dave approval**
+3. **Financial transactions require explicit human approval**
 4. **Session recording is OFF** — no video of banking/password screens on Browserbase servers
-5. **Proxy providers block banking domains** — hand-off to Dave is the approach for those
+5. **Proxy providers block banking domains** — hand-off to human is the approach for those
 
 ## Cost Awareness
 
 - **Budget**: 100 hours/month ($0.12/hr overage)
-- **Current usage**: ~2-4 hrs/month (well within budget)
 - **Typical task**: 2-5 minutes (login, navigate, grab data)
 - **At 5 min/task**: budget supports ~1,200 tasks/month
 - **Proxy bandwidth**: 1 GB/month — avoid large file downloads through Browserbase
@@ -129,4 +128,4 @@ When BMO hits a blocker (CAPTCHA, login, MFA, payment approval):
 
 ## References
 
-- [reference.md](reference.md) — Detailed API reference, session lifecycle, troubleshooting, credentials, plan limits, audit findings
+- [reference.md](reference.md) — Detailed API reference, session lifecycle, troubleshooting, credentials, plan limits

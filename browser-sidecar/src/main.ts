@@ -83,7 +83,7 @@ function buildWrapperHtml(liveViewUrl: string): string {
 <html lang="en"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>BMO Browser</title>
+<title>CC4Me Browser</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{height:100%;overflow:hidden;font-family:-apple-system,system-ui,sans-serif;background:#0d1117}
@@ -507,7 +507,7 @@ function withSessionGuard(
         sessionMeta = null;
         deleteSessionState();
 
-        // Notify daemon so it can deactivate hand-off and notify Dave
+        // Notify daemon so it can deactivate hand-off and notify the human
         notifyDaemon('/browser/timeout-warning', {
           type: 'session-died',
           message: 'Browser session ended unexpectedly.',
@@ -900,7 +900,7 @@ async function handleHandoffDone(_req: http.IncomingMessage, res: http.ServerRes
   notifyDaemon('/browser/handoff/stop', {});
   notifyDaemon('/browser/timeout-warning', {
     type: 'handoff-done-via-wrapper',
-    message: `Dave completed hand-off via wrapper page.${screenshotInfo}`,
+    message: `Human completed hand-off via wrapper page.${screenshotInfo}`,
   });
 
   // Save screenshot locally for Claude

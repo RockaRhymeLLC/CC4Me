@@ -6,6 +6,7 @@
  *   telegram          - send text responses to Telegram
  *   telegram-verbose  - send text + thinking blocks to Telegram
  *   silent            - no sending anywhere
+ *   voice             - voice pipeline (responses captured via voice-pending callback)
  */
 
 import fs from 'node:fs';
@@ -48,7 +49,7 @@ export function registerTelegramHandler(handler: MessageHandler, startTyping?: (
 /**
  * Start the Telegram typing indicator.
  * Used when voice input arrives on a telegram channel, so the user
- * sees "typing..." while waiting for Claude's response.
+ * sees "typing..." while waiting for the assistant's response.
  */
 export function startTypingIndicator(): void {
   if (_startTypingHandler) {
@@ -67,31 +68,6 @@ export function signalResponseComplete(): void {
     _stopTypingHandler();
     log.debug('Response complete — typing stopped');
   }
-}
-
-/**
- * Get the current channel from state file.
- */
-export function getChannel(): Channel {
-  try {
-    const channelFile = resolveProjectPath('.claude', 'state', 'channel.txt');
-    const content = fs.readFileSync(channelFile, 'utf8').trim();
-    if (['terminal', 'telegram', 'telegram-verbose', 'silent', 'voice'].includes(content)) {
-      return content as Channel;
-    }
-  } catch {
-    // File doesn't exist or can't be read
-  }
-  return 'terminal';
-}
-
-/**
- * Set the current channel.
- */
-export function setChannel(channel: Channel): void {
-  const channelFile = resolveProjectPath('.claude', 'state', 'channel.txt');
-  fs.writeFileSync(channelFile, channel + '\n');
-  log.info(`Channel set to: ${channel}`);
 }
 
 /**
@@ -137,6 +113,31 @@ export function sendDirectTelegram(text: string): boolean {
     log.error('sendDirectTelegram error', { error: err instanceof Error ? err.message : String(err) });
     return false;
   }
+}
+
+/**
+ * Get the current channel from state file.
+ */
+export function getChannel(): Channel {
+  try {
+    const channelFile = resolveProjectPath('.claude', 'state', 'channel.txt');
+    const content = fs.readFileSync(channelFile, 'utf8').trim();
+    if (['terminal', 'telegram', 'telegram-verbose', 'silent', 'voice'].includes(content)) {
+      return content as Channel;
+    }
+  } catch {
+    // File doesn't exist or can't be read
+  }
+  return 'terminal';
+}
+
+/**
+ * Set the current channel.
+ */
+export function setChannel(channel: Channel): void {
+  const channelFile = resolveProjectPath('.claude', 'state', 'channel.txt');
+  fs.writeFileSync(channelFile, channel + '\n');
+  log.info(`Channel set to: ${channel}`);
 }
 
 /**

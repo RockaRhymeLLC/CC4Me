@@ -1,5 +1,5 @@
 /**
- * Morning Briefing — sends Dave a daily summary at 7am.
+ * Morning Briefing — sends the human a daily summary.
  *
  * Gathers: calendar events, weather, open todos, overnight messages.
  * If a Claude session is active, injects data as a prompt for a nicely
@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { injectText, sessionExists } from '../../core/session-bridge.js';
 import { createLogger } from '../../core/logger.js';
-import { getProjectDir } from '../../core/config.js';
+import { getProjectDir, loadConfig } from '../../core/config.js';
 import { registerTask } from '../scheduler.js';
 
 const log = createLogger('morning-briefing');
@@ -32,16 +32,24 @@ function gatherCalendar(): string {
 
 function gatherWeather(): string {
   try {
+    // Weather location can be configured via scheduler task config.
+    // Falls back to auto-detection (wttr.in uses IP geolocation).
+    const config = loadConfig();
+    const task = config.scheduler.tasks.find(t => t.name === 'morning-briefing');
+    const location = (task?.config?.weather_location as string) ?? '';
+    const locationParam = location ? location.replace(/\s+/g, '+') : '';
+    const locationPath = locationParam ? `/${locationParam}` : '';
+
     // One-line current conditions
     const current = execFileSync('/usr/bin/curl', [
       '-s', '--max-time', '8',
-      'wttr.in/White+Hall+MD?format=%c+%t+|+Humidity:+%h+|+Wind:+%w+|+Precip:+%p',
+      `wttr.in${locationPath}?format=%c+%t+|+Humidity:+%h+|+Wind:+%w+|+Precip:+%p`,
     ], { encoding: 'utf8', timeout: 10_000 }).trim();
 
     // 3-day forecast summary (compact)
     const forecast = execFileSync('/usr/bin/curl', [
       '-s', '--max-time', '8',
-      'wttr.in/White+Hall+MD?format=3',
+      `wttr.in${locationPath}?format=3`,
     ], { encoding: 'utf8', timeout: 10_000 }).trim();
 
     if (!current && !forecast) return 'Weather unavailable.';
@@ -200,7 +208,7 @@ async function run(): Promise<void> {
   if (sessionExists()) {
     const prompt = [
       `[System] Morning briefing time! Today is ${today}.`,
-      'Send Dave a concise, friendly morning briefing via Telegram with the data below.',
+      'Send the human a concise, friendly morning briefing via Telegram with the data below.',
       'Format it nicely but keep it short — a snapshot, not an essay.',
       'Include any notable items and a cheerful greeting.',
       'If the lookahead has anything notable (birthdays, travel, big storms, deadlines), call it out.',

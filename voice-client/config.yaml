@@ -1,8 +1,8 @@
-# BMO Voice Client Configuration
+# CC4Me Voice Client Configuration
 
-# Daemon connection
+# Daemon connection — set this to the IP/hostname of your CC4Me machine
 daemon:
-  host: "192.168.12.169"   # Mac Mini (BMO)
+  host: "localhost"        # Change to your daemon's IP if running on a different machine
   port: 3847
 
 # Client identity
@@ -13,11 +13,9 @@ client:
 # Wake word
 wake_word:
   # Path to custom model file, or a pre-trained model name (e.g., "hey_jarvis")
-  model: "hey_bee_mo.onnx"
+  model: "hey_jarvis"        # Use a pre-trained model or path to your custom .onnx
   threshold: 0.5            # Detection confidence threshold (0.0-1.0)
   inference_framework: "onnx"
-  patience: 2               # Consecutive frames above threshold needed (filters noise spikes)
-  vad_threshold: 0.5        # Silero VAD threshold — filters non-speech sounds (0 = disabled)
 
 # Audio
 audio:

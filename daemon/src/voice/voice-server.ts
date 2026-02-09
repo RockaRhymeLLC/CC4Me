@@ -291,7 +291,7 @@ export async function handleVoiceRequest(
             resolve(text);
           });
 
-          const injected = injectText(`[Voice] Dave: ${sttText}`);
+          const injected = injectText(`[Voice] ${sttText}`);
           if (!injected) {
             clearTimeout(timeout);
             clearVoicePending();
@@ -330,7 +330,7 @@ export async function handleVoiceRequest(
           startTypingIndicator();
         }
 
-        const injected = injectText(`[Voice] Dave: ${sttText}`);
+        const injected = injectText(`[Voice] ${sttText}`);
         if (!injected) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Failed to inject text into Claude session' }));
@@ -463,7 +463,7 @@ export interface VoiceNotificationResult {
 }
 
 /**
- * Send a voice notification to Dave.
+ * Send a voice notification to the user.
  *
  * Flow:
  * 1. Check if a voice client is connected

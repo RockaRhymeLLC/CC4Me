@@ -21,7 +21,7 @@ Contribute enhancements from your local fork back to the original CC4Me reposito
 ## Overview
 
 ```
-Fork (BMO repo)         cc4me-dev (middleman)        Upstream (CC4Me)
+Fork (your repo)         cc4me-dev (middleman)        Upstream (CC4Me)
 +--------------+        +------------------+         +--------------+
 | Fork-specific|  sync  | PII-scrubbed     |   PR    |   Generic    |
 |  code with   | -----> | genericized code | ------> |  code ready  |
@@ -29,7 +29,7 @@ Fork (BMO repo)         cc4me-dev (middleman)        Upstream (CC4Me)
 +--------------+        +------------------+         +--------------+
                               |
                               | Remotes:
-                              |   origin -> fork (CC4Me-BMO)
+                              |   origin -> fork (CC4Me-YourFork)
                               |   upstream -> CC4Me
 ```
 
@@ -37,7 +37,7 @@ Fork (BMO repo)         cc4me-dev (middleman)        Upstream (CC4Me)
 
 | Path | Purpose |
 |------|---------|
-| `~/CC4Me-BMO/` | Your fork -- live assistant code. **NEVER modify for upstream work.** |
+| `~/CC4Me-YourFork/` | Your fork -- live assistant code. **NEVER modify for upstream work.** |
 | `~/cc4me-dev/` | Middleman working copy. All genericization and PRs happen here. Has `origin` (fork) and `upstream` (CC4Me) remotes. |
 | `.claude/state/research/upstream-analysis.md` | Analysis document (tech debt, findings, recommendations) |
 

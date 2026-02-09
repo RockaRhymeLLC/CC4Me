@@ -30,6 +30,18 @@ channels:
     # - type: "graph"    # Microsoft 365 via Graph API
     # - type: "jmap"     # Fastmail via JMAP
 
+  # Voice integration (optional)
+  # Requires: whisper-cli (Homebrew), Python 3.12+ with mlx-audio (TTS)
+  # See docs/voice-integration.md for full setup guide
+  voice:
+    enabled: false
+    stt:
+      model_path: "models/ggml-small.en.bin"   # Whisper model for speech-to-text
+    tts:
+      port: 3848                                # TTS worker port
+      speaker: "Aiden"                          # mlx-audio voice (Aiden, Ryan, Dylan, Eric, etc.)
+      instruct_prompt: "A clear, friendly voice."
+
 # ── Automation ────────────────────────
 scheduler:
   tasks:
@@ -56,6 +68,9 @@ scheduler:
     - name: "approval-audit"
       enabled: true
       cron: "0 9 1 */6 *"    # 9am on the 1st, every 6 months
+    - name: "peer-heartbeat"
+      enabled: false         # Enable if using agent-comms with peers
+      interval: "5m"
 
 # ── Security ──────────────────────────
 security:
