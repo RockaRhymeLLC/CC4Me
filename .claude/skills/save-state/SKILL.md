@@ -22,8 +22,10 @@ The state file captures:
 1. **Current Task**: What you're actively working on
 2. **Progress**: What's been done so far
 3. **Next Steps**: Immediate next actions
-4. **Context**: Relevant files, decisions, blockers
+4. **Context**: Relevant files, decisions, blockers, active channel
 5. **Notes**: Anything important to remember
+
+**Always include the active comms channel** (from `.claude/state/channel.txt`) so you know how to reach the user after a clear/restart.
 
 ## File Format
 
@@ -83,8 +85,8 @@ Needs to work without JavaScript for accessibility.
 
 4. **Append to 24hr Log**
    - Run: `./scripts/append-state-log.sh "reason"` (use the save reason or auto-generate one)
-   - This appends a timestamped copy of the state to `.claude/state/memory/summaries/24hr.md`
-   - Throttled: skips if last append was < 15 minutes ago (unless called with `--force`)
+   - The script automatically **condenses** the state: keeps key sections (Current Task, Completed, Next Steps, Context, Blockers), limits each to a few lines, drops verbose metadata and Open Todos (already in todo files)
+   - Protected by three layers: **time throttle** (15 min, unless `--force`), **condensing** (~80% size reduction), **content dedup** (skips if identical to last entry, even with `--force`)
    - The 24hr log feeds the nightly consolidation cascade
 
 5. **Confirm Save**
@@ -138,6 +140,6 @@ Reference active tasks by ID so they can be resolved on load.
 ## Notes
 
 - Only one state file exists (current state)
-- State history is preserved in the 24hr cascade log (summaries/24hr.md)
+- State history is preserved in the 24hr rolling log (summaries/24hr.md), then rotated nightly to timeline/ daily files
 - PreCompact auto-saves and auto-appends, so manual save is optional
 - State is loaded at session start automatically
