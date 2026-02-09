@@ -74,9 +74,11 @@ source: user
 | `category` | Yes | person, preference, technical, account, event, decision, other | other |
 | `importance` | Yes | critical, high, medium, low | medium |
 | `subject` | Yes | Brief subject line | Derived from fact |
-| `tags` | No | Array of searchable tags | [] |
-| `confidence` | No | 0.0 to 1.0 | 1.0 |
-| `source` | No | user, observation, system | observation |
+| `tags` | Yes | Array of searchable tags | [] |
+| `confidence` | Yes | 0.0 to 1.0 | 0.9 (user-stated), 0.7 (auto-extracted), 0.5 (inferred) |
+| `source` | Yes | user, observation, system, auto-extraction, email, conversation | user |
+
+**All fields are required.** Use defaults when the value isn't obvious. The `source` field helps distinguish human-curated memories from auto-extracted ones.
 
 ### Categories
 - `person` — People, contacts, relationships
@@ -120,17 +122,26 @@ Filename: 20260203-0445-prefers-dark-mode.md
 2. Return matching lines with file context
 3. Include frontmatter metadata (category, importance) in results
 
-## Memory Cascade
+## Memory Architecture
 
-State snapshots are appended to `summaries/24hr.md` on every save-state, compact, and restart. A nightly consolidation task (5am) cascades old entries:
+### Sources of Truth
+- **memories/** — Individual fact files with YAML frontmatter. The knowledge store. Created by `/memory add`, the Stop hook auto-extractor, or nightly consolidation.
+- **timeline/** — Daily files with YAML frontmatter (date, sessions, topics, todos, highlights). Append-only, no compression. Created by nightly consolidation from 24hr.md entries.
+- **24hr.md** — Ephemeral rolling state log. Entries rotate to timeline/ after 24 hours.
 
-- **24hr.md**: Rolling state log — detailed snapshots from the past day
-- **30day.md**: Condensed daily summaries (2-4 sentences each, highlights only)
-- **2026.md** (yearly): Monthly summaries (3-5 sentences, themes and milestones)
+### Auto-Extraction
+A Stop hook agent automatically scans conversation transcripts after each response and extracts new persistent facts into individual memory files. Tagged `source: auto-extraction`, `confidence: 0.7`.
 
-The nightly job also extracts new memories from the 24hr log — new people, decisions, tools, preferences — and creates individual memory files with back-references.
+### Nightly Consolidation (5am)
+1. Reads 24hr.md entries older than 24 hours
+2. Creates/appends to timeline/YYYY-MM-DD.md daily files (with frontmatter)
+3. Extracts new facts as individual memory files
+4. Removes processed entries from 24hr.md
 
-Individual memory files in `memories/` are the source of truth for persistent facts.
+### Timeline Retrieval
+- Scan frontmatter without loading body: `Read(file, limit: 10)` or `Grep("topics:.*voice", path: "timeline/")`
+- Load specific days: `Glob("timeline/2026-02-0[1-7].md")`
+- Search across timeline: `Grep("highlights:.*shipped", path: "timeline/")`
 
 ## Output Format
 

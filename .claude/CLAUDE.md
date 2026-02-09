@@ -59,7 +59,7 @@ The daemon scheduler runs these tasks automatically (configured in `cc4me.config
 | `email-check` | Every 15m | Check for unread emails |
 | `nightly-todo` | 10pm daily | Self-assigned creative todo |
 | `health-check` | Mon 8am | System health check |
-| `memory-consolidation` | 5am daily | Cascade 24hr→30day→yearly summaries, extract memories |
+| `memory-consolidation` | 5am daily | Rotate stale 24hr entries to timeline/ daily files, extract memories |
 
 ### Environment Knowledge
 
@@ -89,8 +89,7 @@ Your persistent state lives in `.claude/state/`. Know this directory well — it
 |------|---------|---------------|
 | `memory/memories/*.md` | Individual memory files with YAML frontmatter | Use Grep to search by keyword/tag/category |
 | `memory/summaries/24hr.md` | Rolling 24-hour state log (appended on save-state, compact, restart) | For recent history — "what was I doing earlier?" |
-| `memory/summaries/30day.md` | Condensed daily summaries from nightly consolidation | For recent weeks — "what did we do last Tuesday?" |
-| `memory/summaries/2026.md` | Yearly archive with monthly summaries | For long-term reference — "when did we set up X?" |
+| `memory/timeline/*.md` | Daily files with YAML frontmatter (date, topics, todos, highlights) | Grep frontmatter for "what happened on X?" or "when did we work on Y?" |
 | `calendar.md` | Scheduled events, reminders, to-do due dates (linked via `[todo:id]`) | At session start and when scheduling |
 | `assistant-state.md` | Saved work context from before compaction/restart | At session start to resume work |
 | `autonomy.json` | Current autonomy mode (yolo/confident/cautious/supervised) | Before taking actions that need permission |
@@ -112,7 +111,8 @@ Your persistent state lives in `.claude/state/`. Know this directory well — it
 |-----------|---------|
 | `todos/` | Individual to-do JSON files. Naming: `{priority}-{status}-{id}-{slug}.json`. Counter in `.counter` file. See `/todo` skill for details |
 | `memory/memories/` | Individual memory files. Naming: `YYYYMMDD-HHMM-slug.md` with YAML frontmatter |
-| `memory/summaries/` | Cascading time-based summaries: `24hr.md`, `30day.md`, yearly (`2026.md`, etc.) |
+| `memory/summaries/` | Rolling state log: `24hr.md` (ephemeral, rotates to timeline/ nightly) |
+| `memory/timeline/` | Daily files with YAML frontmatter. Append-only, no compression. Scan frontmatter with Grep or Read with limit |
 | `research/` | Research documents and deliverables (`.md` and `.docx`). Long-form analysis, reports, and generated documents that persist across sessions |
 | `telegram-media/` | Photos and documents received via Telegram. Files named by Telegram's file ID |
 
@@ -128,11 +128,13 @@ When the channel (`.claude/state/channel.txt`) is `telegram`, the **daemon's tra
 
 Only use `telegram-send.sh` directly when the channel is `silent` and you need to proactively reach the user.
 
+**When channel is `telegram`**: Don't use `AskUserQuestion` or other interactive TUI elements — they render as widgets in the terminal but don't get captured in the transcript JSONL, so the user on Telegram never sees them. Instead, ask questions as plain text in your response.
+
 ### Check Memory First
 
 **Before asking the user for information**, check memory:
 1. Use Grep to search `.claude/state/memory/memories/` by keyword, tag, or category
-2. For recent history, check `.claude/state/memory/summaries/24hr.md` or `30day.md`
+2. For recent history, check `.claude/state/memory/summaries/24hr.md` or scan `memory/timeline/` frontmatter
 
 If the information isn't there, ask and then store it with `/memory add "fact"`.
 
@@ -169,12 +171,20 @@ The workflow integrates review at multiple points:
 /todo pickup → [Bob check] → work → [R2 review if shared]
 ```
 
-### Save State Proactively
+### Manage Context Proactively
 
-Monitor context usage. When approaching limits:
-1. Use `/save-state` to capture current work
-2. Suggest compaction to the user
-3. The SessionStart hook will restore context after
+Context is a finite resource. Don't wait for the watchdog — be situationally aware.
+
+**Check before big tasks**: Before starting multi-step work (implementation, refactoring, research), read `.claude/state/context-usage.json` to check `remaining_percentage`. If below 50%, save state and `/clear` before starting — it's better to start fresh than get halfway through and hit the wall.
+
+**Save early, save often**: Use `/save-state` at natural breakpoints — after completing a task, before switching topics, before anything that might use a lot of context. The watchdog at 35% is a safety net, not a strategy.
+
+**The save-clear-restore cycle**:
+1. `/save-state` — writes current context to `assistant-state.md`, appends to 24hr log
+2. `/clear` — clears conversation context (triggers SessionStart hook)
+3. SessionStart hook — loads state back from `assistant-state.md`, auto-resumes
+
+**When the watchdog fires** (context < 35%): It sets flag files that the Stop hook picks up to inject `/save-state` then `/clear` automatically. You don't need to do anything — but it's better to manage context yourself before it gets that low.
 
 ## Autonomy Modes
 

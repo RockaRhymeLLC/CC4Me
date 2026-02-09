@@ -148,6 +148,11 @@ Messages arrive as `[Telegram] Name: content` in the conversation.
 
 ## Gotchas
 
+### Interactive UI Elements Don't Forward
+- `AskUserQuestion`, multiple-choice prompts, and other TUI widgets render in the terminal but are NOT captured in the transcript JSONL
+- When channel is `telegram`, the user will never see these — they only see text output from the transcript stream
+- **Rule**: When channel is `telegram`, ask questions as plain text in your response instead of using interactive tools
+
 ### tmux Socket Path
 - Scripts running from launchd need explicit socket path
 - Use: `/opt/homebrew/bin/tmux -S /private/tmp/tmux-$(id -u)/default`

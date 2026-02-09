@@ -144,16 +144,6 @@ export function injectText(text: string, pressEnter = true): boolean {
   const tmux = getTmuxCmd();
 
   try {
-    // Pre-injection cleanup: dismiss menus and clear partial input
-    execSync(`${tmux} send-keys -t ${session} Escape`, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-    execSync('sleep 0.05', { stdio: ['pipe', 'pipe', 'pipe'] });
-    execSync(`${tmux} send-keys -t ${session} C-u`, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-    execSync('sleep 0.05', { stdio: ['pipe', 'pipe', 'pipe'] });
-
     // Use -l flag for literal text (handles special chars)
     const sanitized = text.replace(/'/g, "'\\''");
     execSync(`${tmux} send-keys -t ${session} -l '${sanitized}'`, {

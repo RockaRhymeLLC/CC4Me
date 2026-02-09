@@ -145,6 +145,14 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Session clear endpoint — injects /clear into the tmux session
+  if (req.method === 'POST' && url.pathname === '/session/clear') {
+    const ok = injectText('/clear');
+    res.writeHead(ok ? 200 : 503, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok, injected: '/clear' }));
+    return;
+  }
+
   // Typing-done endpoint (used by transcript stream to stop typing)
   if (req.method === 'POST' && url.pathname === '/typing-done') {
     if (telegramRouter) {
@@ -167,7 +175,7 @@ const server = http.createServer(async (req, res) => {
       try {
         const payload = JSON.parse(body);
         hookEvent = payload.hook_event;
-        onHookNotification(payload.transcript_path);
+        onHookNotification(payload.transcript_path, hookEvent);
       } catch {
         // No body or invalid JSON — still trigger a read
         onHookNotification();
@@ -178,11 +186,6 @@ const server = http.createServer(async (req, res) => {
         updateAgentState(hookEvent);
       }
 
-      // On Stop events, deliver any queued Telegram messages.
-      // This ensures messages arrive between responses, not mid-response.
-      if (hookEvent === 'Stop' && telegramRouter) {
-        telegramRouter.deliverPending();
-      }
     });
     return;
   }
