@@ -151,17 +151,12 @@ export function setChannel(channel: Channel): void {
  * @param thinking - Optional thinking block content (sent in verbose mode)
  */
 export function routeOutgoingMessage(text: string, thinking?: string): void {
-  // Voice-pending takes priority — intercept the message for the voice pipeline
+  // Voice-pending: clear the callback but don't intercept for TTS.
+  // Voice input defaults to the active channel (usually Telegram) for faster delivery.
+  // TTS is slower than text — Dave prefers reading responses on Telegram.
   if (_voicePendingCallback) {
-    const cb = _voicePendingCallback;
     _voicePendingCallback = null;
-    log.info('Routing response to voice pipeline', { chars: text.length });
-    try {
-      cb(text);
-    } catch (err) {
-      log.error('Voice callback error', { error: err instanceof Error ? err.message : String(err) });
-    }
-    return;
+    log.info('Voice-pending cleared, routing via normal channel', { chars: text.length });
   }
 
   const channel = getChannel();
