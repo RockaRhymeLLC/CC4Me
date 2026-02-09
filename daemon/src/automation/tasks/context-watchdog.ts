@@ -1,16 +1,16 @@
 /**
- * Context Watchdog — monitors context usage, reminds Claude to save + clear.
+ * Context Watchdog — monitors context usage with escalating warnings.
  *
- * When context drops below the configured threshold (default 35% remaining):
- * - Injects a reminder so Claude can save state and clear at a good stopping point
- * - Only sends one reminder per low-context episode to avoid spamming
+ * Three tiers of alerts as context fills up:
+ * - 50% used → gentle heads-up
+ * - 65% used → firmer nudge to wrap up
+ * - 80% used → urgent, restart now
  *
- * Claude is responsible for managing the save + clear cycle. This task
- * just provides the nudge.
+ * Each tier fires once per session. BMO decides when to act.
  */
 
 import fs from 'node:fs';
-import { resolveProjectPath, loadConfig } from '../../core/config.js';
+import { resolveProjectPath } from '../../core/config.js';
 import { injectText } from '../../core/session-bridge.js';
 import { createLogger } from '../../core/logger.js';
 import { registerTask } from '../scheduler.js';
@@ -19,7 +19,32 @@ const log = createLogger('context-watchdog');
 
 const STALE_SECONDS = 600; // Ignore data older than 10 minutes
 
-let reminderSentForSession: string | null = null;
+interface Tier {
+  threshold: number; // used percentage to trigger
+  message: (used: number, remaining: number) => string;
+}
+
+const TIERS: Tier[] = [
+  {
+    threshold: 50,
+    message: (used, remaining) =>
+      `[System] Context at ${used}% used (${remaining}% remaining). Start thinking about a good save point.`,
+  },
+  {
+    threshold: 65,
+    message: (used, remaining) =>
+      `[System] Context at ${used}% used (${remaining}% remaining). Wrap up your current task, then /save-state and restart.`,
+  },
+  {
+    threshold: 80,
+    message: (used, remaining) =>
+      `[System] Context at ${used}% used (${remaining}% remaining). Save state and restart NOW.`,
+  },
+];
+
+// Track which tiers have fired for the current session
+let firedTiers: Set<number> = new Set();
+let currentSessionId: string | null = null;
 
 async function run(): Promise<void> {
   const stateFile = resolveProjectPath('.claude', 'state', 'context-usage.json');
@@ -43,33 +68,20 @@ async function run(): Promise<void> {
   const used = data.used_percentage ?? 0;
   const sessionId = data.session_id ?? 'unknown';
 
-  // Get threshold from scheduler config
-  const config = loadConfig();
-  const taskConfig = config.scheduler.tasks.find(t => t.name === 'context-watchdog');
-  const threshold = (taskConfig?.config?.threshold_percent as number) ?? 35;
+  // New session — reset tracking
+  if (sessionId !== currentSessionId) {
+    firedTiers = new Set();
+    currentSessionId = sessionId;
+  }
 
-  if (remaining >= threshold) {
-    // Context is healthy — reset reminder tracking
-    if (reminderSentForSession !== null) {
-      log.debug('Context healthy again — resetting reminder tracking');
-      reminderSentForSession = null;
+  // Find the highest tier we've crossed that hasn't fired yet
+  for (const tier of TIERS) {
+    if (used >= tier.threshold && !firedTiers.has(tier.threshold)) {
+      log.info(`Context ${used}% used — firing tier ${tier.threshold}%`);
+      injectText(tier.message(used, remaining));
+      firedTiers.add(tier.threshold);
     }
-    return;
   }
-
-  // Already sent reminder for this session — don't spam
-  if (reminderSentForSession === sessionId) {
-    log.debug(`Already reminded for session ${sessionId}`);
-    return;
-  }
-
-  log.info(`Context low: ${used}% used, ${remaining}% remaining (threshold: ${threshold}%)`);
-
-  injectText(
-    `[System] Context is at ${used}% used (${remaining}% remaining). ` +
-    `Find a good stopping point, then /save-state and /clear.`,
-  );
-  reminderSentForSession = sessionId;
 }
 
 registerTask({ name: 'context-watchdog', run });
