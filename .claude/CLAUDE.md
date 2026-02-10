@@ -324,6 +324,7 @@ Each skill has detailed instructions in `.claude/skills/{name}/SKILL.md` (canoni
 | `/validate` | Verify spec-plan-implementation alignment |
 | `/upstream` | Contribute changes back to upstream CC4Me |
 | `/playwright-cli` | Browser automation for testing, screenshots, and data extraction |
+| `/worker-agent` | Spin up sandboxed Claude Code worker agents with scoped permissions and comms |
 
 **Reference skills** (loaded automatically when relevant, not directly invoked):
 

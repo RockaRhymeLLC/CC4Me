@@ -396,6 +396,38 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Worker signal: POST /worker/signal — worker agents notify parent (local-only, no auth)
+  if (req.method === 'POST' && url.pathname === '/worker/signal') {
+    let body = '';
+    req.on('data', (c: Buffer) => { body += c.toString(); });
+    req.on('end', () => {
+      try {
+        const data = JSON.parse(body) as { worker?: string; status?: string; message?: string };
+        if (!data.worker || !data.status) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: "'worker' and 'status' are required" }));
+          return;
+        }
+        const validStatuses = ['done', 'stuck', 'error', 'working'];
+        if (!validStatuses.includes(data.status)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: `Invalid status. Use: ${validStatuses.join(', ')}` }));
+          return;
+        }
+        const emoji = data.status === 'done' ? '✅' : data.status === 'stuck' ? '🚧' : data.status === 'error' ? '❌' : '🔄';
+        const notification = `[Worker] ${emoji} ${data.worker}: ${data.status}${data.message ? ' — ' + data.message : ''}`;
+        log.info('Worker signal received', { worker: data.worker, status: data.status, message: data.message });
+        injectText(notification);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      }
+    });
+    return;
+  }
+
   // 404
   res.writeHead(404);
   res.end('Not found');
