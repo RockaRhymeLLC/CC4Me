@@ -10,6 +10,30 @@ Operational guide for web browsing tasks. Two browser options are available — 
 
 **See also**: [reference.md](reference.md) for detailed API reference, troubleshooting, credentials, and plan limits.
 
+## Site Knowledge
+
+Before browsing a new site, check if we have prior learnings:
+
+```bash
+# Search for site-specific memories
+grep -l "category: website" .claude/state/memory/memories/*.md | xargs grep -l "example.com"
+```
+
+**Before navigating**: Grep memories for the domain. Prior knowledge includes:
+- Field selectors (login forms, search boxes, data tables)
+- Navigation flows (how to reach specific pages)
+- Anti-bot patterns (Cloudflare, rate limits, headless detection)
+- Auth requirements (OAuth, cookies, session handling)
+- Known quirks (JS-heavy rendering, iframe issues, dynamic IDs)
+
+**After successful interaction**: Capture learnings as a memory:
+```
+/memory add "Site example.com: login form is #auth-form, submit button .btn-primary,
+rate limited to 10 req/min, requires JS for form validation" category:website tags:selectors,auth
+```
+
+Site knowledge is stored as memories (not in this skill) so the skill stays portable while learnings accumulate per-agent.
+
 ## Decision Matrix
 
 ### Option A: Local Playwright (MCP tools) — FREE, unlimited
