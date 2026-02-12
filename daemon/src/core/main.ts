@@ -8,6 +8,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import { execSync } from 'node:child_process';
 import { loadConfig, getProjectDir } from './config.js';
 import { initLogger, createLogger } from './logger.js';
 import { runHealthCheck, formatReport } from './health.js';
@@ -109,6 +110,121 @@ function createRetryTodo(url?: string, contextName?: string): void {
   }
 }
 
+// ── Extended Status ───────────────────────────────────────────
+
+interface ExtendedStatus {
+  agent: string;
+  timestamp: string;
+  uptime: string;
+  health: 'ok' | 'warn' | 'error';
+  todos: { open: number; inProgress: number; blocked: number };
+  commits: Array<{ hash: string; msg: string; time: string }>;
+  services: Array<{ name: string; status: string }>;
+}
+
+function formatUptime(seconds: number): string {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0) parts.push(`${hours}h`);
+  parts.push(`${minutes}m`);
+
+  return parts.join(' ');
+}
+
+function countTodos(): { open: number; inProgress: number; blocked: number } {
+  const todosDir = path.join(getProjectDir(), '.claude', 'state', 'todos');
+  const counts = { open: 0, inProgress: 0, blocked: 0 };
+
+  try {
+    const files = fs.readdirSync(todosDir).filter(f => f.endsWith('.json') && !f.startsWith('.'));
+    for (const file of files) {
+      // Parse status from filename: {priority}-{status}-{id}-{slug}.json
+      const parts = file.split('-');
+      if (parts.length >= 2) {
+        const status = parts[1];
+        if (status === 'open') counts.open++;
+        else if (status === 'in' || status === 'inProgress') counts.inProgress++;
+        else if (status === 'blocked') counts.blocked++;
+        // 'completed' todos are not counted
+      }
+    }
+  } catch {
+    // Directory doesn't exist or can't be read
+  }
+
+  return counts;
+}
+
+function getRecentCommits(): Array<{ hash: string; msg: string; time: string }> {
+  try {
+    const output = execSync(
+      'git log -3 --pretty=format:"%h|%s|%ci"',
+      { cwd: getProjectDir(), encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }
+    ).trim();
+
+    if (!output) return [];
+
+    return output.split('\n').map(line => {
+      const [hash, msg, time] = line.split('|');
+      return { hash: hash ?? '', msg: msg ?? '', time: time ?? '' };
+    });
+  } catch {
+    return [];
+  }
+}
+
+function getServiceStatuses(): Array<{ name: string; status: string }> {
+  const services: Array<{ name: string; status: string }> = [];
+
+  // tmux session
+  services.push({
+    name: 'tmux',
+    status: sessionExists() ? 'active' : 'stopped',
+  });
+
+  // Telegram
+  services.push({
+    name: 'telegram',
+    status: config.channels.telegram.enabled ? 'enabled' : 'disabled',
+  });
+
+  // Agent comms
+  services.push({
+    name: 'agent-comms',
+    status: config['agent-comms']?.enabled ? 'enabled' : 'disabled',
+  });
+
+  // Scheduler
+  services.push({
+    name: 'scheduler',
+    status: 'running',  // If we're responding, scheduler is running
+  });
+
+  return services;
+}
+
+async function getExtendedStatus(): Promise<ExtendedStatus> {
+  // Get health summary
+  const healthReport = await runHealthCheck();
+  let health: 'ok' | 'warn' | 'error' = 'ok';
+  if (healthReport.summary.errors > 0) health = 'error';
+  else if (healthReport.summary.warnings > 0) health = 'warn';
+
+  return {
+    agent: config.agent.name,
+    timestamp: new Date().toISOString(),
+    uptime: formatUptime(process.uptime()),
+    health,
+    todos: countTodos(),
+    commits: getRecentCommits(),
+    services: getServiceStatuses(),
+  };
+}
+
 // ── HTTP Server ──────────────────────────────────────────────
 
 const telegramRouter = config.channels.telegram.enabled
@@ -142,6 +258,23 @@ const server = http.createServer(async (req, res) => {
       session: sessionExists() ? 'active' : 'stopped',
       uptime: process.uptime(),
     }));
+    return;
+  }
+
+  // Extended status endpoint (for ops dashboard)
+  if (req.method === 'GET' && url.pathname === '/status/extended') {
+    try {
+      const extendedStatus = await getExtendedStatus();
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',  // Allow cross-origin for dashboard
+      });
+      res.end(JSON.stringify(extendedStatus, null, 2));
+    } catch (err) {
+      log.error('Extended status error', { error: err instanceof Error ? err.message : String(err) });
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Failed to gather status' }));
+    }
     return;
   }
 
