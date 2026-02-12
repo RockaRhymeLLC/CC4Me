@@ -225,6 +225,80 @@ async function getExtendedStatus(): Promise<ExtendedStatus> {
   };
 }
 
+// ── Logs API ─────────────────────────────────────────────────
+
+interface LogEntry {
+  ts: string;
+  level: string;
+  module: string;
+  msg: string;
+  data?: Record<string, unknown>;
+}
+
+function readLogs(options: {
+  limit?: number;
+  module?: string;
+  level?: string;
+  search?: string;
+}): LogEntry[] {
+  const logPath = path.join(getProjectDir(), 'logs', 'daemon.log');
+  const { limit = 100, module, level, search } = options;
+
+  try {
+    if (!fs.existsSync(logPath)) return [];
+
+    const content = fs.readFileSync(logPath, 'utf8');
+    const lines = content.trim().split('\n').filter(Boolean);
+
+    // Parse and filter
+    let entries: LogEntry[] = [];
+    for (const line of lines) {
+      try {
+        const entry = JSON.parse(line) as LogEntry;
+
+        // Apply filters
+        if (module && entry.module !== module) continue;
+        if (level && entry.level !== level) continue;
+        if (search && !line.toLowerCase().includes(search.toLowerCase())) continue;
+
+        entries.push(entry);
+      } catch {
+        // Skip malformed lines
+      }
+    }
+
+    // Return last N entries (most recent)
+    return entries.slice(-limit);
+  } catch {
+    return [];
+  }
+}
+
+function getLogModules(): string[] {
+  const logPath = path.join(getProjectDir(), 'logs', 'daemon.log');
+  const modules = new Set<string>();
+
+  try {
+    if (!fs.existsSync(logPath)) return [];
+
+    const content = fs.readFileSync(logPath, 'utf8');
+    const lines = content.trim().split('\n').filter(Boolean);
+
+    for (const line of lines) {
+      try {
+        const entry = JSON.parse(line) as LogEntry;
+        if (entry.module) modules.add(entry.module);
+      } catch {
+        // Skip malformed lines
+      }
+    }
+
+    return Array.from(modules).sort();
+  } catch {
+    return [];
+  }
+}
+
 // ── HTTP Server ──────────────────────────────────────────────
 
 const telegramRouter = config.channels.telegram.enabled
@@ -275,6 +349,35 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Failed to gather status' }));
     }
+    return;
+  }
+
+  // Logs endpoint — returns filtered JSON logs
+  if (req.method === 'GET' && url.pathname === '/logs') {
+    const limit = parseInt(url.searchParams.get('limit') ?? '100', 10);
+    const module = url.searchParams.get('module') ?? undefined;
+    const level = url.searchParams.get('level') ?? undefined;
+    const search = url.searchParams.get('search') ?? undefined;
+
+    const logs = readLogs({ limit, module, level, search });
+
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+    });
+    res.end(JSON.stringify(logs, null, 2));
+    return;
+  }
+
+  // Logs modules endpoint — returns list of unique modules
+  if (req.method === 'GET' && url.pathname === '/logs/modules') {
+    const modules = getLogModules();
+
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+    });
+    res.end(JSON.stringify(modules));
     return;
   }
 
