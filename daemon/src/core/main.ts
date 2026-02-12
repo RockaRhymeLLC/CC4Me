@@ -45,6 +45,7 @@ import '../automation/tasks/morning-briefing.js';
 import '../automation/tasks/upstream-sync.js';
 import '../automation/tasks/peer-heartbeat.js';
 import '../automation/tasks/backup.js';
+import '../automation/tasks/memory-sync.js';
 
 // ── Bootstrap ────────────────────────────────────────────────
 
