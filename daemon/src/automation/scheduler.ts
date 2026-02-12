@@ -170,3 +170,48 @@ export function stopScheduler(): void {
 
   log.info('Scheduler stopped');
 }
+
+/**
+ * Run a task by name (for manual trigger via API).
+ * Bypasses idle check since it's an explicit request.
+ */
+export async function runTaskByName(name: string): Promise<{ ok: boolean; error?: string }> {
+  const running = _tasks.get(name);
+  if (!running) {
+    // Check if task is registered but not enabled
+    if (_registry.has(name)) {
+      return { ok: false, error: `Task '${name}' is registered but not enabled in config` };
+    }
+    return { ok: false, error: `Task '${name}' not found` };
+  }
+
+  try {
+    log.info(`Manual trigger: ${name}`);
+    await running.task.run();
+    running.lastRun = Date.now();
+    log.info(`Manual trigger completed: ${name}`);
+    return { ok: true };
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    log.error(`Manual trigger failed: ${name}`, { error });
+    return { ok: false, error };
+  }
+}
+
+/**
+ * Get list of available tasks for the API.
+ */
+export function getTaskList(): Array<{ name: string; enabled: boolean; lastRun: number | null }> {
+  const result: Array<{ name: string; enabled: boolean; lastRun: number | null }> = [];
+
+  for (const [name, task] of _registry.entries()) {
+    const running = _tasks.get(name);
+    result.push({
+      name,
+      enabled: !!running,
+      lastRun: running?.lastRun || null,
+    });
+  }
+
+  return result.sort((a, b) => a.name.localeCompare(b.name));
+}

@@ -30,7 +30,7 @@ import { initBrowserSidecar, stopBrowserSidecar } from '../browser/browser-sidec
 import { activateHandoff, deactivateHandoff, isHandoffActive, sendMessage as sendTelegramMessage } from '../comms/adapters/telegram.js';
 
 // Automation imports (Phase 3)
-import { startScheduler, stopScheduler } from '../automation/scheduler.js';
+import { startScheduler, stopScheduler, runTaskByName, getTaskList } from '../automation/scheduler.js';
 
 // Task registrations — importing these files causes registerTask() calls
 import '../automation/tasks/context-watchdog.js';
@@ -379,6 +379,32 @@ const server = http.createServer(async (req, res) => {
       'Access-Control-Allow-Origin': '*',
     });
     res.end(JSON.stringify(modules));
+    return;
+  }
+
+  // Tasks list endpoint — returns available tasks
+  if (req.method === 'GET' && url.pathname === '/tasks') {
+    const tasks = getTaskList();
+
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+    });
+    res.end(JSON.stringify(tasks));
+    return;
+  }
+
+  // Task runner endpoint — POST /tasks/:name/run to trigger a task
+  const taskRunMatch = url.pathname.match(/^\/tasks\/([^/]+)\/run$/);
+  if (req.method === 'POST' && taskRunMatch) {
+    const taskName = taskRunMatch[1];
+    const result = await runTaskByName(taskName);
+
+    res.writeHead(result.ok ? 200 : 400, {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+    });
+    res.end(JSON.stringify(result));
     return;
   }
 
