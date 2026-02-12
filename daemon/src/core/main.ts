@@ -12,6 +12,7 @@ import { execSync } from 'node:child_process';
 import { loadConfig, getProjectDir } from './config.js';
 import { initLogger, createLogger } from './logger.js';
 import { runHealthCheck, formatReport } from './health.js';
+import { validateAgentCommsAuth } from './keychain.js';
 import { sessionExists, injectText, updateAgentState } from './session-bridge.js';
 
 // Comms imports (Phase 2)
@@ -273,6 +274,157 @@ function readLogs(options: {
   } catch {
     return [];
   }
+}
+
+// ── Memory Sync ──────────────────────────────────────────────
+
+interface MemorySyncPayload {
+  from: string;
+  memories: Array<{
+    filename: string;
+    subject: string;
+    category: string;
+    content: string;
+  }>;
+}
+
+interface MemorySyncResult {
+  ok: boolean;
+  accepted: number;
+  skipped: number;
+  updated: number;
+  conflicts: number;
+  details: string[];
+}
+
+const PRIVATE_CATEGORIES = ['account'];
+const PRIVATE_TAGS = ['pii', 'credential', 'financial', 'keychain', 'secret', 'password'];
+
+function isPrivateMemory(content: string): boolean {
+  const lowerContent = content.toLowerCase();
+
+  // Check for private tags in frontmatter
+  for (const tag of PRIVATE_TAGS) {
+    if (lowerContent.includes(tag)) return true;
+  }
+
+  // Check for keychain references
+  if (lowerContent.includes('keychain:') || lowerContent.includes('credential-')) return true;
+
+  return false;
+}
+
+function parseMemoryFrontmatter(content: string): { source?: string; subject?: string } {
+  const match = content.match(/^---\n([\s\S]*?)\n---/);
+  if (!match) return {};
+
+  const frontmatter = match[1];
+  const sourceMatch = frontmatter.match(/source:\s*(.+)/);
+  const subjectMatch = frontmatter.match(/subject:\s*(.+)/);
+
+  return {
+    source: sourceMatch?.[1]?.trim(),
+    subject: subjectMatch?.[1]?.trim(),
+  };
+}
+
+async function handleMemorySync(payload: MemorySyncPayload): Promise<MemorySyncResult> {
+  const memoryDir = path.join(getProjectDir(), '.claude', 'state', 'memory', 'memories');
+  const result: MemorySyncResult = {
+    ok: true,
+    accepted: 0,
+    skipped: 0,
+    updated: 0,
+    conflicts: 0,
+    details: [],
+  };
+
+  // Ensure memory directory exists
+  if (!fs.existsSync(memoryDir)) {
+    fs.mkdirSync(memoryDir, { recursive: true });
+  }
+
+  for (const mem of payload.memories) {
+    try {
+      // Skip private memories
+      if (PRIVATE_CATEGORIES.includes(mem.category) || isPrivateMemory(mem.content)) {
+        result.skipped++;
+        result.details.push(`Skipped (private): ${mem.filename}`);
+        continue;
+      }
+
+      const localPath = path.join(memoryDir, mem.filename);
+
+      // Check if local file exists
+      if (fs.existsSync(localPath)) {
+        const localContent = fs.readFileSync(localPath, 'utf8');
+        const localMeta = parseMemoryFrontmatter(localContent);
+
+        // source:user always wins
+        if (localMeta.source === 'user') {
+          result.skipped++;
+          result.details.push(`Skipped (local user source): ${mem.filename}`);
+          continue;
+        }
+
+        // Check for conflict (same subject, different content)
+        if (localMeta.subject === mem.subject && localContent !== mem.content) {
+          // Don't overwrite - flag as conflict
+          result.conflicts++;
+          result.details.push(`Conflict: ${mem.filename} (local vs peer-${payload.from})`);
+          continue;
+        }
+
+        // Same content - skip
+        if (localContent === mem.content) {
+          result.skipped++;
+          continue;
+        }
+
+        // Update with peer content
+        const updatedContent = addProvenanceLine(mem.content, payload.from);
+        fs.writeFileSync(localPath, updatedContent);
+        result.updated++;
+        result.details.push(`Updated: ${mem.filename}`);
+      } else {
+        // New memory from peer - add provenance and save
+        const newContent = addProvenanceLine(mem.content, payload.from);
+        fs.writeFileSync(localPath, newContent);
+        result.accepted++;
+        result.details.push(`Accepted: ${mem.filename}`);
+      }
+    } catch (err) {
+      result.details.push(`Error processing ${mem.filename}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  // Log and notify if conflicts
+  if (result.conflicts > 0) {
+    log.warn(`Memory sync: ${result.conflicts} conflict(s) from peer-${payload.from}`);
+    injectText(`[Memory Sync] ${result.conflicts} conflict(s) from peer-${payload.from}. Review needed.`);
+  }
+
+  log.info(`Memory sync from ${payload.from}`, {
+    accepted: result.accepted,
+    skipped: result.skipped,
+    updated: result.updated,
+    conflicts: result.conflicts,
+  });
+
+  return result;
+}
+
+function addProvenanceLine(content: string, fromPeer: string): string {
+  // Update source in frontmatter to peer-{from}
+  const sourceRegex = /^(---\n[\s\S]*?)(source:\s*.+)([\s\S]*?\n---)/;
+  const match = content.match(sourceRegex);
+
+  if (match) {
+    return content.replace(sourceRegex, `$1source: peer-${fromPeer}$3`);
+  }
+
+  // If no source field, add it after the opening ---
+  return content.replace(/^(---\n)/, `$1source: peer-${fromPeer}\n`);
 }
 
 function getLogModules(): string[] {
@@ -644,6 +796,48 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(result));
       } catch {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid request' }));
+      }
+    });
+    return;
+  }
+
+  // Agent comms: POST /agent/memory-sync — receive memory sync from peer
+  if (req.method === 'POST' && url.pathname === '/agent/memory-sync') {
+    if (!config['agent-comms']?.enabled) {
+      res.writeHead(404);
+      res.end('Agent comms not enabled');
+      return;
+    }
+
+    const authHeader = req.headers.authorization ?? '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+
+    if (!token || !validateAgentCommsAuth(token)) {
+      log.warn('Memory sync rejected: invalid auth');
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Unauthorized' }));
+      return;
+    }
+
+    let body = '';
+    req.on('data', (c: Buffer) => { body += c.toString(); });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body) as MemorySyncPayload;
+
+        if (!payload.from || !Array.isArray(payload.memories)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid payload: requires from and memories array' }));
+          return;
+        }
+
+        const result = await handleMemorySync(payload);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } catch (err) {
+        log.error('Memory sync error', { error: err instanceof Error ? err.message : String(err) });
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Invalid request' }));
       }
