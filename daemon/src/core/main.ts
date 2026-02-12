@@ -43,6 +43,7 @@ import '../automation/tasks/approval-audit.js';
 import '../automation/tasks/morning-briefing.js';
 import '../automation/tasks/upstream-sync.js';
 import '../automation/tasks/peer-heartbeat.js';
+import '../automation/tasks/backup.js';
 
 // ── Bootstrap ────────────────────────────────────────────────
 

@@ -1,16 +1,16 @@
 #!/bin/bash
-# Weekly backup of CC4Me-BMO to ~/Documents/backups/
-# Scheduled via launchd. Keeps max 2 backups, deletes oldest.
+# Weekly backup of cc4me_r2d2 to ~/Documents/backups/
+# Scheduled via daemon scheduler. Keeps max 2 backups, deletes oldest.
 
 set -euo pipefail
 
-PROJECT_DIR="$HOME/CC4Me-BMO"
+PROJECT_DIR="$HOME/cc4me_r2d2"
 BACKUP_DIR="$HOME/Documents/backups"
-LOG_FILE="$HOME/.cc4me-backup.log"
-LOCKFILE="/tmp/cc4me-backup.lock"
+LOG_FILE="$HOME/.r2d2-backup.log"
+LOCKFILE="/tmp/r2d2-backup.lock"
 MAX_BACKUPS=2
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-BACKUP_NAME="cc4me-backup-${TIMESTAMP}"
+BACKUP_NAME="r2d2-backup-${TIMESTAMP}"
 BACKUP_ZIP="${BACKUP_DIR}/${BACKUP_NAME}.zip"
 BACKUP_TMP="${BACKUP_DIR}/${BACKUP_NAME}.zip.tmp"
 
@@ -65,10 +65,10 @@ SIZE_MB=$((BACKUP_SIZE / 1048576))
 echo "$(date): Backup created: $(basename "$BACKUP_ZIP") (${SIZE_MB}MB)"
 
 # Rotate: keep only the newest MAX_BACKUPS
-BACKUP_COUNT=$(ls -1 "$BACKUP_DIR"/cc4me-backup-*.zip 2>/dev/null | wc -l | tr -d ' ')
+BACKUP_COUNT=$(ls -1 "$BACKUP_DIR"/r2d2-backup-*.zip 2>/dev/null | wc -l | tr -d ' ')
 if [ "$BACKUP_COUNT" -gt "$MAX_BACKUPS" ]; then
   DELETE_COUNT=$((BACKUP_COUNT - MAX_BACKUPS))
-  ls -1t "$BACKUP_DIR"/cc4me-backup-*.zip | tail -n "$DELETE_COUNT" | while read -r old; do
+  ls -1t "$BACKUP_DIR"/r2d2-backup-*.zip | tail -n "$DELETE_COUNT" | while read -r old; do
     echo "$(date): Removing old backup: $(basename "$old")"
     rm -f "$old"
   done
