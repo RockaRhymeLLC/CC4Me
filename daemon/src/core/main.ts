@@ -543,7 +543,7 @@ const server = http.createServer(async (req, res) => {
     if (blockExternal(req, res)) return;
     const taskName = taskRunMatch[1]!;
     const result = await runTaskByName(taskName);
-    res.writeHead(result.ran ? 200 : 404, { 'Content-Type': 'application/json' });
+    res.writeHead(result.ok ? 200 : 404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(result));
     return;
   }

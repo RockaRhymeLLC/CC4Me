@@ -227,36 +227,6 @@ export function startScheduler(): void {
 }
 
 /**
- * Manually trigger a task by name. Bypasses the idle check.
- * Returns { ran: true } on success, or { ran: false, error: string } on failure.
- */
-export async function runTaskByName(name: string): Promise<{ ran: boolean; error?: string }> {
-  const running = _tasks.get(name);
-  if (!running) {
-    return { ran: false, error: `Task not found: ${name}` };
-  }
-
-  try {
-    log.info(`Manual trigger: ${name}`);
-    await running.task.run();
-    running.lastRun = Date.now();
-    running.successCount++;
-    running.lastError = null;
-    saveState();
-    log.info(`Manual trigger completed: ${name}`);
-    return { ran: true };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    running.lastRun = Date.now();
-    running.failureCount++;
-    running.lastError = msg;
-    saveState();
-    log.error(`Manual trigger failed: ${name}`, { error: msg });
-    return { ran: false, error: msg };
-  }
-}
-
-/**
  * List all registered task names and their last run time.
  */
 export function listTasks(): { name: string; lastRun: number; nextRun?: number; interval?: string; cron?: string; successCount: number; failureCount: number; lastError: string | null }[] {
