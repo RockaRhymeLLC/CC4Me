@@ -11,6 +11,7 @@ import path from 'node:path';
 import { loadConfig, getProjectDir } from './config.js';
 import { initLogger, createLogger } from './logger.js';
 import { runHealthCheck, formatReport } from './health.js';
+import { getExtendedStatus } from './extended-status.js';
 import { sessionExists, injectText, updateAgentState } from './session-bridge.js';
 
 // Comms imports (Phase 2)
@@ -19,7 +20,7 @@ import { initChannelRouter } from '../comms/channel-router.js';
 import { createTelegramRouter } from '../comms/adapters/telegram.js';
 
 // Agent comms imports
-import { initAgentComms, stopAgentComms, handleAgentMessage, getAgentStatus, sendAgentMessage } from '../comms/agent-comms.js';
+import { initAgentComms, stopAgentComms, handleAgentMessage, getAgentStatus, sendAgentMessage, updatePeerState } from '../comms/agent-comms.js';
 
 // Voice imports
 import { handleVoiceRequest, initVoiceServer, stopVoiceServer } from '../voice/voice-server.js';
@@ -29,7 +30,10 @@ import { initBrowserSidecar, stopBrowserSidecar } from '../browser/browser-sidec
 import { activateHandoff, deactivateHandoff, isHandoffActive, sendMessage as sendTelegramMessage } from '../comms/adapters/telegram.js';
 
 // Automation imports (Phase 3)
-import { startScheduler, stopScheduler } from '../automation/scheduler.js';
+import { startScheduler, stopScheduler, runTaskByName, listTasks } from '../automation/scheduler.js';
+
+// Memory sync handler
+import { handleMemorySync } from '../automation/tasks/memory-sync.js';
 
 // Task registrations — importing these files causes registerTask() calls
 import '../automation/tasks/context-watchdog.js';
@@ -42,6 +46,9 @@ import '../automation/tasks/approval-audit.js';
 import '../automation/tasks/morning-briefing.js';
 import '../automation/tasks/upstream-sync.js';
 import '../automation/tasks/peer-heartbeat.js';
+import '../automation/tasks/backup.js';
+import '../automation/tasks/transcript-cleanup.js';
+import '../automation/tasks/memory-sync.js';
 
 // ── Bootstrap ────────────────────────────────────────────────
 
@@ -115,6 +122,21 @@ const telegramRouter = config.channels.telegram.enabled
   ? createTelegramRouter()
   : null;
 
+/** Returns true if the request came through Cloudflare tunnel (external). */
+function isExternalRequest(req: http.IncomingMessage): boolean {
+  return !!req.headers['cf-connecting-ip'];
+}
+
+/** Block external access — returns true if blocked (response already sent). */
+function blockExternal(req: http.IncomingMessage, res: http.ServerResponse): boolean {
+  if (isExternalRequest(req)) {
+    res.writeHead(404);
+    res.end('Not found');
+    return true;
+  }
+  return false;
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', `http://localhost:${config.daemon.port}`);
 
@@ -145,16 +167,30 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Delivery stats endpoint
+  // Extended status endpoint (for ops dashboards) — local only
+  if (req.method === 'GET' && url.pathname === '/status/extended') {
+    if (blockExternal(req, res)) return;
+    const status = await getExtendedStatus();
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+    });
+    res.end(JSON.stringify(status, null, 2));
+    return;
+  }
+
+  // Delivery stats endpoint — local only
   if (req.method === 'GET' && url.pathname === '/delivery-stats') {
+    if (blockExternal(req, res)) return;
     const stats = getDeliveryStats();
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(stats, null, 2));
     return;
   }
 
-  // Session clear endpoint — injects /clear into the tmux session
+  // Session clear endpoint — local only
   if (req.method === 'POST' && url.pathname === '/session/clear') {
+    if (blockExternal(req, res)) return;
     const ok = injectText('/clear');
     res.writeHead(ok ? 200 : 503, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok, injected: '/clear' }));
@@ -369,8 +405,32 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Agent comms: POST /agent/send — trigger outgoing message (local-only, no auth)
+  // Agent comms: POST /agent/status — heartbeat state exchange (no auth required)
+  // Peer sends their state, we reply with ours. Both sides cache each other's state.
+  if (req.method === 'POST' && url.pathname === '/agent/status') {
+    let body = '';
+    req.on('data', (c: Buffer) => { body += c.toString(); });
+    req.on('end', () => {
+      try {
+        const data = JSON.parse(body) as { agent?: string; status?: string };
+        if (data.agent && data.status) {
+          updatePeerState(data.agent, {
+            status: (data.status === 'idle' || data.status === 'busy') ? data.status : 'unknown',
+            updatedAt: Date.now(),
+          });
+        }
+      } catch {
+        // Invalid JSON — still return our status
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(getAgentStatus()));
+    });
+    return;
+  }
+
+  // Agent comms: POST /agent/send — local only
   if (req.method === 'POST' && url.pathname === '/agent/send') {
+    if (blockExternal(req, res)) return;
     let body = '';
     req.on('data', (c: Buffer) => { body += c.toString(); });
     req.on('end', async () => {
@@ -393,6 +453,225 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ error: 'Invalid request' }));
       }
     });
+    return;
+  }
+
+  // Agent comms: POST /agent/memory-sync — receive memories from peer
+  if (req.method === 'POST' && url.pathname === '/agent/memory-sync') {
+    if (!config['agent-comms'].enabled) {
+      res.writeHead(404);
+      res.end('Agent comms not enabled');
+      return;
+    }
+
+    let body = '';
+    req.on('data', (c: Buffer) => { body += c.toString(); });
+    req.on('end', () => {
+      const authHeader = req.headers.authorization ?? '';
+      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+        return;
+      }
+
+      const result = handleMemorySync(token, parsed);
+      res.writeHead(result.status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result.body));
+    });
+    return;
+  }
+
+  // Memory conflicts: DELETE /agent/memory-conflicts — clear resolved conflicts (local only)
+  if (req.method === 'DELETE' && url.pathname === '/agent/memory-conflicts') {
+    if (blockExternal(req, res)) return;
+    const { clearMemoryConflicts } = await import('../automation/tasks/memory-sync.js');
+    const peer = url.searchParams.get('peer') ?? undefined;
+    const cleared = clearMemoryConflicts(peer);
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    res.end(JSON.stringify({ ok: true, cleared }));
+    return;
+  }
+
+  // Worker signal: POST /worker/signal — local only
+  if (req.method === 'POST' && url.pathname === '/worker/signal') {
+    if (blockExternal(req, res)) return;
+    let body = '';
+    req.on('data', (c: Buffer) => { body += c.toString(); });
+    req.on('end', () => {
+      try {
+        const data = JSON.parse(body) as { worker?: string; status?: string; message?: string };
+        if (!data.worker || !data.status) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: "'worker' and 'status' are required" }));
+          return;
+        }
+        const validStatuses = ['done', 'stuck', 'error', 'working'];
+        if (!validStatuses.includes(data.status)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: `Invalid status. Use: ${validStatuses.join(', ')}` }));
+          return;
+        }
+        log.info('Worker signal received', { worker: data.worker, status: data.status, message: data.message });
+        const notification = `[Worker] ${data.worker}: ${data.status}${data.message ? ' — ' + data.message : ''}`;
+        injectText(notification);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      }
+    });
+    return;
+  }
+
+  // Admin: GET /tasks — local only
+  if (req.method === 'GET' && url.pathname === '/tasks') {
+    if (blockExternal(req, res)) return;
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(listTasks(), null, 2));
+    return;
+  }
+
+  // Admin: POST /tasks/:name/run — local only
+  const taskRunMatch = url.pathname.match(/^\/tasks\/([a-z0-9-]+)\/run$/);
+  if (req.method === 'POST' && taskRunMatch) {
+    if (blockExternal(req, res)) return;
+    const taskName = taskRunMatch[1]!;
+    const result = await runTaskByName(taskName);
+    res.writeHead(result.ran ? 200 : 404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(result));
+    return;
+  }
+
+  // Admin: GET /logs — local only
+  // Query params: ?limit=200&module=telegram&level=error&search=keyword
+  if (req.method === 'GET' && url.pathname === '/logs') {
+    if (blockExternal(req, res)) return;
+    const logPath = path.join(projectDir, 'logs', 'daemon.log');
+    const limit = Math.min(Number(url.searchParams.get('limit')) || 200, 2000);
+    const filterModule = url.searchParams.get('module') ?? '';
+    const filterLevel = url.searchParams.get('level') ?? '';
+    const filterSearch = url.searchParams.get('search') ?? '';
+
+    try {
+      const raw = fs.readFileSync(logPath, 'utf8');
+      const lines = raw.trim().split('\n');
+      const entries: unknown[] = [];
+      for (let i = lines.length - 1; i >= 0 && entries.length < limit; i--) {
+        try {
+          const entry = JSON.parse(lines[i]!) as { module?: string; level?: string; msg?: string };
+          if (filterModule && entry.module !== filterModule) continue;
+          if (filterLevel && entry.level !== filterLevel) continue;
+          if (filterSearch && !(entry.msg ?? '').toLowerCase().includes(filterSearch.toLowerCase())) continue;
+          entries.push(entry);
+        } catch {
+          // skip non-JSON lines
+        }
+      }
+      entries.reverse();
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      });
+      res.end(JSON.stringify(entries));
+    } catch {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end('[]');
+    }
+    return;
+  }
+
+  // Admin: GET /logs/modules — local only
+  if (req.method === 'GET' && url.pathname === '/logs/modules') {
+    if (blockExternal(req, res)) return;
+    const logPath = path.join(projectDir, 'logs', 'daemon.log');
+    try {
+      const raw = fs.readFileSync(logPath, 'utf8');
+      const lines = raw.trim().split('\n');
+      const modules = new Set<string>();
+      for (const line of lines) {
+        try {
+          const entry = JSON.parse(line) as { module?: string };
+          if (entry.module) modules.add(entry.module);
+        } catch { /* skip */ }
+      }
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      });
+      res.end(JSON.stringify([...modules].sort()));
+    } catch {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end('[]');
+    }
+    return;
+  }
+
+  // Admin: GET /agent-comms/recent — local only
+  if (req.method === 'GET' && url.pathname === '/agent-comms/recent') {
+    if (blockExternal(req, res)) return;
+    const limit = Math.min(Number(url.searchParams.get('limit')) || 30, 200);
+    const logPath = path.join(projectDir, 'logs', 'agent-comms.log');
+
+    try {
+      const raw = fs.readFileSync(logPath, 'utf8');
+      const lines = raw.trim().split('\n');
+      const messages: { ts: string; direction: string; from?: string; to?: string; type?: string; text?: string }[] = [];
+
+      for (let i = lines.length - 1; i >= 0 && messages.length < limit; i--) {
+        try {
+          const entry = JSON.parse(lines[i]!) as Record<string, unknown>;
+          if (entry.direction === 'heartbeat') continue;
+          messages.push({
+            ts: entry.ts as string,
+            direction: entry.direction as string,
+            from: entry.from as string | undefined,
+            to: entry.to as string | undefined,
+            type: entry.type as string | undefined,
+            text: typeof entry.text === 'string' ? entry.text.slice(0, 300) : undefined,
+          });
+        } catch { /* skip non-JSON */ }
+      }
+
+      messages.reverse();
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify(messages));
+    } catch {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end('[]');
+    }
+    return;
+  }
+
+  // Admin: GET /git-status — local only
+  if (req.method === 'GET' && url.pathname === '/git-status') {
+    if (blockExternal(req, res)) return;
+    try {
+      const { execSync } = await import('node:child_process');
+      const branch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8', cwd: projectDir, timeout: 5_000 }).trim();
+      const aheadBehind = execSync('git rev-list --left-right --count origin/main...HEAD 2>/dev/null || echo "0\t0"', { encoding: 'utf8', cwd: projectDir, timeout: 5_000 }).trim();
+      const [behind, ahead] = aheadBehind.split('\t').map(Number);
+      const dirty = execSync('git status --porcelain', { encoding: 'utf8', cwd: projectDir, timeout: 5_000 }).trim();
+      const lastCommit = execSync('git log -1 --format="%h|%s|%ar"', { encoding: 'utf8', cwd: projectDir, timeout: 5_000 }).trim();
+      const [hash, subject, relTime] = lastCommit.split('|');
+
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({
+        branch,
+        ahead: ahead ?? 0,
+        behind: behind ?? 0,
+        dirty: dirty ? dirty.split('\n').length : 0,
+        lastCommit: { hash, subject, relativeTime: relTime },
+      }));
+    } catch {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ branch: 'unknown', ahead: 0, behind: 0, dirty: 0 }));
+    }
     return;
   }
 

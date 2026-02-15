@@ -23,6 +23,7 @@ let _telegramHandler: MessageHandler | null = null;
 let _startTypingHandler: (() => void) | null = null;
 let _stopTypingHandler: (() => void) | null = null;
 let _voicePendingCallback: MessageHandler | null = null;
+let _responseHook: MessageHandler | null = null;
 
 /**
  * Initialize the channel router.
@@ -98,6 +99,26 @@ export function isVoicePending(): boolean {
 }
 
 /**
+ * Register a one-shot response hook. Called with the next assistant message
+ * AFTER normal channel routing completes. Used by web voice to capture
+ * Claude's response while still delivering to Telegram.
+ */
+export function setResponseHook(callback: MessageHandler): void {
+  _responseHook = callback;
+  log.debug('Response hook registered');
+}
+
+/**
+ * Clear any pending response hook.
+ */
+export function clearResponseHook(): void {
+  if (_responseHook) {
+    _responseHook = null;
+    log.debug('Response hook cleared');
+  }
+}
+
+/**
  * Send a message directly to Telegram, bypassing channel checks.
  * Used for immediate feedback (e.g., voice transcription echo).
  */
@@ -153,7 +174,7 @@ export function setChannel(channel: Channel): void {
 export function routeOutgoingMessage(text: string, thinking?: string): void {
   // Voice-pending: clear the callback but don't intercept for TTS.
   // Voice input defaults to the active channel (usually Telegram) for faster delivery.
-  // TTS is slower than text — Dave prefers reading responses on Telegram.
+  // TTS is slower than text — users typically prefer reading responses on Telegram.
   if (_voicePendingCallback) {
     _voicePendingCallback = null;
     log.info('Voice-pending cleared, routing via normal channel', { chars: text.length });
@@ -167,22 +188,20 @@ export function routeOutgoingMessage(text: string, thinking?: string): void {
     case 'voice':
       // No external delivery (voice responses are captured via voice-pending callback above)
       log.debug(`Channel is ${channel}, not forwarding: ${text.length} chars`);
-      return;
+      break;
 
     case 'telegram':
-      log.info(`Routing to telegram: ${text.length} chars, handler=${!!_telegramHandler}`);
+      log.debug(`Routing to telegram: ${text.length} chars`);
       if (_telegramHandler) {
         try {
-          log.info('Calling telegram handler now');
           _telegramHandler(text);
-          log.info('Telegram handler returned');
         } catch (err) {
           log.error('Telegram handler error', { error: err instanceof Error ? err.message : String(err) });
         }
       } else {
         log.warn('Telegram message dropped: no handler registered');
       }
-      return;
+      break;
 
     case 'telegram-verbose':
       if (_telegramHandler) {
@@ -198,6 +217,18 @@ export function routeOutgoingMessage(text: string, thinking?: string): void {
       } else {
         log.warn('Telegram message dropped: no handler registered');
       }
-      return;
+      break;
+  }
+
+  // Fire one-shot response hook (e.g., web voice waiting for Claude's reply)
+  if (_responseHook) {
+    const hook = _responseHook;
+    _responseHook = null;
+    log.info('Firing response hook', { chars: text.length });
+    try {
+      hook(text);
+    } catch (err) {
+      log.error('Response hook error', { error: err instanceof Error ? err.message : String(err) });
+    }
   }
 }

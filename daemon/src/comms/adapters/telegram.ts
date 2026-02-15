@@ -21,6 +21,8 @@ import { resolveProjectPath, loadConfig } from '../../core/config.js';
 import { sessionExists, startSession, injectText } from '../../core/session-bridge.js';
 import { registerTelegramHandler, setChannel } from '../channel-router.js';
 import { createLogger } from '../../core/logger.js';
+import { transcribe } from '../../voice/stt.js';
+import { convertToWav, cleanupTemp } from '../../voice/audio-utils.js';
 import { getSidecarPort, isSidecarReady } from '../../browser/browser-sidecar.js';
 import {
   classifySender,
@@ -172,6 +174,8 @@ interface TelegramMessage {
   text?: string;
   photo?: Array<{ file_id: string }>;
   document?: { file_id: string; file_name?: string };
+  voice?: { file_id: string; duration?: number; mime_type?: string };
+  audio?: { file_id: string; duration?: number; file_name?: string; mime_type?: string };
   caption?: string;
 }
 
@@ -1012,6 +1016,37 @@ export function createTelegramRouter(): TelegramRouter {
           const caption = msg.caption ?? '';
           const text = caption ? `[Sent a document: ${localPath}] ${caption}` : `[Sent a document: ${localPath}]`;
           await processIncomingMessage(text, senderId, replyChatId, firstName);
+        }
+        return;
+      }
+
+      // Handle voice messages — download, convert to WAV, transcribe via STT
+      if (msg.voice || msg.audio) {
+        const fileId = msg.voice?.file_id ?? msg.audio!.file_id;
+        const ext = msg.voice ? 'ogg' : (msg.audio!.file_name?.split('.').pop() ?? 'mp3');
+        const filename = `voice_${Date.now()}.${ext}`;
+        const localPath = await downloadTelegramFile(fileId, filename);
+        if (localPath) {
+          try {
+            const wavPath = await convertToWav(localPath);
+            try {
+              const transcription = await transcribe(wavPath);
+              if (transcription && transcription.trim()) {
+                const caption = msg.caption ? ` ${msg.caption}` : '';
+                await processIncomingMessage(transcription + caption, senderId, replyChatId, firstName);
+              } else {
+                log.warn('Voice message transcription was empty');
+                sendMessage('(I received your voice message but couldn\'t make out what was said — could you try again or send it as text?)', replyChatId);
+              }
+            } finally {
+              cleanupTemp(wavPath);
+            }
+          } catch (err) {
+            log.error('Voice message processing failed', {
+              error: err instanceof Error ? err.message : String(err),
+            });
+            sendMessage('(Sorry, I had trouble processing that voice message — could you send it as text instead?)', replyChatId);
+          }
         }
         return;
       }
