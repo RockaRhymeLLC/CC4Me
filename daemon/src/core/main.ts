@@ -8,20 +8,19 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { execSync } from 'node:child_process';
 import { loadConfig, getProjectDir } from './config.js';
 import { initLogger, createLogger } from './logger.js';
 import { runHealthCheck, formatReport } from './health.js';
-import { validateAgentCommsAuth } from './keychain.js';
+import { getExtendedStatus } from './extended-status.js';
 import { sessionExists, injectText, updateAgentState } from './session-bridge.js';
 
 // Comms imports (Phase 2)
-import { startTranscriptStream, stopTranscriptStream, onHookNotification } from '../comms/transcript-stream.js';
+import { startTranscriptStream, stopTranscriptStream, onHookNotification, getDeliveryStats } from '../comms/transcript-stream.js';
 import { initChannelRouter } from '../comms/channel-router.js';
 import { createTelegramRouter } from '../comms/adapters/telegram.js';
 
 // Agent comms imports
-import { initAgentComms, stopAgentComms, handleAgentMessage, getAgentStatus, sendAgentMessage } from '../comms/agent-comms.js';
+import { initAgentComms, stopAgentComms, handleAgentMessage, getAgentStatus, sendAgentMessage, updatePeerState } from '../comms/agent-comms.js';
 
 // Voice imports
 import { handleVoiceRequest, initVoiceServer, stopVoiceServer } from '../voice/voice-server.js';
@@ -31,7 +30,10 @@ import { initBrowserSidecar, stopBrowserSidecar } from '../browser/browser-sidec
 import { activateHandoff, deactivateHandoff, isHandoffActive, sendMessage as sendTelegramMessage } from '../comms/adapters/telegram.js';
 
 // Automation imports (Phase 3)
-import { startScheduler, stopScheduler, runTaskByName, getTaskList } from '../automation/scheduler.js';
+import { startScheduler, stopScheduler, runTaskByName, listTasks } from '../automation/scheduler.js';
+
+// Memory sync handler
+import { handleMemorySync } from '../automation/tasks/memory-sync.js';
 
 // Task registrations — importing these files causes registerTask() calls
 import '../automation/tasks/context-watchdog.js';
@@ -45,6 +47,7 @@ import '../automation/tasks/morning-briefing.js';
 import '../automation/tasks/upstream-sync.js';
 import '../automation/tasks/peer-heartbeat.js';
 import '../automation/tasks/backup.js';
+import '../automation/tasks/transcript-cleanup.js';
 import '../automation/tasks/memory-sync.js';
 
 // ── Bootstrap ────────────────────────────────────────────────
@@ -113,374 +116,26 @@ function createRetryTodo(url?: string, contextName?: string): void {
   }
 }
 
-// ── Extended Status ───────────────────────────────────────────
-
-interface ExtendedStatus {
-  agent: string;
-  timestamp: string;
-  uptime: string;
-  health: 'ok' | 'warn' | 'error';
-  todos: { open: number; inProgress: number; blocked: number };
-  commits: Array<{ hash: string; msg: string; time: string }>;
-  services: Array<{ name: string; status: string }>;
-}
-
-function formatUptime(seconds: number): string {
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-
-  const parts: string[] = [];
-  if (days > 0) parts.push(`${days}d`);
-  if (hours > 0) parts.push(`${hours}h`);
-  parts.push(`${minutes}m`);
-
-  return parts.join(' ');
-}
-
-function countTodos(): { open: number; inProgress: number; blocked: number } {
-  const todosDir = path.join(getProjectDir(), '.claude', 'state', 'todos');
-  const counts = { open: 0, inProgress: 0, blocked: 0 };
-
-  try {
-    const files = fs.readdirSync(todosDir).filter(f => f.endsWith('.json') && !f.startsWith('.'));
-    for (const file of files) {
-      // Parse status from filename: {priority}-{status}-{id}-{slug}.json
-      const parts = file.split('-');
-      if (parts.length >= 2) {
-        const status = parts[1];
-        if (status === 'open') counts.open++;
-        else if (status === 'in' || status === 'inProgress') counts.inProgress++;
-        else if (status === 'blocked') counts.blocked++;
-        // 'completed' todos are not counted
-      }
-    }
-  } catch {
-    // Directory doesn't exist or can't be read
-  }
-
-  return counts;
-}
-
-function getRecentCommits(): Array<{ hash: string; msg: string; time: string }> {
-  try {
-    const output = execSync(
-      'git log -3 --pretty=format:"%h|%s|%ci"',
-      { cwd: getProjectDir(), encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }
-    ).trim();
-
-    if (!output) return [];
-
-    return output.split('\n').map(line => {
-      const [hash, msg, time] = line.split('|');
-      return { hash: hash ?? '', msg: msg ?? '', time: time ?? '' };
-    });
-  } catch {
-    return [];
-  }
-}
-
-function getServiceStatuses(): Array<{ name: string; status: string }> {
-  const services: Array<{ name: string; status: string }> = [];
-
-  // tmux session
-  services.push({
-    name: 'tmux',
-    status: sessionExists() ? 'active' : 'stopped',
-  });
-
-  // Telegram
-  services.push({
-    name: 'telegram',
-    status: config.channels.telegram.enabled ? 'enabled' : 'disabled',
-  });
-
-  // Agent comms
-  services.push({
-    name: 'agent-comms',
-    status: config['agent-comms']?.enabled ? 'enabled' : 'disabled',
-  });
-
-  // Scheduler
-  services.push({
-    name: 'scheduler',
-    status: 'running',  // If we're responding, scheduler is running
-  });
-
-  return services;
-}
-
-async function getExtendedStatus(): Promise<ExtendedStatus> {
-  // Get health summary
-  const healthReport = await runHealthCheck();
-  let health: 'ok' | 'warn' | 'error' = 'ok';
-  if (healthReport.summary.errors > 0) health = 'error';
-  else if (healthReport.summary.warnings > 0) health = 'warn';
-
-  return {
-    agent: config.agent.name,
-    timestamp: new Date().toISOString(),
-    uptime: formatUptime(process.uptime()),
-    health,
-    todos: countTodos(),
-    commits: getRecentCommits(),
-    services: getServiceStatuses(),
-  };
-}
-
-// ── Logs API ─────────────────────────────────────────────────
-
-interface LogEntry {
-  ts: string;
-  level: string;
-  module: string;
-  msg: string;
-  data?: Record<string, unknown>;
-}
-
-function readLogs(options: {
-  limit?: number;
-  module?: string;
-  level?: string;
-  search?: string;
-}): LogEntry[] {
-  const logPath = path.join(getProjectDir(), 'logs', 'daemon.log');
-  const { limit = 100, module, level, search } = options;
-
-  try {
-    if (!fs.existsSync(logPath)) return [];
-
-    const content = fs.readFileSync(logPath, 'utf8');
-    const lines = content.trim().split('\n').filter(Boolean);
-
-    // Parse and filter
-    let entries: LogEntry[] = [];
-    for (const line of lines) {
-      try {
-        const entry = JSON.parse(line) as LogEntry;
-
-        // Apply filters
-        if (module && entry.module !== module) continue;
-        if (level && entry.level !== level) continue;
-        if (search && !line.toLowerCase().includes(search.toLowerCase())) continue;
-
-        entries.push(entry);
-      } catch {
-        // Skip malformed lines
-      }
-    }
-
-    // Return last N entries (most recent)
-    return entries.slice(-limit);
-  } catch {
-    return [];
-  }
-}
-
-// ── Memory Sync ──────────────────────────────────────────────
-
-interface MemorySyncPayload {
-  from: string;
-  memories: Array<{
-    filename: string;
-    subject: string;
-    category: string;
-    content: string;
-  }>;
-}
-
-interface MemorySyncResult {
-  ok: boolean;
-  accepted: number;
-  skipped: number;
-  updated: number;
-  conflicts: number;
-  details: string[];
-}
-
-const PRIVATE_CATEGORIES = ['account'];
-const PRIVATE_TAGS = ['pii', 'credential', 'financial', 'keychain', 'secret', 'password'];
-
-function isPrivateMemory(content: string): boolean {
-  const lowerContent = content.toLowerCase();
-
-  // Check for private tags in frontmatter
-  for (const tag of PRIVATE_TAGS) {
-    if (lowerContent.includes(tag)) return true;
-  }
-
-  // Check for keychain references
-  if (lowerContent.includes('keychain:') || lowerContent.includes('credential-')) return true;
-
-  return false;
-}
-
-function parseMemoryFrontmatter(content: string): { source?: string; subject?: string } {
-  const match = content.match(/^---\n([\s\S]*?)\n---/);
-  if (!match) return {};
-
-  const frontmatter = match[1];
-  const sourceMatch = frontmatter.match(/source:\s*(.+)/);
-  const subjectMatch = frontmatter.match(/subject:\s*(.+)/);
-
-  return {
-    source: sourceMatch?.[1]?.trim(),
-    subject: subjectMatch?.[1]?.trim(),
-  };
-}
-
-async function handleMemorySync(payload: MemorySyncPayload): Promise<MemorySyncResult> {
-  const memoryDir = path.join(getProjectDir(), '.claude', 'state', 'memory', 'memories');
-  const conflictStateFile = path.join(getProjectDir(), '.claude', 'state', 'memory', 'sync-conflicts.json');
-  const result: MemorySyncResult = {
-    ok: true,
-    accepted: 0,
-    skipped: 0,
-    updated: 0,
-    conflicts: 0,
-    details: [],
-  };
-
-  // Load known conflict subjects to avoid repeat notifications
-  let knownConflicts: string[] = [];
-  try {
-    if (fs.existsSync(conflictStateFile)) {
-      knownConflicts = JSON.parse(fs.readFileSync(conflictStateFile, 'utf8'));
-    }
-  } catch {
-    // Ignore parse errors, start fresh
-  }
-  const newConflictSubjects: string[] = [];
-
-  // Ensure memory directory exists
-  if (!fs.existsSync(memoryDir)) {
-    fs.mkdirSync(memoryDir, { recursive: true });
-  }
-
-  for (const mem of payload.memories) {
-    try {
-      // Skip private memories
-      if (PRIVATE_CATEGORIES.includes(mem.category) || isPrivateMemory(mem.content)) {
-        result.skipped++;
-        result.details.push(`Skipped (private): ${mem.filename}`);
-        continue;
-      }
-
-      const localPath = path.join(memoryDir, mem.filename);
-
-      // Check if local file exists
-      if (fs.existsSync(localPath)) {
-        const localContent = fs.readFileSync(localPath, 'utf8');
-        const localMeta = parseMemoryFrontmatter(localContent);
-
-        // source:user always wins
-        if (localMeta.source === 'user') {
-          result.skipped++;
-          result.details.push(`Skipped (local user source): ${mem.filename}`);
-          continue;
-        }
-
-        // Check for conflict (same subject, different content)
-        if (localMeta.subject === mem.subject && localContent !== mem.content) {
-          // Don't overwrite - flag as conflict
-          result.conflicts++;
-          result.details.push(`Conflict: ${mem.filename} (local vs peer-${payload.from})`);
-          // Track if this is a NEW conflict (not previously notified)
-          if (!knownConflicts.includes(mem.subject)) {
-            newConflictSubjects.push(mem.subject);
-          }
-          continue;
-        }
-
-        // Same content - skip
-        if (localContent === mem.content) {
-          result.skipped++;
-          continue;
-        }
-
-        // Update with peer content
-        const updatedContent = addProvenanceLine(mem.content, payload.from);
-        fs.writeFileSync(localPath, updatedContent);
-        result.updated++;
-        result.details.push(`Updated: ${mem.filename}`);
-      } else {
-        // New memory from peer - add provenance and save
-        const newContent = addProvenanceLine(mem.content, payload.from);
-        fs.writeFileSync(localPath, newContent);
-        result.accepted++;
-        result.details.push(`Accepted: ${mem.filename}`);
-      }
-    } catch (err) {
-      result.details.push(`Error processing ${mem.filename}: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-
-  // Only notify for NEW conflicts (avoid spam on re-detection)
-  if (newConflictSubjects.length > 0) {
-    // Save new conflicts to state file
-    const allConflicts = [...new Set([...knownConflicts, ...newConflictSubjects])];
-    fs.writeFileSync(conflictStateFile, JSON.stringify(allConflicts, null, 2));
-
-    log.warn(`Memory sync: ${newConflictSubjects.length} NEW conflict(s) from peer-${payload.from}`);
-    injectText(`[Memory Sync] ${newConflictSubjects.length} conflict(s) from peer-${payload.from}. Review needed.`);
-  } else if (result.conflicts > 0) {
-    log.debug(`Memory sync: ${result.conflicts} known conflict(s) from peer-${payload.from} (already notified)`);
-  }
-
-  log.info(`Memory sync from ${payload.from}`, {
-    accepted: result.accepted,
-    skipped: result.skipped,
-    updated: result.updated,
-    conflicts: result.conflicts,
-    newConflicts: newConflictSubjects.length,
-  });
-
-  return result;
-}
-
-function addProvenanceLine(content: string, fromPeer: string): string {
-  // Update source in frontmatter to peer-{from}
-  const sourceRegex = /^(---\n[\s\S]*?)(source:\s*.+)([\s\S]*?\n---)/;
-  const match = content.match(sourceRegex);
-
-  if (match) {
-    return content.replace(sourceRegex, `$1source: peer-${fromPeer}$3`);
-  }
-
-  // If no source field, add it after the opening ---
-  return content.replace(/^(---\n)/, `$1source: peer-${fromPeer}\n`);
-}
-
-function getLogModules(): string[] {
-  const logPath = path.join(getProjectDir(), 'logs', 'daemon.log');
-  const modules = new Set<string>();
-
-  try {
-    if (!fs.existsSync(logPath)) return [];
-
-    const content = fs.readFileSync(logPath, 'utf8');
-    const lines = content.trim().split('\n').filter(Boolean);
-
-    for (const line of lines) {
-      try {
-        const entry = JSON.parse(line) as LogEntry;
-        if (entry.module) modules.add(entry.module);
-      } catch {
-        // Skip malformed lines
-      }
-    }
-
-    return Array.from(modules).sort();
-  } catch {
-    return [];
-  }
-}
-
 // ── HTTP Server ──────────────────────────────────────────────
 
 const telegramRouter = config.channels.telegram.enabled
   ? createTelegramRouter()
   : null;
+
+/** Returns true if the request came through Cloudflare tunnel (external). */
+function isExternalRequest(req: http.IncomingMessage): boolean {
+  return !!req.headers['cf-connecting-ip'];
+}
+
+/** Block external access — returns true if blocked (response already sent). */
+function blockExternal(req: http.IncomingMessage, res: http.ServerResponse): boolean {
+  if (isExternalRequest(req)) {
+    res.writeHead(404);
+    res.end('Not found');
+    return true;
+  }
+  return false;
+}
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', `http://localhost:${config.daemon.port}`);
@@ -512,80 +167,30 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Extended status endpoint (for ops dashboard)
+  // Extended status endpoint (for ops dashboards) — local only
   if (req.method === 'GET' && url.pathname === '/status/extended') {
-    try {
-      const extendedStatus = await getExtendedStatus();
-      res.writeHead(200, {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',  // Allow cross-origin for dashboard
-      });
-      res.end(JSON.stringify(extendedStatus, null, 2));
-    } catch (err) {
-      log.error('Extended status error', { error: err instanceof Error ? err.message : String(err) });
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Failed to gather status' }));
-    }
-    return;
-  }
-
-  // Logs endpoint — returns filtered JSON logs
-  if (req.method === 'GET' && url.pathname === '/logs') {
-    const limit = parseInt(url.searchParams.get('limit') ?? '100', 10);
-    const module = url.searchParams.get('module') ?? undefined;
-    const level = url.searchParams.get('level') ?? undefined;
-    const search = url.searchParams.get('search') ?? undefined;
-
-    const logs = readLogs({ limit, module, level, search });
-
+    if (blockExternal(req, res)) return;
+    const status = await getExtendedStatus();
     res.writeHead(200, {
       'Content-Type': 'application/json',
       'Access-Control-Allow-Origin': '*',
     });
-    res.end(JSON.stringify(logs, null, 2));
+    res.end(JSON.stringify(status, null, 2));
     return;
   }
 
-  // Logs modules endpoint — returns list of unique modules
-  if (req.method === 'GET' && url.pathname === '/logs/modules') {
-    const modules = getLogModules();
-
-    res.writeHead(200, {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-    });
-    res.end(JSON.stringify(modules));
+  // Delivery stats endpoint — local only
+  if (req.method === 'GET' && url.pathname === '/delivery-stats') {
+    if (blockExternal(req, res)) return;
+    const stats = getDeliveryStats();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(stats, null, 2));
     return;
   }
 
-  // Tasks list endpoint — returns available tasks
-  if (req.method === 'GET' && url.pathname === '/tasks') {
-    const tasks = getTaskList();
-
-    res.writeHead(200, {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-    });
-    res.end(JSON.stringify(tasks));
-    return;
-  }
-
-  // Task runner endpoint — POST /tasks/:name/run to trigger a task
-  const taskRunMatch = url.pathname.match(/^\/tasks\/([^/]+)\/run$/);
-  if (req.method === 'POST' && taskRunMatch) {
-    const taskName = taskRunMatch[1];
-    const result = await runTaskByName(taskName);
-
-    res.writeHead(result.ok ? 200 : 400, {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-    });
-    res.end(JSON.stringify(result));
-    return;
-  }
-
-  // Session clear endpoint — injects /clear into the tmux session
+  // Session clear endpoint — local only
   if (req.method === 'POST' && url.pathname === '/session/clear') {
+    if (blockExternal(req, res)) return;
     const ok = injectText('/clear');
     res.writeHead(ok ? 200 : 503, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok, injected: '/clear' }));
@@ -800,8 +405,32 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Agent comms: POST /agent/send — trigger outgoing message (local-only, no auth)
+  // Agent comms: POST /agent/status — heartbeat state exchange (no auth required)
+  // Peer sends their state, we reply with ours. Both sides cache each other's state.
+  if (req.method === 'POST' && url.pathname === '/agent/status') {
+    let body = '';
+    req.on('data', (c: Buffer) => { body += c.toString(); });
+    req.on('end', () => {
+      try {
+        const data = JSON.parse(body) as { agent?: string; status?: string };
+        if (data.agent && data.status) {
+          updatePeerState(data.agent, {
+            status: (data.status === 'idle' || data.status === 'busy') ? data.status : 'unknown',
+            updatedAt: Date.now(),
+          });
+        }
+      } catch {
+        // Invalid JSON — still return our status
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(getAgentStatus()));
+    });
+    return;
+  }
+
+  // Agent comms: POST /agent/send — local only
   if (req.method === 'POST' && url.pathname === '/agent/send') {
+    if (blockExternal(req, res)) return;
     let body = '';
     req.on('data', (c: Buffer) => { body += c.toString(); });
     req.on('end', async () => {
@@ -827,45 +456,222 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Agent comms: POST /agent/memory-sync — receive memory sync from peer
+  // Agent comms: POST /agent/memory-sync — receive memories from peer
   if (req.method === 'POST' && url.pathname === '/agent/memory-sync') {
-    if (!config['agent-comms']?.enabled) {
+    if (!config['agent-comms'].enabled) {
       res.writeHead(404);
       res.end('Agent comms not enabled');
       return;
     }
 
-    const authHeader = req.headers.authorization ?? '';
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-
-    if (!token || !validateAgentCommsAuth(token)) {
-      log.warn('Memory sync rejected: invalid auth');
-      res.writeHead(401, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Unauthorized' }));
-      return;
-    }
-
     let body = '';
     req.on('data', (c: Buffer) => { body += c.toString(); });
-    req.on('end', async () => {
-      try {
-        const payload = JSON.parse(body) as MemorySyncPayload;
+    req.on('end', () => {
+      const authHeader = req.headers.authorization ?? '';
+      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
 
-        if (!payload.from || !Array.isArray(payload.memories)) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+        return;
+      }
+
+      const result = handleMemorySync(token, parsed);
+      res.writeHead(result.status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result.body));
+    });
+    return;
+  }
+
+  // Memory conflicts: DELETE /agent/memory-conflicts — clear resolved conflicts (local only)
+  if (req.method === 'DELETE' && url.pathname === '/agent/memory-conflicts') {
+    if (blockExternal(req, res)) return;
+    const { clearMemoryConflicts } = await import('../automation/tasks/memory-sync.js');
+    const peer = url.searchParams.get('peer') ?? undefined;
+    const cleared = clearMemoryConflicts(peer);
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    res.end(JSON.stringify({ ok: true, cleared }));
+    return;
+  }
+
+  // Worker signal: POST /worker/signal — local only
+  if (req.method === 'POST' && url.pathname === '/worker/signal') {
+    if (blockExternal(req, res)) return;
+    let body = '';
+    req.on('data', (c: Buffer) => { body += c.toString(); });
+    req.on('end', () => {
+      try {
+        const data = JSON.parse(body) as { worker?: string; status?: string; message?: string };
+        if (!data.worker || !data.status) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Invalid payload: requires from and memories array' }));
+          res.end(JSON.stringify({ error: "'worker' and 'status' are required" }));
           return;
         }
-
-        const result = await handleMemorySync(payload);
+        const validStatuses = ['done', 'stuck', 'error', 'working'];
+        if (!validStatuses.includes(data.status)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: `Invalid status. Use: ${validStatuses.join(', ')}` }));
+          return;
+        }
+        log.info('Worker signal received', { worker: data.worker, status: data.status, message: data.message });
+        const notification = `[Worker] ${data.worker}: ${data.status}${data.message ? ' — ' + data.message : ''}`;
+        injectText(notification);
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(result));
-      } catch (err) {
-        log.error('Memory sync error', { error: err instanceof Error ? err.message : String(err) });
+        res.end(JSON.stringify({ ok: true }));
+      } catch {
         res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Invalid request' }));
+        res.end(JSON.stringify({ error: 'Invalid JSON body' }));
       }
     });
+    return;
+  }
+
+  // Admin: GET /tasks — local only
+  if (req.method === 'GET' && url.pathname === '/tasks') {
+    if (blockExternal(req, res)) return;
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(listTasks(), null, 2));
+    return;
+  }
+
+  // Admin: POST /tasks/:name/run — local only
+  const taskRunMatch = url.pathname.match(/^\/tasks\/([a-z0-9-]+)\/run$/);
+  if (req.method === 'POST' && taskRunMatch) {
+    if (blockExternal(req, res)) return;
+    const taskName = taskRunMatch[1]!;
+    const result = await runTaskByName(taskName);
+    res.writeHead(result.ran ? 200 : 404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(result));
+    return;
+  }
+
+  // Admin: GET /logs — local only
+  // Query params: ?limit=200&module=telegram&level=error&search=keyword
+  if (req.method === 'GET' && url.pathname === '/logs') {
+    if (blockExternal(req, res)) return;
+    const logPath = path.join(projectDir, 'logs', 'daemon.log');
+    const limit = Math.min(Number(url.searchParams.get('limit')) || 200, 2000);
+    const filterModule = url.searchParams.get('module') ?? '';
+    const filterLevel = url.searchParams.get('level') ?? '';
+    const filterSearch = url.searchParams.get('search') ?? '';
+
+    try {
+      const raw = fs.readFileSync(logPath, 'utf8');
+      const lines = raw.trim().split('\n');
+      const entries: unknown[] = [];
+      for (let i = lines.length - 1; i >= 0 && entries.length < limit; i--) {
+        try {
+          const entry = JSON.parse(lines[i]!) as { module?: string; level?: string; msg?: string };
+          if (filterModule && entry.module !== filterModule) continue;
+          if (filterLevel && entry.level !== filterLevel) continue;
+          if (filterSearch && !(entry.msg ?? '').toLowerCase().includes(filterSearch.toLowerCase())) continue;
+          entries.push(entry);
+        } catch {
+          // skip non-JSON lines
+        }
+      }
+      entries.reverse();
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      });
+      res.end(JSON.stringify(entries));
+    } catch {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end('[]');
+    }
+    return;
+  }
+
+  // Admin: GET /logs/modules — local only
+  if (req.method === 'GET' && url.pathname === '/logs/modules') {
+    if (blockExternal(req, res)) return;
+    const logPath = path.join(projectDir, 'logs', 'daemon.log');
+    try {
+      const raw = fs.readFileSync(logPath, 'utf8');
+      const lines = raw.trim().split('\n');
+      const modules = new Set<string>();
+      for (const line of lines) {
+        try {
+          const entry = JSON.parse(line) as { module?: string };
+          if (entry.module) modules.add(entry.module);
+        } catch { /* skip */ }
+      }
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      });
+      res.end(JSON.stringify([...modules].sort()));
+    } catch {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end('[]');
+    }
+    return;
+  }
+
+  // Admin: GET /agent-comms/recent — local only
+  if (req.method === 'GET' && url.pathname === '/agent-comms/recent') {
+    if (blockExternal(req, res)) return;
+    const limit = Math.min(Number(url.searchParams.get('limit')) || 30, 200);
+    const logPath = path.join(projectDir, 'logs', 'agent-comms.log');
+
+    try {
+      const raw = fs.readFileSync(logPath, 'utf8');
+      const lines = raw.trim().split('\n');
+      const messages: { ts: string; direction: string; from?: string; to?: string; type?: string; text?: string }[] = [];
+
+      for (let i = lines.length - 1; i >= 0 && messages.length < limit; i--) {
+        try {
+          const entry = JSON.parse(lines[i]!) as Record<string, unknown>;
+          if (entry.direction === 'heartbeat') continue;
+          messages.push({
+            ts: entry.ts as string,
+            direction: entry.direction as string,
+            from: entry.from as string | undefined,
+            to: entry.to as string | undefined,
+            type: entry.type as string | undefined,
+            text: typeof entry.text === 'string' ? entry.text.slice(0, 300) : undefined,
+          });
+        } catch { /* skip non-JSON */ }
+      }
+
+      messages.reverse();
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify(messages));
+    } catch {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end('[]');
+    }
+    return;
+  }
+
+  // Admin: GET /git-status — local only
+  if (req.method === 'GET' && url.pathname === '/git-status') {
+    if (blockExternal(req, res)) return;
+    try {
+      const { execSync } = await import('node:child_process');
+      const branch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8', cwd: projectDir, timeout: 5_000 }).trim();
+      const aheadBehind = execSync('git rev-list --left-right --count origin/main...HEAD 2>/dev/null || echo "0\t0"', { encoding: 'utf8', cwd: projectDir, timeout: 5_000 }).trim();
+      const [behind, ahead] = aheadBehind.split('\t').map(Number);
+      const dirty = execSync('git status --porcelain', { encoding: 'utf8', cwd: projectDir, timeout: 5_000 }).trim();
+      const lastCommit = execSync('git log -1 --format="%h|%s|%ar"', { encoding: 'utf8', cwd: projectDir, timeout: 5_000 }).trim();
+      const [hash, subject, relTime] = lastCommit.split('|');
+
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({
+        branch,
+        ahead: ahead ?? 0,
+        behind: behind ?? 0,
+        dirty: dirty ? dirty.split('\n').length : 0,
+        lastCommit: { hash, subject, relativeTime: relTime },
+      }));
+    } catch {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ branch: 'unknown', ahead: 0, behind: 0, dirty: 0 }));
+    }
     return;
   }
 

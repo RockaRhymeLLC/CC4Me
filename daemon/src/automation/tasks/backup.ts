@@ -1,11 +1,17 @@
 /**
- * Backup task — weekly backup of project state.
+ * Weekly Backup task — backs up the project directory.
  *
- * Runs backup.sh which creates a zip of the project (excluding
- * node_modules, .git, logs, models) and rotates old backups.
+ * Calls the existing scripts/backup.sh which handles:
+ * - Zip creation (excluding node_modules, .venv, .git, logs, models, dist)
+ * - Integrity verification
+ * - Size sanity check
+ * - Rotation (keeps last 2 backups)
+ *
+ * Results are logged to ~/Documents/backups/ and the daemon log.
  */
 
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
+import path from 'node:path';
 import { getProjectDir } from '../../core/config.js';
 import { createLogger } from '../../core/logger.js';
 import { registerTask } from '../scheduler.js';
@@ -13,29 +19,27 @@ import { registerTask } from '../scheduler.js';
 const log = createLogger('backup');
 
 async function run(): Promise<void> {
-  const projectDir = getProjectDir();
-  const scriptPath = `${projectDir}/scripts/backup.sh`;
+  const scriptPath = path.join(getProjectDir(), 'scripts', 'backup.sh');
+  log.info('Starting weekly backup');
 
   try {
-    log.info('Starting backup');
-    const output = execSync(`bash "${scriptPath}"`, {
-      cwd: projectDir,
+    const output = execFileSync('bash', [scriptPath], {
       encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: 300_000, // 5 minute timeout
+      timeout: 300_000, // 5 minute timeout for large zips
+      cwd: getProjectDir(),
     });
 
-    // Script logs to its own file, but capture any stdout
-    if (output.trim()) {
-      log.info('Backup output', { output: output.trim() });
+    // Parse output for the summary line
+    const sizeLine = output.match(/Backup created: (.+)/);
+    if (sizeLine) {
+      log.info(`Backup complete: ${sizeLine[1]}`);
+    } else {
+      log.info('Backup script completed');
     }
-
-    log.info('Backup completed successfully');
   } catch (err) {
-    log.error('Backup failed', {
-      error: err instanceof Error ? err.message : String(err),
-    });
+    const msg = err instanceof Error ? err.message : String(err);
+    log.error('Backup failed', { error: msg });
   }
 }
 
-registerTask({ name: 'backup', run });
+registerTask({ name: 'backup', run, requiresSession: false });

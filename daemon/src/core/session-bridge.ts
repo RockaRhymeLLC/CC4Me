@@ -24,7 +24,7 @@ const log = createLogger('session-bridge');
 let _agentState: 'idle' | 'busy' = 'idle';
 let _agentStateUpdatedAt: number = 0;
 
-const STALE_STATE_MS = 5 * 60 * 1000; // 5 minutes — faster stuck-busy recovery
+const STALE_STATE_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
  * Update agent state from a hook event.
@@ -32,14 +32,10 @@ const STALE_STATE_MS = 5 * 60 * 1000; // 5 minutes — faster stuck-busy recover
  */
 export function updateAgentState(hookEvent: string): void {
   const prev = _agentState;
-  if (hookEvent === 'Stop') {
-    // Stop = main agent turn complete → idle
+  if (hookEvent === 'Stop' || hookEvent === 'SubagentStop') {
+    // Stop = agent finished responding, SubagentStop = sub-agent finished
+    // Both mean the agent is between turns — treat as idle
     _agentState = 'idle';
-  } else if (hookEvent === 'SubagentStop') {
-    // SubagentStop = Task sub-agent finished, but main agent may still be working.
-    // Don't change state — let Stop be the authoritative idle signal.
-    // This prevents SubagentStop from incorrectly setting busy after Stop fires.
-    return;
   } else {
     // PostToolUse, UserPromptSubmit, etc. — agent is working
     _agentState = 'busy';
@@ -54,18 +50,18 @@ export function updateAgentState(hookEvent: string): void {
  * Check if the agent is idle based on hook events.
  * Returns true if the last hook event was Stop (agent finished responding).
  * Falls back to true if no hook events received yet (fresh daemon start)
- * or if the last state update is stale (>10min — hooks may have stopped firing).
+ * or if the last state update is stale (>5min — hooks may have stopped firing).
  */
 export function isAgentIdle(): boolean {
   // If no hook events yet, assume idle (daemon just started)
   if (_agentStateUpdatedAt === 0) return true;
 
-  // Staleness guard: if no hooks for 10 minutes, fall back to idle.
+  // Staleness guard: if no hooks for 5 minutes, fall back to idle.
   // Prevents stuck-busy state if hooks stop firing (daemon restart,
   // hook script failure, etc.)
   if (Date.now() - _agentStateUpdatedAt > STALE_STATE_MS) {
     if (_agentState === 'busy') {
-      log.info('Agent state stale (>10min) — falling back to idle');
+      log.info('Agent state stale (>5min) — falling back to idle');
       _agentState = 'idle';
     }
     return true;
@@ -160,16 +156,16 @@ export function injectText(text: string, pressEnter = true): boolean {
       // Longer delay before Enter to ensure text is fully rendered
       execSync('sleep 0.3', { stdio: ['pipe', 'pipe', 'pipe'] });
 
-      // Send Enter with retry — sometimes the first one doesn't register
+      // Send Enter with retry + backoff — sometimes the first one doesn't register
       const MAX_ENTER_ATTEMPTS = 3;
+      const ENTER_DELAYS = [300, 500, 800]; // increasing backoff between attempts
       for (let attempt = 1; attempt <= MAX_ENTER_ATTEMPTS; attempt++) {
         execSync(`${tmux} send-keys -t ${session} Enter`, {
           stdio: ['pipe', 'pipe', 'pipe'],
         });
 
-        // Wait and verify the text was submitted (pane should no longer
-        // contain our injected text on the input line)
-        execSync('sleep 0.3', { stdio: ['pipe', 'pipe', 'pipe'] });
+        const delay = ENTER_DELAYS[attempt - 1] ?? 800;
+        execSync(`sleep ${delay / 1000}`, { stdio: ['pipe', 'pipe', 'pipe'] });
 
         if (attempt < MAX_ENTER_ATTEMPTS) {
           // Check if text is still sitting in the input line
@@ -181,7 +177,7 @@ export function injectText(text: string, pressEnter = true): boolean {
           if (!textStillPending) {
             break; // Text was submitted successfully
           }
-          log.warn(`Enter attempt ${attempt} may not have fired — retrying`);
+          log.debug(`Enter attempt ${attempt} pending — retrying (backoff ${delay}ms)`);
         }
       }
     }

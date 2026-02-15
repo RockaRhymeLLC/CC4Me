@@ -42,6 +42,11 @@ Examples:
 ### Search
 - `search "term"` - Full-text search across all memory files
 
+### Conflicts
+- `conflicts` - Scan for potential contradictions across memory files
+- Groups memories by subject/person overlap and flags where content may conflict
+- Advisory only — review results and resolve manually
+
 ## File Format (v2)
 
 Memories are stored as individual markdown files in `.claude/state/memory/memories/`.
@@ -77,8 +82,22 @@ source: user
 | `tags` | Yes | Array of searchable tags | [] |
 | `confidence` | Yes | 0.0 to 1.0 | 0.9 (user-stated), 0.7 (auto-extracted), 0.5 (inferred) |
 | `source` | Yes | user, observation, system, auto-extraction, email, conversation | user |
+| `correction_for` | No | Filename of the memory this corrects (e.g., `20260201-1200-old-fact.md`) | — |
 
-**All fields are required.** Use defaults when the value isn't obvious. The `source` field helps distinguish human-curated memories from auto-extracted ones.
+**All required fields are mandatory.** Use defaults when the value isn't obvious. The `source` field helps distinguish human-curated memories from auto-extracted ones.
+
+### Authority Hierarchy
+
+When multiple memories cover the same topic, authority determines which is trusted:
+
+1. **Source** (highest to lowest): `user` > `observation` > `email`/`conversation` > `auto-extraction` > `system`
+2. **Recency**: For equal source authority, the most recent memory wins
+3. **Confidence**: Tiebreaker when source and date are similar
+
+**Key rules:**
+- User-stated facts are canonical. Auto-extraction should never contradict a `source: user` memory.
+- When a user explicitly corrects a fact, set `correction_for` on the new memory to link it to the old one. The old memory remains for audit trail but the corrected version is authoritative.
+- Use `/memory conflicts` to surface potential contradictions for manual review.
 
 ### Categories
 - `person` — People, contacts, relationships
@@ -121,6 +140,28 @@ Filename: 20260203-0445-prefers-dark-mode.md
 1. Use Grep to search `.claude/state/memory/memories/` for the search term
 2. Return matching lines with file context
 3. Include frontmatter metadata (category, importance) in results
+
+### Conflict Detection
+1. Glob all `.md` files in `memories/` directory
+2. Parse frontmatter from each file (subject, category, source, date, confidence)
+3. Group memories by similarity:
+   - Same person (category: person, same name in subject or body)
+   - Same topic (similar subject lines or overlapping tags)
+4. For each group with 2+ memories, compare content for contradictions
+5. Display as advisory report — flag potential conflicts, let user decide resolution
+6. When correcting a conflict: use `/memory add` with `correction_for:filename.md`
+
+**Output format:**
+```
+## Memory Conflicts Report
+
+### Group: Dave Hurley
+- 20260201-1200-dave-identity.md (user, confidence 0.9) — "Prefers Dave, works at Acme"
+- 20260205-0900-dave-work.md (auto-extraction, confidence 0.7) — "Dave works at Initech"
+⚠️  Possible conflict: workplace
+
+### No other conflicts found.
+```
 
 ## Memory Architecture
 

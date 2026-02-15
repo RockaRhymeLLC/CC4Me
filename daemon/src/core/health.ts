@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { loadConfig, resolveProjectPath, getProjectDir } from './config.js';
 import { sessionExists } from './session-bridge.js';
+import { getDeliveryStats } from '../comms/transcript-stream.js';
 import { createLogger } from './logger.js';
 
 const log = createLogger('health');
@@ -84,7 +85,7 @@ function checkLogs(): HealthResult[] {
     const filePath = path.join(logDir, file);
     const stats = fs.statSync(filePath);
     totalSize += stats.size;
-    if (stats.size > 1_048_576) {
+    if (stats.size > 5 * 1_048_576) {
       largeFiles.push(`${file}: ${(stats.size / 1_048_576).toFixed(1)}MB`);
     }
   }
@@ -223,12 +224,44 @@ function checkState(): HealthResult[] {
   return results;
 }
 
+function checkDelivery(): HealthResult[] {
+  const results: HealthResult[] = [];
+  const stats = getDeliveryStats();
+
+  if (stats.entries === 0) {
+    results.push({ severity: 'ok', category: 'Delivery', message: 'No delivery log entries yet' });
+    return results;
+  }
+
+  // Overall delivery success rate
+  const failRate = stats.totalRetryExhausted / stats.entries;
+  const severity: Severity = failRate > 0.1 ? 'error' : failRate > 0 ? 'warn' : 'ok';
+  const topLayer = Object.entries(stats.byLayer).sort((a, b) => b[1] - a[1])[0];
+  results.push({
+    severity,
+    category: 'Delivery',
+    message: `${stats.totalDelivered} delivered, ${stats.totalDedup} deduped, ${stats.totalRetryExhausted} failed`,
+    detail: topLayer ? `Primary: ${topLayer[0]} (${Math.round(topLayer[1] / stats.entries * 100)}%)` : undefined,
+  });
+
+  return results;
+}
+
 // ── Public API ───────────────────────────────────────────────
+
+let cachedReport: HealthReport | null = null;
+let cachedAt = 0;
+const CACHE_TTL_MS = 30_000;
 
 /**
  * Run all health checks and return a structured report.
+ * Results are cached for 30s to avoid redundant checks from polling clients.
  */
 export async function runHealthCheck(): Promise<HealthReport> {
+  const now = Date.now();
+  if (cachedReport && (now - cachedAt) < CACHE_TTL_MS) {
+    return cachedReport;
+  }
   const [networkResults, peerResults] = await Promise.all([checkNetwork(), checkPeers()]);
   const results = [
     ...checkDisk(),
@@ -238,6 +271,7 @@ export async function runHealthCheck(): Promise<HealthReport> {
     ...networkResults,
     ...peerResults,
     ...checkState(),
+    ...checkDelivery(),
   ];
 
   const summary = {
@@ -252,7 +286,15 @@ export async function runHealthCheck(): Promise<HealthReport> {
     results,
   };
 
-  log.info(`Health check: ${summary.ok} ok, ${summary.warnings} warnings, ${summary.errors} errors`);
+  const hasIssues = summary.warnings > 0 || summary.errors > 0;
+  if (hasIssues) {
+    log.info(`Health check: ${summary.ok} ok, ${summary.warnings} warnings, ${summary.errors} errors`);
+  } else {
+    log.debug(`Health check: ${summary.ok} ok`);
+  }
+
+  cachedReport = report;
+  cachedAt = Date.now();
 
   return report;
 }

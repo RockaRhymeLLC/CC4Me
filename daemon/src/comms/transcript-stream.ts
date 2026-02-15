@@ -268,9 +268,20 @@ function readNewMessages(filePath: string): boolean {
     }
     return foundAny;
   } catch (err) {
-    log.error('readNewMessages error', {
-      error: err instanceof Error ? err.message : String(err),
-    });
+    // If the file was deleted/rotated, clear our reference so the background
+    // check discovers the next transcript on its next cycle
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') {
+      log.info(`Transcript file gone: ${path.basename(filePath)}, will discover next on poll`);
+      if (_currentFile === filePath) {
+        _currentFile = null;
+        _fileOffset = 0;
+      }
+    } else {
+      log.error('readNewMessages error', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
     return false;
   }
 }
@@ -342,14 +353,17 @@ function handleAssistantMessage(msg: TranscriptMessage): boolean {
  * Switch to a new transcript file.
  */
 function switchToFile(filePath: string): void {
-  _currentFile = filePath;
   // Start from end of file (don't replay old messages)
   try {
     _fileOffset = fs.statSync(filePath).size;
+    _currentFile = filePath;
     log.info(`Watching transcript: ${path.basename(filePath)} (from byte ${_fileOffset})`);
   } catch {
+    // File may have been rotated/deleted between discovery and stat — clear reference
+    // so readNewMessages() isn't called with a stale path
+    _currentFile = null;
     _fileOffset = 0;
-    log.warn(`Could not stat transcript: ${path.basename(filePath)}, starting from 0`);
+    log.debug(`Transcript gone before stat: ${path.basename(filePath)}, will retry on next poll`);
   }
 }
 
@@ -448,7 +462,7 @@ function backgroundCheck(): void {
     _currentHookEvent = null; // Background check, no hook
     const found = readNewMessages(_currentFile);
     if (found) {
-      log.info('Background check: found and delivered missed message(s)');
+      log.debug('Background check: found and delivered missed message(s)');
       logDelivery({
         ts: new Date().toISOString(),
         event: 'delivered',
@@ -650,4 +664,96 @@ export function stopTranscriptStream(): void {
   cancelRetryLoop();
 
   log.info('Transcript stream stopped');
+}
+
+// ── Delivery stats ──────────────────────────────────────────
+
+export interface DeliveryStats {
+  totalDelivered: number;
+  totalDedup: number;
+  totalRetryExhausted: number;
+  byLayer: Record<string, number>;
+  byHookEvent: Record<string, number>;
+  avgRetryLatencyMs: number | null;
+  avgMessageLen: number;
+  timeSinceLastDelivery: number | null;  // ms, null if no deliveries
+  entries: number;  // total log entries analyzed
+}
+
+/**
+ * Read the delivery log and compute aggregate stats.
+ */
+export function getDeliveryStats(): DeliveryStats {
+  const logPath = getDeliveryLogPath();
+  const stats: DeliveryStats = {
+    totalDelivered: 0,
+    totalDedup: 0,
+    totalRetryExhausted: 0,
+    byLayer: {},
+    byHookEvent: {},
+    avgRetryLatencyMs: null,
+    avgMessageLen: 0,
+    timeSinceLastDelivery: null,
+    entries: 0,
+  };
+
+  let entries: DeliveryLogEntry[] = [];
+  try {
+    const content = fs.readFileSync(logPath, 'utf8');
+    const lines = content.split('\n').filter(l => l.trim());
+    entries = lines.map(l => JSON.parse(l) as DeliveryLogEntry);
+  } catch {
+    return stats;
+  }
+
+  stats.entries = entries.length;
+  if (entries.length === 0) return stats;
+
+  let totalLen = 0;
+  let retryLatencies: number[] = [];
+  let lastDeliveryTs = 0;
+
+  for (const e of entries) {
+    // Count by event type
+    if (e.event === 'delivered') stats.totalDelivered++;
+    else if (e.event === 'dedup') stats.totalDedup++;
+    else if (e.event === 'retry-exhausted') stats.totalRetryExhausted++;
+
+    // Count by layer
+    if (e.layer) {
+      stats.byLayer[e.layer] = (stats.byLayer[e.layer] || 0) + 1;
+    }
+
+    // Count by hook event
+    const hookKey = e.hookEvent || 'background';
+    stats.byHookEvent[hookKey] = (stats.byHookEvent[hookKey] || 0) + 1;
+
+    // Aggregate message length
+    totalLen += e.len || 0;
+
+    // Collect retry latencies
+    if (e.elapsed != null && e.elapsed > 0) {
+      retryLatencies.push(e.elapsed);
+    }
+
+    // Track last delivery time
+    if (e.event === 'delivered' && e.ts) {
+      const ts = new Date(e.ts).getTime();
+      if (ts > lastDeliveryTs) lastDeliveryTs = ts;
+    }
+  }
+
+  stats.avgMessageLen = Math.round(totalLen / entries.length);
+
+  if (retryLatencies.length > 0) {
+    stats.avgRetryLatencyMs = Math.round(
+      retryLatencies.reduce((a, b) => a + b, 0) / retryLatencies.length
+    );
+  }
+
+  if (lastDeliveryTs > 0) {
+    stats.timeSinceLastDelivery = Date.now() - lastDeliveryTs;
+  }
+
+  return stats;
 }
