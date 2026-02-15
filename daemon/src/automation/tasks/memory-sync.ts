@@ -88,7 +88,7 @@ interface SyncState {
 
 // ── Constants ─────────────────────────────────────────────────
 
-const PRIVATE_TAGS = new Set(['pii', 'credential', 'financial', 'ssn']);
+const PRIVATE_TAGS = new Set(['pii', 'credential', 'financial', 'ssn', 'keychain', 'password']);
 const PRIVATE_CATEGORIES = new Set(['account']);
 const SYNC_STATE_FILE = '.claude/state/memory/sync-state.json';
 const MEMORIES_DIR = '.claude/state/memory/memories';
@@ -745,4 +745,4 @@ export function clearMemoryConflicts(peer?: string): number {
   return cleared;
 }
 
-registerTask({ name: 'memory-sync', run });
+registerTask({ name: 'memory-sync', run, requiresSession: false });
