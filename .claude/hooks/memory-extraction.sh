@@ -42,36 +42,55 @@ if [ -z "$TRANSCRIPT_PATH" ] || [ ! -f "$TRANSCRIPT_PATH" ]; then
 fi
 
 # Build the prompt and write to a temp file (avoids shell quoting issues with multi-line args)
-PROMPT_FILE=$(mktemp /tmp/bmo-extract-prompt.XXXXXX)
+PROMPT_FILE=$(mktemp /tmp/r2d2-extract-prompt.XXXXXX)
 cat > "$PROMPT_FILE" <<PROMPT_EOF
-You are a memory extraction agent for a personal assistant named BMO.
+You are a memory extraction agent for a personal assistant named R2D2.
 
 Read the transcript file at: $TRANSCRIPT_PATH
 Read only the LAST 200 lines to stay fast.
 
 Extract any NEW persistent facts worth remembering. Write each as an individual memory file to: $MEMORY_DIR
 
+CATEGORIES (use ONLY these 6):
+- person: Names, relationships, contact info, preferences about specific people
+- preference: How the user likes things done, tool choices, style preferences
+- technical: Environment details, architecture decisions, tool configurations
+- account: Service accounts, usernames, non-secret identifiers
+- event: Things that happened on specific dates (trips, milestones, meetings)
+- decision: Significant decisions made (with reasoning if stated)
+
+IMPORTANCE SCALE (1-5):
+- 1: Critical — core identity, primary contacts, security-related
+- 2: High — important relationships, key preferences, major decisions
+- 3: Medium — useful context, general facts (DEFAULT for most extractions)
+- 4: Low — nice to know, minor details
+- 5: Trivial — barely worth keeping
+
+CONFIDENCE SCALE (0.0-1.0):
+- 1.0: User explicitly stated this fact
+- 0.9: Clear factual outcome from session (e.g., "commit merged")
+- 0.7-0.8: Reasonably inferred from context (DEFAULT: 0.7)
+- <0.7: Don't extract — too uncertain
+
+DEDUP CHECK (REQUIRED before each write):
+1. Use Grep to search $MEMORY_DIR for the subject keywords
+2. If a similar memory exists, skip — don't create near-duplicates
+3. Check both subject lines AND content for overlap
+
 RULES:
 1. Run \`date '+%Y%m%d-%H%M'\` via Bash to get the current timestamp for filenames.
-2. Look for NEW persistent facts in these categories:
-   - person: Names, relationships, contact info, preferences about specific people
-   - preference: How the user likes things done, tool choices, style preferences
-   - technical: Environment details, architecture decisions, tool configurations
-   - account: Service accounts, usernames, non-secret identifiers
-   - decision: Significant decisions made (with reasoning if stated)
-3. For each candidate, use Grep to search $MEMORY_DIR to check if it already exists. Skip duplicates.
-4. Only write a memory if ALL of these are true:
+2. Only write a memory if ALL of these are true:
    - Genuinely persistent (not transient session context)
-   - Not already in memories
+   - Not already in memories (passed dedup check)
    - Stated by the user or a clear factual outcome (not inferred)
    - Would be useful to recall in a future session
-5. Write to $MEMORY_DIR with format:
+3. Write to $MEMORY_DIR with format:
    - Filename: YYYYMMDD-HHMM-slug.md
-   - YAML frontmatter: date (ISO 8601), category, importance (1-5), subject, tags (list), confidence (0.7), source (auto-extraction)
+   - YAML frontmatter: date (ISO 8601), category, importance (1-5), subject, tags (list), confidence, source (auto-extraction)
    - Markdown body with the fact
-6. Quality over quantity. Extracting 0 facts is perfectly fine and expected most turns.
-7. Do NOT extract: temp task context, file paths being worked on, routine operations, things tracked in todos, code snippets, error messages, implementation details, secrets, passwords, or API keys.
-8. When done, just exit. Do not output anything extra.
+4. Quality over quantity. Extracting 0 facts is perfectly fine and expected most turns.
+5. Do NOT extract: temp task context, file paths being worked on, routine operations, things tracked in todos, code snippets, error messages, implementation details, secrets, passwords, or API keys.
+6. When done, just exit. Do not output anything extra.
 PROMPT_EOF
 
 # Run extraction in a separate claude session (from /tmp to avoid loading project hooks)

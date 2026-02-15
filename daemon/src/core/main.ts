@@ -331,6 +331,7 @@ function parseMemoryFrontmatter(content: string): { source?: string; subject?: s
 
 async function handleMemorySync(payload: MemorySyncPayload): Promise<MemorySyncResult> {
   const memoryDir = path.join(getProjectDir(), '.claude', 'state', 'memory', 'memories');
+  const conflictStateFile = path.join(getProjectDir(), '.claude', 'state', 'memory', 'sync-conflicts.json');
   const result: MemorySyncResult = {
     ok: true,
     accepted: 0,
@@ -339,6 +340,17 @@ async function handleMemorySync(payload: MemorySyncPayload): Promise<MemorySyncR
     conflicts: 0,
     details: [],
   };
+
+  // Load known conflict subjects to avoid repeat notifications
+  let knownConflicts: string[] = [];
+  try {
+    if (fs.existsSync(conflictStateFile)) {
+      knownConflicts = JSON.parse(fs.readFileSync(conflictStateFile, 'utf8'));
+    }
+  } catch {
+    // Ignore parse errors, start fresh
+  }
+  const newConflictSubjects: string[] = [];
 
   // Ensure memory directory exists
   if (!fs.existsSync(memoryDir)) {
@@ -373,6 +385,10 @@ async function handleMemorySync(payload: MemorySyncPayload): Promise<MemorySyncR
           // Don't overwrite - flag as conflict
           result.conflicts++;
           result.details.push(`Conflict: ${mem.filename} (local vs peer-${payload.from})`);
+          // Track if this is a NEW conflict (not previously notified)
+          if (!knownConflicts.includes(mem.subject)) {
+            newConflictSubjects.push(mem.subject);
+          }
           continue;
         }
 
@@ -399,10 +415,16 @@ async function handleMemorySync(payload: MemorySyncPayload): Promise<MemorySyncR
     }
   }
 
-  // Log and notify if conflicts
-  if (result.conflicts > 0) {
-    log.warn(`Memory sync: ${result.conflicts} conflict(s) from peer-${payload.from}`);
-    injectText(`[Memory Sync] ${result.conflicts} conflict(s) from peer-${payload.from}. Review needed.`);
+  // Only notify for NEW conflicts (avoid spam on re-detection)
+  if (newConflictSubjects.length > 0) {
+    // Save new conflicts to state file
+    const allConflicts = [...new Set([...knownConflicts, ...newConflictSubjects])];
+    fs.writeFileSync(conflictStateFile, JSON.stringify(allConflicts, null, 2));
+
+    log.warn(`Memory sync: ${newConflictSubjects.length} NEW conflict(s) from peer-${payload.from}`);
+    injectText(`[Memory Sync] ${newConflictSubjects.length} conflict(s) from peer-${payload.from}. Review needed.`);
+  } else if (result.conflicts > 0) {
+    log.debug(`Memory sync: ${result.conflicts} known conflict(s) from peer-${payload.from} (already notified)`);
   }
 
   log.info(`Memory sync from ${payload.from}`, {
@@ -410,6 +432,7 @@ async function handleMemorySync(payload: MemorySyncPayload): Promise<MemorySyncR
     skipped: result.skipped,
     updated: result.updated,
     conflicts: result.conflicts,
+    newConflicts: newConflictSubjects.length,
   });
 
   return result;
