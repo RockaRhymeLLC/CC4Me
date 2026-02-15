@@ -5,7 +5,9 @@
 import { loadConfig } from '../../../core/config.js';
 import { createLogger } from '../../../core/logger.js';
 import { GraphProvider } from './graph-provider.js';
+import { HimalayaProvider } from './himalaya-provider.js';
 import { JmapProvider } from './jmap-provider.js';
+import { OutlookProvider } from './outlook-provider.js';
 
 const log = createLogger('email');
 
@@ -25,6 +27,7 @@ export interface EmailProvider {
   listInbox(limit?: number, unreadOnly?: boolean): Promise<EmailMessage[]>;
   readEmail(id: string): Promise<EmailMessage | null>;
   markAsRead(id: string): Promise<void>;
+  moveEmail?(id: string, folder: string): Promise<void>;
   searchEmails(query: string, limit?: number): Promise<EmailMessage[]>;
   sendEmail(to: string, subject: string, body: string, options?: SendOptions): Promise<void>;
 }
@@ -55,6 +58,12 @@ export function getEmailProviders(): EmailProvider[] {
         break;
       case 'jmap':
         provider = new JmapProvider();
+        break;
+      case 'himalaya':
+        provider = new HimalayaProvider(providerConfig.account ?? 'gmail');
+        break;
+      case 'outlook':
+        provider = new OutlookProvider();
         break;
       default:
         log.warn(`Unknown email provider type: ${providerConfig.type}`);

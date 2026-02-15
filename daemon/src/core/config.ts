@@ -36,12 +36,23 @@ export interface TelegramChannelConfig {
 }
 
 export interface EmailProviderConfig {
-  type: 'graph' | 'jmap';
+  type: 'graph' | 'jmap' | 'himalaya' | 'outlook';
+  account?: string;  // For himalaya: 'gmail' or 'outlook'
+}
+
+export interface EmailTriageConfig {
+  enabled: boolean;
+  vip: string[];
+  junk: string[];
+  newsletters: string[];
+  receipts: string[];
+  auto_read: string[];
 }
 
 export interface EmailChannelConfig {
   enabled: boolean;
   providers: EmailProviderConfig[];
+  triage?: EmailTriageConfig;
 }
 
 export interface VoiceSttConfig {
@@ -59,7 +70,7 @@ export interface VoiceTtsConfig {
 
 export interface VoiceWakeWordConfig {
   engine: string;        // e.g. 'openwakeword'
-  phrase: string;        // e.g. 'Hey BMO'
+  phrase: string;        // e.g. 'Hey Assistant'
 }
 
 export interface VoiceClientConfig {
@@ -111,6 +122,7 @@ export interface AgentCommsPeerConfig {
   name: string;
   host: string;
   port: number;
+  ip?: string;             // Optional fallback IP when DNS fails
 }
 
 export interface AgentCommsConfig {
@@ -194,7 +206,7 @@ const DEFAULTS: CC4MeConfig = {
       enabled: false,
       stt: { engine: 'whisper-cpp', model: 'small.en', language: 'en' },
       tts: { engine: 'qwen3-tts-mlx', model: 'Qwen/Qwen3-TTS-0.6B', voice: 'default', speed: 1.0 },
-      wake_word: { engine: 'openwakeword', phrase: 'Hey BMO' },
+      wake_word: { engine: 'openwakeword', phrase: 'Hey Assistant' },
       client: {
         listen_after_response: 3,
         chime_timeout: 5,

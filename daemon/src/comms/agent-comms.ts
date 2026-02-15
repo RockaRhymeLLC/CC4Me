@@ -39,14 +39,19 @@ const VALID_TYPES = ['text', 'status', 'coordination', 'pr-review'] as const;
 
 /**
  * Map agent IDs to display names for injection.
- * "r2d2" → "R2", "bmo" → "BMO", etc.
+ * Reads from config peers, falls back to titlecasing the agent ID.
  */
 function getDisplayName(agentId: string): string {
-  const names: Record<string, string> = {
-    r2d2: 'R2',
-    bmo: 'BMO',
-  };
-  return names[agentId.toLowerCase()] ?? agentId;
+  const config = loadConfig();
+  const peers = config['agent-comms']?.peers ?? [];
+  for (const peer of peers) {
+    if (peer.name.toLowerCase() === agentId.toLowerCase()) {
+      // Use the peer name as-is (it's already the configured display name)
+      return peer.name;
+    }
+  }
+  // Fallback: titlecase the agent ID
+  return agentId.charAt(0).toUpperCase() + agentId.slice(1);
 }
 
 // ── Message Formatting ────────────────────────────────────────
@@ -86,6 +91,36 @@ function formatMessage(msg: AgentMessage): string {
 
 // ── JSONL Logging ─────────────────────────────────────────────
 
+const COMMS_LOG_MAX_SIZE = 5 * 1024 * 1024; // 5 MB
+const COMMS_LOG_MAX_FILES = 3;
+
+function rotateCommsLogIfNeeded(logPath: string): void {
+  try {
+    if (!fs.existsSync(logPath)) return;
+    const stats = fs.statSync(logPath);
+    if (stats.size < COMMS_LOG_MAX_SIZE) return;
+
+    // Rotate: agent-comms.log -> .1 -> .2 -> ...
+    for (let i = COMMS_LOG_MAX_FILES - 1; i >= 1; i--) {
+      const src = `${logPath}.${i}`;
+      const dst = `${logPath}.${i + 1}`;
+      if (fs.existsSync(src)) {
+        if (i + 1 >= COMMS_LOG_MAX_FILES) {
+          fs.unlinkSync(src);
+        } else {
+          fs.renameSync(src, dst);
+        }
+      }
+    }
+    fs.renameSync(logPath, `${logPath}.1`);
+    log.info('Rotated agent-comms.log');
+  } catch (err) {
+    log.warn('Failed to rotate agent-comms.log', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 function logCommsEntry(entry: CommsLogEntry): void {
   const logPath = resolveProjectPath('logs', 'agent-comms.log');
 
@@ -95,6 +130,7 @@ function logCommsEntry(entry: CommsLogEntry): void {
     fs.mkdirSync(logDir, { recursive: true });
   }
 
+  rotateCommsLogIfNeeded(logPath);
   const line = JSON.stringify(entry) + '\n';
   fs.appendFileSync(logPath, line);
 }
@@ -339,12 +375,49 @@ export async function sendAgentMessage(
   });
 }
 
+// ── Peer State Cache ─────────────────────────────────────────
+
+export interface PeerState {
+  status: 'idle' | 'busy' | 'unknown';
+  updatedAt: number;   // Date.now()
+  latencyMs?: number;
+}
+
+/** Cached peer states from heartbeat exchanges. */
+const _peerStates = new Map<string, PeerState>();
+
+/** Update cached state for a peer (called by peer-heartbeat task). */
+export function updatePeerState(peerName: string, state: PeerState): void {
+  _peerStates.set(peerName.toLowerCase(), state);
+}
+
+/** Get cached state for a specific peer. */
+export function getPeerState(peerName: string): PeerState | undefined {
+  return _peerStates.get(peerName.toLowerCase());
+}
+
+/** Get all cached peer states. */
+export function getAllPeerStates(): Record<string, PeerState> {
+  const result: Record<string, PeerState> = {};
+  for (const [name, state] of _peerStates) {
+    result[name] = state;
+  }
+  return result;
+}
+
 // ── Agent Status ──────────────────────────────────────────────
+
+export interface AgentStatusResponse {
+  agent: string;
+  status: 'idle' | 'busy';
+  uptime: number;
+}
 
 /**
  * Get this agent's current status for the /agent/status endpoint.
+ * Used for both GET (simple status check) and POST (heartbeat exchange).
  */
-export function getAgentStatus(): { agent: string; status: 'idle' | 'busy'; uptime: number } {
+export function getAgentStatus(): AgentStatusResponse {
   const config = loadConfig();
   return {
     agent: config.agent.name,

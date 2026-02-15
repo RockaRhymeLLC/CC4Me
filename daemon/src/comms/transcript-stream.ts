@@ -268,9 +268,20 @@ function readNewMessages(filePath: string): boolean {
     }
     return foundAny;
   } catch (err) {
-    log.error('readNewMessages error', {
-      error: err instanceof Error ? err.message : String(err),
-    });
+    // If the file was deleted/rotated, clear our reference so the background
+    // check discovers the next transcript on its next cycle
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') {
+      log.info(`Transcript file gone: ${path.basename(filePath)}, will discover next on poll`);
+      if (_currentFile === filePath) {
+        _currentFile = null;
+        _fileOffset = 0;
+      }
+    } else {
+      log.error('readNewMessages error', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
     return false;
   }
 }
@@ -342,14 +353,17 @@ function handleAssistantMessage(msg: TranscriptMessage): boolean {
  * Switch to a new transcript file.
  */
 function switchToFile(filePath: string): void {
-  _currentFile = filePath;
   // Start from end of file (don't replay old messages)
   try {
     _fileOffset = fs.statSync(filePath).size;
+    _currentFile = filePath;
     log.info(`Watching transcript: ${path.basename(filePath)} (from byte ${_fileOffset})`);
   } catch {
+    // File may have been rotated/deleted between discovery and stat — clear reference
+    // so readNewMessages() isn't called with a stale path
+    _currentFile = null;
     _fileOffset = 0;
-    log.warn(`Could not stat transcript: ${path.basename(filePath)}, starting from 0`);
+    log.debug(`Transcript gone before stat: ${path.basename(filePath)}, will retry on next poll`);
   }
 }
 
@@ -448,7 +462,7 @@ function backgroundCheck(): void {
     _currentHookEvent = null; // Background check, no hook
     const found = readNewMessages(_currentFile);
     if (found) {
-      log.info('Background check: found and delivered missed message(s)');
+      log.debug('Background check: found and delivered missed message(s)');
       logDelivery({
         ts: new Date().toISOString(),
         event: 'delivered',

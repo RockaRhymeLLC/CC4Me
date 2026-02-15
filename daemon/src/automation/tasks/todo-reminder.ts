@@ -25,10 +25,10 @@ async function run(): Promise<void> {
 
   if (!fs.existsSync(todosDir)) return;
 
-  // Count open and in-progress todos
+  // Count open, in-progress, and blocked todos
   const files = fs.readdirSync(todosDir);
   const openTodos = files.filter(f =>
-    (f.includes('-open-') || f.includes('-in-progress-')) && f.endsWith('.json'),
+    (f.includes('-open-') || f.includes('-in-progress-') || f.includes('-blocked-')) && f.endsWith('.json'),
   );
   const openCount = openTodos.length;
 
@@ -43,22 +43,39 @@ async function run(): Promise<void> {
     return;
   }
 
-  // Find the highest priority todo to suggest
-  let suggestion = '';
-  try {
-    const sorted = openTodos.sort(); // Files sort by priority prefix (1-, 2-, 3-, 4-)
-    const topFile = sorted[0];
-    if (topFile) {
-      const todo = JSON.parse(fs.readFileSync(`${todosDir}/${topFile}`, 'utf8'));
-      suggestion = ` Highest priority: [${todo.id}] ${todo.title}`;
+  // Categorize todos: actionable vs blocked
+  let blockedCount = 0;
+  const actionable: { id: string; title: string; file: string }[] = [];
+  for (const file of openTodos) {
+    try {
+      const todo = JSON.parse(fs.readFileSync(`${todosDir}/${file}`, 'utf8'));
+      if (todo.status === 'blocked' || file.includes('-blocked-')) {
+        blockedCount++;
+      } else {
+        actionable.push({ id: todo.id, title: todo.title, file });
+      }
+    } catch {
+      // Ignore parse errors
     }
-  } catch {
-    // Ignore parse errors, just omit the suggestion
   }
 
-  log.info(`Reminding about ${openCount} open todo(s)`);
+  // If ALL todos are blocked, skip the nag — just log it
+  if (actionable.length === 0 && blockedCount > 0) {
+    log.debug(`All ${blockedCount} todo(s) are blocked — skipping reminder`);
+    return;
+  }
 
-  const reminder = `[System] You have ${openCount} open todo(s).${suggestion} Run /todo list, pick one, and start working on it now.`;
+  // Find the highest priority actionable todo to suggest
+  let suggestion = '';
+  const sorted = actionable.sort((a, b) => a.file.localeCompare(b.file));
+  if (sorted[0]) {
+    suggestion = ` Highest priority: [${sorted[0].id}] ${sorted[0].title}`;
+  }
+
+  const blockedNote = blockedCount > 0 ? ` (${blockedCount} blocked)` : '';
+  log.info(`Reminding about ${actionable.length} actionable todo(s)${blockedNote}`);
+
+  const reminder = `[System] You have ${actionable.length} actionable todo(s)${blockedNote}.${suggestion} Run /todo list, pick one, and start working on it now.`;
   injectText(reminder);
 }
 

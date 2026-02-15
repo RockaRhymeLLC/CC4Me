@@ -85,7 +85,7 @@ function checkLogs(): HealthResult[] {
     const filePath = path.join(logDir, file);
     const stats = fs.statSync(filePath);
     totalSize += stats.size;
-    if (stats.size > 1_048_576) {
+    if (stats.size > 5 * 1_048_576) {
       largeFiles.push(`${file}: ${(stats.size / 1_048_576).toFixed(1)}MB`);
     }
   }
@@ -249,10 +249,19 @@ function checkDelivery(): HealthResult[] {
 
 // ── Public API ───────────────────────────────────────────────
 
+let cachedReport: HealthReport | null = null;
+let cachedAt = 0;
+const CACHE_TTL_MS = 30_000;
+
 /**
  * Run all health checks and return a structured report.
+ * Results are cached for 30s to avoid redundant checks from polling clients.
  */
 export async function runHealthCheck(): Promise<HealthReport> {
+  const now = Date.now();
+  if (cachedReport && (now - cachedAt) < CACHE_TTL_MS) {
+    return cachedReport;
+  }
   const [networkResults, peerResults] = await Promise.all([checkNetwork(), checkPeers()]);
   const results = [
     ...checkDisk(),
@@ -277,7 +286,15 @@ export async function runHealthCheck(): Promise<HealthReport> {
     results,
   };
 
-  log.info(`Health check: ${summary.ok} ok, ${summary.warnings} warnings, ${summary.errors} errors`);
+  const hasIssues = summary.warnings > 0 || summary.errors > 0;
+  if (hasIssues) {
+    log.info(`Health check: ${summary.ok} ok, ${summary.warnings} warnings, ${summary.errors} errors`);
+  } else {
+    log.debug(`Health check: ${summary.ok} ok`);
+  }
+
+  cachedReport = report;
+  cachedAt = Date.now();
 
   return report;
 }
