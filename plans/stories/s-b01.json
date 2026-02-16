@@ -11,7 +11,7 @@
   "created": "2026-02-07T05:00:00Z",
   "updated": "2026-02-07T06:00:00Z",
   "notes": [
-    "2026-02-07: Account created by Dave (Turnstile CAPTCHA blocked automation). Org: bmo-hurley, email: bmo_hurley@fastmail.com. API key and project ID stored in Keychain. Test session created via SDK, navigated to Wikipedia Adventure Time page, live view URL sent to Dave via Telegram. Dave confirmed: desktop page, can zoom and scroll. GO verdict — usable for hand-off scenarios. Skipping Developer plan upgrade for now (free tier sufficient for PoC build)."
+    "2026-02-07: Account created by user (Turnstile CAPTCHA blocked automation). Org and email configured in Browserbase dashboard. API key and project ID stored in Keychain. Test session created via SDK, navigated to Wikipedia Adventure Time page, live view URL sent to user via Telegram. User confirmed: desktop page, can zoom and scroll. GO verdict — usable for hand-off scenarios. Skipping Developer plan upgrade for now (free tier sufficient for PoC build)."
   ],
   "files": ["/tmp/bb-signup/test-liveview2.mjs"],
   "acceptanceCriteria": [
