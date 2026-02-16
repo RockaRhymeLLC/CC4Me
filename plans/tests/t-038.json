@@ -1,0 +1,46 @@
+{
+  "id": "t-038",
+  "title": "Relay rejects unsigned/forged messages",
+  "description": "Verify that the relay enforces signature validation and rejects tampered or unsigned messages.",
+  "storyRefs": [
+    "s-n03"
+  ],
+  "planRef": "plans/20260216-cc4me-network.plan.md",
+  "type": "story",
+  "status": "passed",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Register and approve agent \"legit\"",
+      "expected": "Agent active"
+    },
+    {
+      "order": 2,
+      "action": "POST /relay/send with no X-Signature header",
+      "expected": "Returns 401 Unauthorized"
+    },
+    {
+      "order": 3,
+      "action": "POST /relay/send with X-Agent:\"legit\" but wrong signature (signed with different key)",
+      "expected": "Returns 401 Unauthorized (signature mismatch)"
+    },
+    {
+      "order": 4,
+      "action": "POST /relay/send with X-Agent:\"nonexistent\" and any signature",
+      "expected": "Returns 401 Unauthorized (unknown agent)"
+    },
+    {
+      "order": 5,
+      "action": "POST /relay/send claiming to be from \"legit\" but body says from:\"other\"",
+      "expected": "Returns 400 Bad Request (from field must match X-Agent)"
+    },
+    {
+      "order": 6,
+      "action": "POST /relay/send with valid signature from \"legit\"",
+      "expected": "Returns 200 (accepted)"
+    }
+  ],
+  "created": "2026-02-16T03:50:04Z",
+  "executedAt": "2026-02-16T04:06:09.941152Z",
+  "result": "All steps passed"
+}

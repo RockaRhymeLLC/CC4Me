@@ -160,13 +160,32 @@ Ask user's preferred notification channel:
 
 Write choice to `.claude/state/channel.txt`
 
-### 5. Memory Initialization
+### 5. CC4Me Network (Optional)
+
+Enable internet-scale agent-to-agent communication via the CC4Me Relay:
+
+1. Add to `cc4me.config.yaml`:
+   ```yaml
+   network:
+     enabled: true
+     relay_url: "https://relay.bmobot.ai"
+     owner_email: "agent@example.com"
+   ```
+2. Restart daemon — it will auto-generate an Ed25519 keypair and register with the relay
+3. Identity key stored as `credential-cc4me-agent-key` in Keychain (auto-generated, never manual)
+4. Registration starts as "pending" — relay admin must approve via `POST /registry/agents/:name/approve`
+5. Once approved, agent can send/receive messages over the internet
+6. Add `relay-inbox-poll` task to scheduler (interval: 30s) to poll for incoming messages
+
+Creates: `credential-cc4me-agent-key` in Keychain (auto)
+
+### 6. Memory Initialization
 - Copy memory template
 - Add initial facts about user (name, preferences mentioned during setup)
 
 Creates: `.claude/state/memory.md`
 
-### 6. Calendar Initialization
+### 7. Calendar Initialization
 - Copy calendar template
 - Ready for use
 

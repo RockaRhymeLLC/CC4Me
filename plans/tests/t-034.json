@@ -1,0 +1,46 @@
+{
+  "id": "t-034",
+  "title": "Agent registration and approval flow",
+  "description": "Verify the complete agent registration lifecycle: register (pending), approve (active), directory listing.",
+  "storyRefs": [
+    "s-n02"
+  ],
+  "planRef": "plans/20260216-cc4me-network.plan.md",
+  "type": "story",
+  "status": "passed",
+  "steps": [
+    {
+      "order": 1,
+      "action": "POST /registry/agents with {name:\"test-agent\", publicKey:\"<valid-key>\", ownerEmail:\"test@example.com\"}",
+      "expected": "Returns 201 with {name, status:\"pending\"}"
+    },
+    {
+      "order": 2,
+      "action": "GET /registry/agents",
+      "expected": "Returns array containing test-agent with status \"pending\""
+    },
+    {
+      "order": 3,
+      "action": "POST /registry/agents/test-agent/approve with valid X-Admin-Secret",
+      "expected": "Returns 200 with {name, status:\"active\"}"
+    },
+    {
+      "order": 4,
+      "action": "GET /registry/agents",
+      "expected": "test-agent now shows status \"active\""
+    },
+    {
+      "order": 5,
+      "action": "POST /registry/agents with same name again",
+      "expected": "Returns 409 Conflict (agent already exists)"
+    },
+    {
+      "order": 6,
+      "action": "POST /registry/agents/test-agent/approve without X-Admin-Secret",
+      "expected": "Returns 401 Unauthorized"
+    }
+  ],
+  "created": "2026-02-16T03:50:04Z",
+  "executedAt": "2026-02-16T04:04:12.990564Z",
+  "result": "All steps passed"
+}

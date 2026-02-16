@@ -22,6 +22,9 @@ import { createTelegramRouter } from '../comms/adapters/telegram.js';
 // Agent comms imports
 import { initAgentComms, stopAgentComms, handleAgentMessage, getAgentStatus, sendAgentMessage, updatePeerState } from '../comms/agent-comms.js';
 
+// Network imports
+import { registerWithRelay, checkRegistrationStatus } from '../comms/network/registration.js';
+
 // Voice imports
 import { handleVoiceRequest, initVoiceServer, stopVoiceServer } from '../voice/voice-server.js';
 
@@ -49,6 +52,10 @@ import '../automation/tasks/peer-heartbeat.js';
 import '../automation/tasks/backup.js';
 import '../automation/tasks/transcript-cleanup.js';
 import '../automation/tasks/memory-sync.js';
+import '../automation/tasks/weekly-progress-report.js';
+import '../automation/tasks/bounty-scanner.js';
+import '../automation/tasks/supabase-keep-alive.js';
+import '../automation/tasks/relay-inbox-poll.js';
 
 // ── Bootstrap ────────────────────────────────────────────────
 
@@ -700,6 +707,21 @@ server.listen(config.daemon.port, () => {
 
   // Agent-to-Agent Comms
   initAgentComms();
+
+  // CC4Me Network — register with relay if enabled
+  if (config.network?.enabled) {
+    registerWithRelay().then(result => {
+      if (result.ok) {
+        log.info('Network: relay registration', { status: result.status });
+      } else {
+        log.warn('Network: relay registration issue', { error: result.error });
+      }
+    }).catch(err => {
+      log.warn('Network: relay registration failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+  }
 
   // Phase 3: Automation
   startScheduler();

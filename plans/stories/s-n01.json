@@ -1,0 +1,34 @@
+{
+  "id": "s-n01",
+  "title": "Ed25519 crypto utilities",
+  "description": "Create a standalone crypto module for Ed25519 operations: keypair generation, message signing, signature verification, and macOS Keychain integration for private key storage. This is the foundation for all identity and messaging security. Uses only Node.js built-in crypto module (no external dependencies).",
+  "planRef": "plans/20260216-cc4me-network.plan.md",
+  "todoRef": "122",
+  "status": "completed",
+  "priority": 1,
+  "tests": [
+    "t-032",
+    "t-033"
+  ],
+  "blockedBy": [],
+  "created": "2026-02-16T03:48:42Z",
+  "updated": "2026-02-16T03:57:53Z",
+  "notes": [
+    {
+      "timestamp": "2026-02-16T03:57:53Z",
+      "content": "Implemented Ed25519 crypto module. All test steps pass."
+    }
+  ],
+  "files": [
+    "daemon/src/comms/network/crypto.ts"
+  ],
+  "acceptanceCriteria": [
+    "Generate Ed25519 keypair (32-byte seed, public key)",
+    "Store private key in macOS Keychain as credential-cc4me-agent-key",
+    "Retrieve private key from Keychain for signing",
+    "Sign arbitrary message payloads (JSON string \u2192 base64 signature)",
+    "Verify signatures against public keys (valid \u2192 true, tampered \u2192 false)",
+    "Export public key in base64 format for registration",
+    "All operations use Node.js crypto module only (no external deps)"
+  ]
+}

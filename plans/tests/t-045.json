@@ -1,0 +1,41 @@
+{
+  "id": "t-045",
+  "title": "LAN send fails \u2014 automatic relay fallback",
+  "description": "Verify that when LAN send fails, the message is automatically retried via relay.",
+  "storyRefs": [
+    "s-n06"
+  ],
+  "planRef": "plans/20260216-cc4me-network.plan.md",
+  "type": "story",
+  "status": "pending",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Configure network.enabled: true and ensure peer is NOT reachable on LAN",
+      "expected": "LAN HTTP will fail"
+    },
+    {
+      "order": 2,
+      "action": "Call sendAgentMessage(\"peer\", \"text\", \"test message\")",
+      "expected": "LAN attempt fails, relay fallback triggered"
+    },
+    {
+      "order": 3,
+      "action": "Check agent-comms.log",
+      "expected": "Log shows LAN failure then direction:\"relay-out\" with relay delivery"
+    },
+    {
+      "order": 4,
+      "action": "Verify relay received the message (check peer inbox)",
+      "expected": "Message appears in peer inbox at relay"
+    },
+    {
+      "order": 5,
+      "action": "sendAgentMessage returns {ok: true, queued: false}",
+      "expected": "Caller sees success (transparent fallback)"
+    }
+  ],
+  "created": "2026-02-16T03:50:04Z",
+  "executedAt": null,
+  "result": null
+}

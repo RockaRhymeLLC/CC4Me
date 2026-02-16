@@ -1,0 +1,46 @@
+{
+  "id": "t-036",
+  "title": "Agent directory lists registered agents",
+  "description": "Verify the agent directory endpoint returns correct public information about all registered agents.",
+  "storyRefs": [
+    "s-n02"
+  ],
+  "planRef": "plans/20260216-cc4me-network.plan.md",
+  "type": "story",
+  "status": "passed",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Register three agents: agent-a (approve), agent-b (approve), agent-c (leave pending)",
+      "expected": "All three registered"
+    },
+    {
+      "order": 2,
+      "action": "GET /registry/agents",
+      "expected": "Returns array of 3 agents with name, publicKey, status fields"
+    },
+    {
+      "order": 3,
+      "action": "Check agent-a and agent-b",
+      "expected": "Both show status \"active\""
+    },
+    {
+      "order": 4,
+      "action": "Check agent-c",
+      "expected": "Shows status \"pending\""
+    },
+    {
+      "order": 5,
+      "action": "Verify each agent record has publicKey field",
+      "expected": "All three have base64-encoded public keys"
+    },
+    {
+      "order": 6,
+      "action": "Verify no private keys or admin secrets in response",
+      "expected": "Response contains only name, publicKey, status, teams, registeredAt, approvedAt"
+    }
+  ],
+  "created": "2026-02-16T03:50:04Z",
+  "executedAt": "2026-02-16T04:04:12.990564Z",
+  "result": "All steps passed"
+}

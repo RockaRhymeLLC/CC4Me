@@ -1,0 +1,46 @@
+{
+  "id": "t-033",
+  "title": "Signature verification (valid, invalid, tampered)",
+  "description": "Verify that signature verification correctly handles valid signatures, wrong keys, and tampered payloads.",
+  "storyRefs": [
+    "s-n01"
+  ],
+  "planRef": "plans/20260216-cc4me-network.plan.md",
+  "type": "story",
+  "status": "passed",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Generate keypair A and sign payload {from:\"bmo\", text:\"hello\"}",
+      "expected": "Signature produced"
+    },
+    {
+      "order": 2,
+      "action": "Verify signature with keypair A public key and original payload",
+      "expected": "Returns true"
+    },
+    {
+      "order": 3,
+      "action": "Tamper with payload (change text to \"goodbye\") and verify with same signature",
+      "expected": "Returns false (tampered payload)"
+    },
+    {
+      "order": 4,
+      "action": "Generate keypair B and verify original signature with keypair B public key",
+      "expected": "Returns false (wrong key)"
+    },
+    {
+      "order": 5,
+      "action": "Pass an empty string as signature",
+      "expected": "Returns false (does not throw)"
+    },
+    {
+      "order": 6,
+      "action": "Pass malformed base64 as signature",
+      "expected": "Returns false (does not throw)"
+    }
+  ],
+  "created": "2026-02-16T03:50:04Z",
+  "executedAt": "2026-02-16T03:57:53Z",
+  "result": "All 6 steps passed."
+}

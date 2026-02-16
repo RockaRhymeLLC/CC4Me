@@ -1,0 +1,41 @@
+{
+  "id": "t-039",
+  "title": "Replay protection (duplicate nonce rejected)",
+  "description": "Verify that the relay rejects duplicate nonces and stale timestamps.",
+  "storyRefs": [
+    "s-n03"
+  ],
+  "planRef": "plans/20260216-cc4me-network.plan.md",
+  "type": "story",
+  "status": "passed",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Register and approve sender and receiver agents",
+      "expected": "Both active"
+    },
+    {
+      "order": 2,
+      "action": "Send a valid message with nonce \"abc123\" and current timestamp",
+      "expected": "Returns 200 (accepted)"
+    },
+    {
+      "order": 3,
+      "action": "Resend the exact same message with same nonce \"abc123\"",
+      "expected": "Returns 409 Conflict (nonce already seen)"
+    },
+    {
+      "order": 4,
+      "action": "Send a message with a new nonce but timestamp 10 minutes in the past",
+      "expected": "Returns 400 Bad Request (timestamp too old)"
+    },
+    {
+      "order": 5,
+      "action": "Send a message with a new nonce and current timestamp",
+      "expected": "Returns 200 (accepted)"
+    }
+  ],
+  "created": "2026-02-16T03:50:04Z",
+  "executedAt": "2026-02-16T04:06:09.941152Z",
+  "result": "All steps passed"
+}

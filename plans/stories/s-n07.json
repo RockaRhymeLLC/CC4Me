@@ -1,0 +1,41 @@
+{
+  "id": "s-n07",
+  "title": "Documentation + relay usage policy",
+  "description": "Update all affected documentation and create the relay usage policy document. Covers CLAUDE.md, agent-comms SKILL.md, keychain SKILL.md, setup SKILL.md, and config template.",
+  "planRef": "plans/20260216-cc4me-network.plan.md",
+  "todoRef": "122",
+  "status": "completed",
+  "priority": 7,
+  "tests": [
+    "t-047"
+  ],
+  "blockedBy": [
+    "s-n06"
+  ],
+  "created": "2026-02-16T03:48:42Z",
+  "updated": "2026-02-16T09:00:00Z",
+  "notes": [
+    {
+      "text": "Relay usage policy created, CLAUDE.md updated with Network section, agent-comms SKILL.md updated with relay architecture, keychain reference updated, setup SKILL.md updated with network step.",
+      "date": "2026-02-16T09:00:00Z",
+      "source": "build"
+    }
+  ],
+  "files": [
+    "docs/relay-usage-policy.md",
+    ".claude/CLAUDE.md",
+    ".claude/skills/agent-comms/SKILL.md",
+    ".claude/skills/keychain/SKILL.md",
+    ".claude/skills/setup/SKILL.md",
+    "cc4me.config.yaml.template"
+  ],
+  "acceptanceCriteria": [
+    "Relay usage policy document created: no sensitive data over relay until E2E encryption",
+    "CLAUDE.md updated with CC4Me Network section (config, relay URL, identity)",
+    "agent-comms SKILL.md updated with relay fallback behavior",
+    "keychain SKILL.md updated with credential-cc4me-agent-key and credential-cc4me-relay-admin",
+    "setup SKILL.md updated with network setup step",
+    "cc4me.config.yaml.template updated with network section",
+    "All docs accurately reflect implemented behavior"
+  ]
+}

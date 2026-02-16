@@ -1,0 +1,41 @@
+{
+  "id": "t-044",
+  "title": "LAN send succeeds \u2014 relay not used",
+  "description": "Verify that when LAN agent-comms works, the relay is not involved.",
+  "storyRefs": [
+    "s-n06"
+  ],
+  "planRef": "plans/20260216-cc4me-network.plan.md",
+  "type": "story",
+  "status": "pending",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Configure network.enabled: true in config",
+      "expected": "Network module active"
+    },
+    {
+      "order": 2,
+      "action": "Ensure peer is reachable on LAN (mock or real)",
+      "expected": "LAN HTTP returns 200"
+    },
+    {
+      "order": 3,
+      "action": "Call sendAgentMessage(\"peer\", \"text\", \"test message\")",
+      "expected": "Message sent via LAN direct"
+    },
+    {
+      "order": 4,
+      "action": "Check agent-comms.log",
+      "expected": "Log shows direction:\"out\" with LAN delivery, no relay-out entry"
+    },
+    {
+      "order": 5,
+      "action": "Verify no requests made to relay URL",
+      "expected": "Relay was not contacted"
+    }
+  ],
+  "created": "2026-02-16T03:50:04Z",
+  "executedAt": null,
+  "result": null
+}

@@ -1,0 +1,41 @@
+{
+  "id": "t-041",
+  "title": "Relay health endpoint responds from Azure",
+  "description": "Verify that the deployed relay service is accessible and healthy.",
+  "storyRefs": [
+    "s-n04"
+  ],
+  "planRef": "plans/20260216-cc4me-network.plan.md",
+  "type": "integration",
+  "status": "pending",
+  "steps": [
+    {
+      "order": 1,
+      "action": "curl https://relay.bmobot.ai/health",
+      "expected": "Returns 200 with {status:\"ok\", agentCount, messageQueueDepth, uptime}"
+    },
+    {
+      "order": 2,
+      "action": "Verify DNS resolution of relay.bmobot.ai",
+      "expected": "Resolves to Azure Container Apps IP"
+    },
+    {
+      "order": 3,
+      "action": "Verify TLS certificate is valid",
+      "expected": "TLS 1.3, wildcard cert for *.bmobot.ai"
+    },
+    {
+      "order": 4,
+      "action": "POST /registry/agents with test data",
+      "expected": "Returns 201 (service is functional, not just health check)"
+    },
+    {
+      "order": 5,
+      "action": "Verify scale-to-zero: wait for idle period, then check container status",
+      "expected": "Container App shows 0 replicas when idle"
+    }
+  ],
+  "created": "2026-02-16T03:50:04Z",
+  "executedAt": null,
+  "result": null
+}

@@ -1,0 +1,42 @@
+{
+  "id": "s-n05",
+  "title": "Agent-side identity + registration",
+  "description": "Implement agent-side network identity: keypair generation, Keychain storage, registration with the relay, and config additions. This is the agent setup flow \u2014 runs once per agent, stores identity permanently.",
+  "planRef": "plans/20260216-cc4me-network.plan.md",
+  "todoRef": "122",
+  "status": "completed",
+  "priority": 5,
+  "tests": [
+    "t-042",
+    "t-043"
+  ],
+  "blockedBy": [
+    "s-n01",
+    "s-n04"
+  ],
+  "created": "2026-02-16T03:48:42Z",
+  "updated": "2026-02-16T09:00:00Z",
+  "notes": [
+    {
+      "text": "Identity setup, registration, config additions all implemented and tested (t-042, t-043 passed).",
+      "date": "2026-02-16T09:00:00Z",
+      "source": "build"
+    }
+  ],
+  "files": [
+    "daemon/src/comms/network/registration.ts",
+    "daemon/src/comms/network/index.ts",
+    "daemon/src/core/config.ts",
+    "cc4me.config.yaml"
+  ],
+  "acceptanceCriteria": [
+    "Network config section added to cc4me.config.yaml (enabled, relay_url, agent_key)",
+    "NetworkConfig interface added to config.ts with defaults (enabled: false)",
+    "On first network setup: generates Ed25519 keypair via crypto module",
+    "Private key stored in Keychain as credential-cc4me-agent-key",
+    "Public key + agent name + owner email POSTed to relay /registry/agents",
+    "Registration status check: polls relay until status changes from pending to active",
+    "Graceful handling of already-registered agent (idempotent)",
+    "Config template updated with network section"
+  ]
+}

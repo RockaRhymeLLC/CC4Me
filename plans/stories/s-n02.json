@@ -1,0 +1,54 @@
+{
+  "id": "s-n02",
+  "title": "Relay service: agent registry",
+  "description": "Build the agent registry portion of the relay service. Handles agent registration (pending until admin approval), agent directory listing, admin approval, and admin revocation. Includes signature verification middleware that checks X-Agent + X-Signature headers on every request. SQLite database for persistence.",
+  "planRef": "plans/20260216-cc4me-network.plan.md",
+  "todoRef": "123",
+  "status": "completed",
+  "priority": 2,
+  "tests": [
+    "t-034",
+    "t-035",
+    "t-036"
+  ],
+  "blockedBy": [
+    "s-n01"
+  ],
+  "created": "2026-02-16T03:48:42Z",
+  "updated": "2026-02-16T04:04:12.990564Z",
+  "notes": [
+    {
+      "text": "Bob review: POST /registry/agents MUST be unauthenticated (exempt from signature middleware). New agents have no registered public key yet \u2014 they cannot sign requests. Also: GET /registry/agents should be unauthenticated (public directory).",
+      "date": "2026-02-16T04:00:00Z",
+      "source": "bob-review"
+    },
+    {
+      "text": "All 18 test steps pass (t-034, t-035, t-036). Registry CRUD, revocation blocking, directory listing all verified.",
+      "date": "2026-02-16T04:04:12.990564Z",
+      "source": "build"
+    }
+  ],
+  "files": [
+    "services/cc4me-relay/src/index.ts",
+    "services/cc4me-relay/src/db.ts",
+    "services/cc4me-relay/src/auth.ts",
+    "services/cc4me-relay/src/registry.ts",
+    "services/cc4me-relay/src/relay.ts",
+    "services/cc4me-relay/package.json",
+    "services/cc4me-relay/tsconfig.json"
+  ],
+  "acceptanceCriteria": [
+    "POST /registry/agents accepts {name, publicKey, ownerEmail}, creates pending agent",
+    "GET /registry/agents returns list of all agents with name, publicKey, status",
+    "POST /registry/agents/:name/approve (admin) activates a pending agent",
+    "POST /registry/agents/:name/revoke (admin) revokes an agent",
+    "Admin endpoints require valid X-Admin-Secret header",
+    "Non-admin endpoints require valid X-Agent + X-Signature headers",
+    "Revoked agents are rejected on ALL subsequent API calls",
+    "Pending agents cannot send messages (only active agents)",
+    "SQLite database with agents table persists across restarts",
+    "Rate limiting: 10 req/s per agent",
+    "POST /registry/agents is unauthenticated (new agents cannot sign yet)",
+    "GET /registry/agents is unauthenticated (public directory)"
+  ]
+}

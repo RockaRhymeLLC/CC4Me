@@ -1,0 +1,46 @@
+{
+  "id": "t-047",
+  "title": "Documentation covers all new features",
+  "description": "Verify all documentation is updated to reflect the CC4Me Network feature.",
+  "storyRefs": [
+    "s-n07"
+  ],
+  "planRef": "plans/20260216-cc4me-network.plan.md",
+  "type": "documentation",
+  "status": "pending",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Read CLAUDE.md",
+      "expected": "Contains CC4Me Network section with network config, relay URL, agent identity info"
+    },
+    {
+      "order": 2,
+      "action": "Read agent-comms SKILL.md",
+      "expected": "Documents relay fallback behavior and relay-specific log entries"
+    },
+    {
+      "order": 3,
+      "action": "Read keychain SKILL.md",
+      "expected": "Lists credential-cc4me-agent-key and credential-cc4me-relay-admin"
+    },
+    {
+      "order": 4,
+      "action": "Read setup SKILL.md",
+      "expected": "Includes network setup step (keypair generation, registration)"
+    },
+    {
+      "order": 5,
+      "action": "Read docs/relay-usage-policy.md",
+      "expected": "Contains explicit policy: no sensitive data over relay until E2E encryption"
+    },
+    {
+      "order": 6,
+      "action": "Read cc4me.config.yaml.template",
+      "expected": "Contains network section with comments explaining each field"
+    }
+  ],
+  "created": "2026-02-16T03:50:04Z",
+  "executedAt": null,
+  "result": null
+}

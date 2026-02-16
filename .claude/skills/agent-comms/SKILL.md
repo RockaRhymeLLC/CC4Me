@@ -67,10 +67,22 @@ Peers are configured in `cc4me.config.yaml` under `agent-comms.peers`. Each peer
 
 ## Architecture
 
+### LAN (Direct)
 - **Inbound**: Daemon receives on `POST /agent/message`, validates auth (bearer token from Keychain), injects directly into tmux session with `[Agent] Name:` prefix (same as Telegram — tmux buffers input natively)
 - **Outbound**: Daemon sends via `curl` subprocess (not Node.js `http.request`, which has macOS LAN networking issues)
 - **Auth**: Shared secret stored in macOS Keychain (`credential-agent-comms-secret`)
-- **Logging**: All messages logged as JSONL to `logs/agent-comms.log`
+
+### Relay (Internet Fallback)
+- **Transport**: HTTPS via CC4Me Relay (https://relay.bmobot.ai)
+- **Auth**: Ed25519 per-request signatures (X-Agent + X-Signature headers)
+- **Sending**: If LAN fails and `network.enabled` is true, automatically falls back to relay
+- **Receiving**: `relay-inbox-poll` task polls every 30s, verifies signatures, injects messages
+- **Identity**: Agent keypair in Keychain (`credential-cc4me-agent-key`), public key registered with relay
+- **Policy**: No sensitive data over relay until E2E encryption is added (see `docs/relay-usage-policy.md`)
+
+### Logging
+- All messages logged as JSONL to `logs/agent-comms.log`
+- Directions: `in` (LAN inbound), `out` (LAN outbound), `relay-in`, `relay-out`
 
 ## Usage Protocol
 

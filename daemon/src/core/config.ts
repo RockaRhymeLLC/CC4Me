@@ -177,12 +177,19 @@ export interface IntegrationsConfig {
   browserbase?: BrowserbaseConfig;
 }
 
+export interface NetworkConfig {
+  enabled: boolean;
+  relay_url: string;
+  owner_email?: string;
+}
+
 export interface CC4MeConfig {
   agent: AgentConfig;
   tmux: TmuxConfig;
   daemon: DaemonConfig;
   channels: ChannelsConfig;
   'agent-comms': AgentCommsConfig;
+  network?: NetworkConfig;
   scheduler: SchedulerConfig;
   security: SecurityConfig;
   integrations?: IntegrationsConfig;

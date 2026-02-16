@@ -1,0 +1,56 @@
+{
+  "id": "s-n03",
+  "title": "Relay service: message relay",
+  "description": "Build the message relay portion of the relay service. Handles sending signed messages, polling inbox, acknowledging messages, replay protection (nonce + timestamp), and automatic message cleanup (7-day TTL). Health endpoint for monitoring.",
+  "planRef": "plans/20260216-cc4me-network.plan.md",
+  "todoRef": "123",
+  "status": "completed",
+  "priority": 3,
+  "tests": [
+    "t-037",
+    "t-038",
+    "t-039",
+    "t-040"
+  ],
+  "blockedBy": [
+    "s-n01",
+    "s-n02"
+  ],
+  "created": "2026-02-16T03:48:42Z",
+  "updated": "2026-02-16T04:06:09.941152Z",
+  "notes": [
+    {
+      "text": "Bob review: (1) Use SQLite nonces table (already in schema) instead of in-memory Set \u2014 eliminates restart replay window. Clean up nonces older than 5 min on a periodic query. (2) Define GET request signing payload: sign \"method + path + timestamp\" header value. Include X-Timestamp header alongside X-Agent and X-Signature. (3) Inbox endpoints must verify :agent path param matches X-Agent \u2014 agent can only access their own inbox.",
+      "date": "2026-02-16T04:00:00Z",
+      "source": "bob-review"
+    },
+    {
+      "text": "Relay code already implemented in relay.ts during s-n02. Running tests now.",
+      "date": "2026-02-16T04:04:52.019442Z",
+      "source": "build"
+    },
+    {
+      "text": "All 23 test steps pass (t-037/038/039/040). Message send/poll/ack, auth rejection, replay protection, TTL cleanup all verified. Regression t-032/t-033 pass.",
+      "date": "2026-02-16T04:06:09.941152Z",
+      "source": "build"
+    }
+  ],
+  "files": [
+    "services/cc4me-relay/relay.ts"
+  ],
+  "acceptanceCriteria": [
+    "POST /relay/send accepts signed JSON with {from, to, type, text, timestamp, messageId, nonce}",
+    "Relay verifies sender signature before storing message",
+    "GET /relay/inbox/:agent returns up to 50 pending messages for that agent",
+    "POST /relay/inbox/:agent/ack deletes acknowledged messages by ID",
+    "Replay protection: rejects duplicate nonces within 5-minute window",
+    "Replay protection: rejects messages with timestamps older than 5 minutes",
+    "Messages older than 7 days auto-deleted (cleanup on access or scheduled)",
+    "Inbox limit: 100 messages per agent (oldest dropped when exceeded)",
+    "GET /health returns {status, agentCount, messageQueueDepth, uptime}",
+    "Nonce dedup uses SQLite nonces table (not in-memory) \u2014 survives restart",
+    "Nonce cleanup: delete nonces older than 5 minutes periodically",
+    "GET requests sign: method + path + X-Timestamp header value",
+    "Inbox endpoints verify :agent path param matches authenticated X-Agent"
+  ]
+}

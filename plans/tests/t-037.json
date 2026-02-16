@@ -1,0 +1,46 @@
+{
+  "id": "t-037",
+  "title": "Send and poll message via relay",
+  "description": "Verify the complete message lifecycle: send signed message, poll inbox, receive message.",
+  "storyRefs": [
+    "s-n03"
+  ],
+  "planRef": "plans/20260216-cc4me-network.plan.md",
+  "type": "story",
+  "status": "passed",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Register and approve two agents: sender and receiver",
+      "expected": "Both active"
+    },
+    {
+      "order": 2,
+      "action": "POST /relay/send as sender with signed message {from:\"sender\", to:\"receiver\", type:\"text\", text:\"hello\", timestamp, messageId, nonce}",
+      "expected": "Returns 200 with {ok: true}"
+    },
+    {
+      "order": 3,
+      "action": "GET /relay/inbox/receiver with valid signature",
+      "expected": "Returns array with 1 message from sender"
+    },
+    {
+      "order": 4,
+      "action": "Verify message content",
+      "expected": "Message has correct from, to, type, text, and includes original signature"
+    },
+    {
+      "order": 5,
+      "action": "POST /relay/inbox/receiver/ack with the messageId",
+      "expected": "Returns 200"
+    },
+    {
+      "order": 6,
+      "action": "GET /relay/inbox/receiver again",
+      "expected": "Returns empty array (message was acknowledged and deleted)"
+    }
+  ],
+  "created": "2026-02-16T03:50:04Z",
+  "executedAt": "2026-02-16T04:06:09.941152Z",
+  "result": "All steps passed"
+}

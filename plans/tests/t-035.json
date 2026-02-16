@@ -1,0 +1,46 @@
+{
+  "id": "t-035",
+  "title": "Agent revocation blocks all API access",
+  "description": "Verify that a revoked agent is immediately blocked from all relay operations.",
+  "storyRefs": [
+    "s-n02"
+  ],
+  "planRef": "plans/20260216-cc4me-network.plan.md",
+  "type": "story",
+  "status": "passed",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Register and approve agent \"revoke-test\"",
+      "expected": "Agent is active"
+    },
+    {
+      "order": 2,
+      "action": "Send a message as revoke-test (POST /relay/send with valid signature)",
+      "expected": "Returns 200 (message accepted)"
+    },
+    {
+      "order": 3,
+      "action": "POST /registry/agents/revoke-test/revoke with admin secret",
+      "expected": "Returns 200 with status \"revoked\""
+    },
+    {
+      "order": 4,
+      "action": "Try to send a message as revoke-test",
+      "expected": "Returns 403 Forbidden (agent revoked)"
+    },
+    {
+      "order": 5,
+      "action": "Try to poll inbox as revoke-test (GET /relay/inbox/revoke-test)",
+      "expected": "Returns 403 Forbidden (agent revoked)"
+    },
+    {
+      "order": 6,
+      "action": "GET /registry/agents",
+      "expected": "revoke-test shows status \"revoked\""
+    }
+  ],
+  "created": "2026-02-16T03:50:04Z",
+  "executedAt": "2026-02-16T04:04:12.990564Z",
+  "result": "All steps passed"
+}

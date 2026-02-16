@@ -60,6 +60,48 @@ The daemon scheduler runs these tasks automatically (configured in `cc4me.config
 | `nightly-todo` | 10pm daily | Self-assigned creative todo |
 | `health-check` | Mon 8am | System health check |
 | `memory-consolidation` | 5am daily | Rotate stale 24hr entries to timeline/ daily files, extract memories |
+| `morning-briefing` | 7am daily | Daily briefing with weather, calendar, todos, overnight messages |
+| `approval-audit` | 1st of month, 9am | Semi-annual review of 3rd-party sender approvals |
+| `upstream-sync` | Mon 8am | Merge upstream CC4Me changes into local fork |
+| `peer-heartbeat` | Every 5m | A2A state exchange with peer agents |
+| `a2a-digest` | Mon 9am | Weekly A2A digest email — summarizes peer conversations and heartbeat stats |
+| `backup` | Sun 3am | Weekly backup to ~/Documents/backups/ (zip, integrity verified, keeps last 2) |
+| `transcript-cleanup` | Sun 4am | Delete transcript JSONL files older than 7 days (~100MB/week) |
+| `memory-sync` | Every 30m | Exchange non-private memories with peer agents (additive, user-source canonical) |
+| `weekly-progress-report` | Fri 4pm | Email digest of week's commits, completed todos, highlights, and stats |
+| `bounty-scanner` | 8am daily | Scan GitHub for fresh bounty opportunities, filter low-competition, notify via Telegram |
+| `relay-inbox-poll` | Every 30s | Poll CC4Me Relay for internet messages, verify signatures, inject into session |
+| `supabase-keep-alive` | Every 3 days, 6am | Ping Supabase free-tier project to prevent 7-day inactivity pause |
+
+### CC4Me Network
+
+Internet-scale agent-to-agent communication via the CC4Me Relay service.
+
+**Config** (`cc4me.config.yaml`):
+```yaml
+network:
+  enabled: true
+  relay_url: "https://relay.bmobot.ai"
+  owner_email: "agent@example.com"
+```
+
+**Key files**:
+- `daemon/src/comms/network/crypto.ts` — Ed25519 keypair, sign, verify
+- `daemon/src/comms/network/registration.ts` — Relay registration + status check
+- `daemon/src/comms/network/relay-client.ts` — Send/poll/ack via relay
+- `daemon/src/automation/tasks/relay-inbox-poll.ts` — Scheduler task for inbox polling
+- `services/cc4me-relay/` — The relay service (deployed on AWS Lightsail)
+- `docs/relay-usage-policy.md` — Security policy and usage guidelines
+
+**How it works**:
+- Each agent has an Ed25519 keypair (private key in Keychain as `credential-cc4me-agent-key`)
+- `sendAgentMessage()` tries LAN first, then relay fallback (transparent to caller)
+- Messages are signed per-request (no JWT/sessions) — stateless auth
+- Relay stores messages until recipient polls and acknowledges
+- Recipients verify signatures against sender's public key from the relay directory
+- Agent registration requires admin approval before messaging is allowed
+
+**Security**: No E2E encryption yet — don't send secrets or PII over relay. See `docs/relay-usage-policy.md`.
 
 ### Environment Knowledge
 

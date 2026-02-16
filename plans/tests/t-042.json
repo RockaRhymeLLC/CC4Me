@@ -1,0 +1,41 @@
+{
+  "id": "t-042",
+  "title": "Agent generates keypair and stores in Keychain",
+  "description": "Verify the agent-side identity setup flow.",
+  "storyRefs": [
+    "s-n05"
+  ],
+  "planRef": "plans/20260216-cc4me-network.plan.md",
+  "type": "story",
+  "status": "pending",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Run the network setup function (generateAndStoreIdentity)",
+      "expected": "Keypair generated and private key stored in Keychain"
+    },
+    {
+      "order": 2,
+      "action": "Verify Keychain contains credential-cc4me-agent-key",
+      "expected": "security find-generic-password -s credential-cc4me-agent-key succeeds"
+    },
+    {
+      "order": 3,
+      "action": "Load the key from Keychain and sign a test message",
+      "expected": "Valid Ed25519 signature produced"
+    },
+    {
+      "order": 4,
+      "action": "Run setup again (idempotent check)",
+      "expected": "Detects existing key, does not regenerate"
+    },
+    {
+      "order": 5,
+      "action": "Verify network config is read from cc4me.config.yaml",
+      "expected": "Config includes relay_url and agent_key fields"
+    }
+  ],
+  "created": "2026-02-16T03:50:04Z",
+  "executedAt": null,
+  "result": null
+}

@@ -1,0 +1,46 @@
+{
+  "id": "t-040",
+  "title": "Inbox acknowledgment and message TTL cleanup",
+  "description": "Verify that acknowledged messages are deleted and old messages are cleaned up.",
+  "storyRefs": [
+    "s-n03"
+  ],
+  "planRef": "plans/20260216-cc4me-network.plan.md",
+  "type": "story",
+  "status": "passed",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Register and approve sender and receiver",
+      "expected": "Both active"
+    },
+    {
+      "order": 2,
+      "action": "Send 3 messages to receiver (msg-1, msg-2, msg-3)",
+      "expected": "All accepted"
+    },
+    {
+      "order": 3,
+      "action": "GET /relay/inbox/receiver",
+      "expected": "Returns 3 messages"
+    },
+    {
+      "order": 4,
+      "action": "POST /relay/inbox/receiver/ack with [\"msg-1\", \"msg-3\"]",
+      "expected": "Returns 200"
+    },
+    {
+      "order": 5,
+      "action": "GET /relay/inbox/receiver",
+      "expected": "Returns 1 message (msg-2 only)"
+    },
+    {
+      "order": 6,
+      "action": "Insert a message with created_at 8 days ago directly in SQLite, then trigger cleanup",
+      "expected": "Old message is deleted (7-day TTL enforced)"
+    }
+  ],
+  "created": "2026-02-16T03:50:04Z",
+  "executedAt": "2026-02-16T04:06:09.941152Z",
+  "result": "All steps passed"
+}

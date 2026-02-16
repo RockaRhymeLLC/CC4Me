@@ -1,0 +1,51 @@
+{
+  "id": "s-n06",
+  "title": "Agent-side relay integration + routing",
+  "description": "Integrate relay messaging into the existing agent-comms module. Add relay fallback to sendAgentMessage() (try LAN first, then relay), add relay inbox polling as a scheduler task, and inject received relay messages into the Claude Code session.",
+  "planRef": "plans/20260216-cc4me-network.plan.md",
+  "todoRef": "123",
+  "status": "completed",
+  "priority": 6,
+  "tests": [
+    "t-044",
+    "t-045",
+    "t-046"
+  ],
+  "blockedBy": [
+    "s-n05"
+  ],
+  "created": "2026-02-16T03:48:42Z",
+  "updated": "2026-02-16T09:00:00Z",
+  "notes": [
+    {
+      "text": "Bob review: Use native fetch() for relay-client.ts (Node 22 built-in), not execFile(curl). The macOS EHOSTUNREACH bug only applies to LAN IPs \u2014 relay is on public internet. Keep curl for LAN sends only. Also: when both LAN and relay fail, return {ok: false} with combined error info.",
+      "date": "2026-02-16T04:00:00Z",
+      "source": "bob-review"
+    },
+    {
+      "text": "Relay client, agent-comms relay fallback, inbox poll task, main.ts wiring all done. TypeScript compiles clean. Relay send/poll/verify/ack all tested against live relay.",
+      "date": "2026-02-16T09:00:00Z",
+      "source": "build"
+    }
+  ],
+  "files": [
+    "daemon/src/comms/network/relay-client.ts",
+    "daemon/src/comms/agent-comms.ts",
+    "daemon/src/automation/tasks/relay-inbox-poll.ts",
+    "daemon/src/core/main.ts"
+  ],
+  "acceptanceCriteria": [
+    "sendAgentMessage() tries LAN direct first, then relay on failure",
+    "sendViaRelay() signs message with agent key and POSTs to relay",
+    "Relay fallback only attempted when network.enabled is true",
+    "Existing LAN behavior completely unchanged when relay is disabled",
+    "relay-inbox-poll scheduler task runs every 30 seconds",
+    "Poll task fetches inbox, verifies signatures, injects messages via injectText()",
+    "Poll task acknowledges received messages (POST /inbox/:agent/ack)",
+    "Poll task is requiresSession: false (polls regardless, only injects when session exists)",
+    "Messages logged to agent-comms.log with direction: \"relay-in\" / \"relay-out\"",
+    "Network module init/shutdown added to main.ts",
+    "Relay client uses native fetch() (not curl) \u2014 cleaner for public internet calls",
+    "When both LAN and relay fail, return {ok: false} with combined error info"
+  ]
+}

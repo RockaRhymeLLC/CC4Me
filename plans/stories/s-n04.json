@@ -1,0 +1,41 @@
+{
+  "id": "s-n04",
+  "title": "Relay deployment (Azure + Cloudflare)",
+  "description": "Deploy the relay service to Azure Container Apps with Cloudflare DNS. Create Dockerfile, Container App, persistent volume for SQLite, DNS record for relay.bmobot.ai. Generate admin secret and store in Keychain.",
+  "planRef": "plans/20260216-cc4me-network.plan.md",
+  "todoRef": "123",
+  "status": "pending",
+  "priority": 4,
+  "tests": [
+    "t-041"
+  ],
+  "blockedBy": [
+    "s-n02",
+    "s-n03"
+  ],
+  "created": "2026-02-16T03:48:42Z",
+  "updated": "2026-02-16T03:48:42Z",
+  "notes": [
+    {
+      "text": "Bob review: Add startup probe to Container App config. better-sqlite3 opens DB synchronously \u2014 if persistent volume mount is slow on cold start, first request might fail. Startup probe on /health ensures the DB is ready before accepting traffic.",
+      "date": "2026-02-16T04:00:00Z",
+      "source": "bob-review"
+    }
+  ],
+  "files": [
+    "services/cc4me-relay/Dockerfile"
+  ],
+  "acceptanceCriteria": [
+    "Dockerfile builds successfully with node:22-alpine base",
+    "TypeScript compiled before Docker build (not in container)",
+    "Container App cc4me-relay created in bmobot-prod resource group",
+    "Persistent volume mounted at /data for SQLite database",
+    "Scale-to-zero configured (min-replicas=0, max-replicas=1)",
+    "relay.bmobot.ai CNAME pointing to Azure Container Apps",
+    "TLS via existing Cloudflare wildcard cert",
+    "Admin secret generated and stored as credential-cc4me-relay-admin in Keychain",
+    "GET /health returns 200 from relay.bmobot.ai",
+    "SQLite database created on first request",
+    "Startup probe configured on /health to ensure DB is ready before accepting traffic"
+  ]
+}

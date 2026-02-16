@@ -1,0 +1,46 @@
+{
+  "id": "t-032",
+  "title": "Ed25519 keypair generation and signing",
+  "description": "Verify that the crypto module generates valid Ed25519 keypairs and can sign messages that are verifiable.",
+  "storyRefs": [
+    "s-n01"
+  ],
+  "planRef": "plans/20260216-cc4me-network.plan.md",
+  "type": "story",
+  "status": "passed",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Call generateKeypair()",
+      "expected": "Returns object with publicKey (base64 string, 44 chars) and privateKey (base64 string)"
+    },
+    {
+      "order": 2,
+      "action": "Sign a test payload \"hello world\" with the private key",
+      "expected": "Returns a base64-encoded signature string"
+    },
+    {
+      "order": 3,
+      "action": "Verify the signature against the payload using the public key",
+      "expected": "Returns true"
+    },
+    {
+      "order": 4,
+      "action": "Generate a second keypair and try to verify the first signature with the second public key",
+      "expected": "Returns false (wrong key)"
+    },
+    {
+      "order": 5,
+      "action": "Call storeKeyInKeychain() with the private key",
+      "expected": "Key stored successfully in macOS Keychain as credential-cc4me-agent-key"
+    },
+    {
+      "order": 6,
+      "action": "Call loadKeyFromKeychain()",
+      "expected": "Returns the same private key that was stored"
+    }
+  ],
+  "created": "2026-02-16T03:50:04Z",
+  "executedAt": "2026-02-16T03:57:53Z",
+  "result": "All 6 steps passed."
+}

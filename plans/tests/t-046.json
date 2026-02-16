@@ -1,0 +1,41 @@
+{
+  "id": "t-046",
+  "title": "Relay inbox poll delivers messages to session",
+  "description": "Verify that the relay inbox polling task fetches, verifies, injects, and acknowledges messages.",
+  "storyRefs": [
+    "s-n06"
+  ],
+  "planRef": "plans/20260216-cc4me-network.plan.md",
+  "type": "story",
+  "status": "pending",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Place a signed message in the agent inbox via relay API",
+      "expected": "Message stored in relay"
+    },
+    {
+      "order": 2,
+      "action": "Run the relay-inbox-poll task manually",
+      "expected": "Task executes without error"
+    },
+    {
+      "order": 3,
+      "action": "Verify injectText() was called with formatted message",
+      "expected": "Message injected as [Agent] SenderName: message text"
+    },
+    {
+      "order": 4,
+      "action": "Verify the message was acknowledged (POST /inbox/:agent/ack)",
+      "expected": "Subsequent inbox poll returns empty"
+    },
+    {
+      "order": 5,
+      "action": "Place a message with invalid signature in inbox",
+      "expected": "Message is logged as suspicious and discarded (not injected)"
+    }
+  ],
+  "created": "2026-02-16T03:50:04Z",
+  "executedAt": null,
+  "result": null
+}

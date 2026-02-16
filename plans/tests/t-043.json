@@ -1,0 +1,41 @@
+{
+  "id": "t-043",
+  "title": "Agent registers with relay and gets approved",
+  "description": "Verify the complete agent registration flow from agent side to admin approval.",
+  "storyRefs": [
+    "s-n05"
+  ],
+  "planRef": "plans/20260216-cc4me-network.plan.md",
+  "type": "integration",
+  "status": "pending",
+  "steps": [
+    {
+      "order": 1,
+      "action": "Agent calls registerWithRelay() with name, public key, and owner email",
+      "expected": "POST sent to relay /registry/agents, returns pending status"
+    },
+    {
+      "order": 2,
+      "action": "Agent checks registration status",
+      "expected": "Status is \"pending\""
+    },
+    {
+      "order": 3,
+      "action": "Admin approves via curl with admin secret",
+      "expected": "Agent status changes to \"active\""
+    },
+    {
+      "order": 4,
+      "action": "Agent checks registration status again",
+      "expected": "Status is \"active\""
+    },
+    {
+      "order": 5,
+      "action": "Agent can now send a signed message via relay",
+      "expected": "Message accepted (200)"
+    }
+  ],
+  "created": "2026-02-16T03:50:04Z",
+  "executedAt": null,
+  "result": null
+}
