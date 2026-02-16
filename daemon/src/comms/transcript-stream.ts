@@ -216,11 +216,16 @@ export function onHookNotification(transcriptPath?: string, hookEvent?: string):
     return;
   }
 
-  // For Stop/SubagentStop hooks, the transcript may not be flushed yet.
+  // For Stop hooks, the transcript may not be flushed yet.
   // Start a retry loop to catch delayed writes.
-  const isStopEvent = hookEvent === 'Stop' || hookEvent === 'SubagentStop';
-  if (isStopEvent) {
-    log.info(`No messages on first read after ${hookEvent}, starting retry loop`);
+  //
+  // NOTE: SubagentStop is excluded because subagent completion doesn't mean
+  // there's content to deliver. The subagent's output goes to its own transcript,
+  // and the main assistant hasn't produced a summary yet. Starting a 60-second
+  // retry loop for SubagentStop leads to false "retry-exhausted" failures.
+  // The actual delivery happens when the main assistant responds (Stop hook).
+  if (hookEvent === 'Stop') {
+    log.info('No messages on first read after Stop, starting retry loop');
     startRetryLoop();
   }
 }
