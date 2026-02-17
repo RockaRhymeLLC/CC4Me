@@ -1,12 +1,15 @@
 /**
- * Context Watchdog — monitors context usage with escalating warnings.
+ * Context Watchdog — monitors context usage with escalating actions.
  *
- * Three tiers of alerts as context fills up:
+ * Four tiers as context fills up:
  * - 50% used → gentle heads-up
  * - 65% used → firmer nudge to wrap up
- * - 80% used → urgent, restart now
+ * - 80% used → auto /save-state
+ * - 90% used → auto /restart (only if 80% already fired in a PREVIOUS run)
  *
- * Each tier fires once per session. BMO decides when to act.
+ * Each tier fires once per session. The 90% tier has a safety gate to
+ * prevent the race condition where both 80% and 90% fire in the same
+ * loop iteration (context jumping from <80% to >90% between checks).
  */
 
 import fs from 'node:fs';
@@ -81,9 +84,20 @@ async function run(): Promise<void> {
     currentSessionId = sessionId;
   }
 
-  // Find the highest tier we've crossed that hasn't fired yet
+  // Capture which tiers had already fired BEFORE this loop iteration
+  // This prevents the race condition where 80% and 90% both fire in the same run
+  const previouslyFired = new Set(firedTiers);
+
+  // Process tiers
   for (const tier of TIERS) {
     if (used >= tier.threshold && !firedTiers.has(tier.threshold)) {
+      // Special gate for 90% tier: only fire if 80% already fired in a PREVIOUS run
+      // This ensures /save-state has time to complete before /restart
+      if (tier.threshold === 90 && !previouslyFired.has(80)) {
+        log.info(`Context ${used}% — skipping 90% tier (80% hasn't fired in a previous run yet)`);
+        continue;
+      }
+
       log.info(`Context ${used}% used — firing tier ${tier.threshold}%`);
       injectText(tier.message(used, remaining));
       firedTiers.add(tier.threshold);
