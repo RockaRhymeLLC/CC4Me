@@ -33,12 +33,19 @@ const TIERS: Tier[] = [
   {
     threshold: 65,
     message: (used, remaining) =>
-      `[System] Context at ${used}% used (${remaining}% remaining). Wrap up your current task, then /save-state and restart.`,
+      `[System] Context at ${used}% used (${remaining}% remaining). Wrap up your current task soon.`,
   },
   {
     threshold: 80,
+    // At 80%, inject the save-state command directly — don't just warn
     message: (used, remaining) =>
-      `[System] Context at ${used}% used (${remaining}% remaining). Save state and restart NOW.`,
+      `/save-state "Auto-save: context at ${used}% (${remaining}% remaining)"`,
+  },
+  {
+    threshold: 90,
+    // At 90%, force a restart — state should already be saved from 80% tier
+    // Using /restart instead of /clear (which has issues)
+    message: () => `/restart`,
   },
 ];
 
