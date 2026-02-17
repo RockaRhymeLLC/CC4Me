@@ -3,13 +3,12 @@
  *
  * Four tiers as context fills up:
  * - 50% used → gentle heads-up
- * - 65% used → firmer nudge to wrap up
- * - 80% used → auto /save-state
- * - 90% used → auto /restart (only if 80% already fired in a PREVIOUS run)
+ * - 65% used → auto /save-state (save early!)
+ * - 80% used → auto /restart (only if 65% already fired in a PREVIOUS run)
+ * - 90% used → emergency fallback if restart didn't happen
  *
- * Each tier fires once per session. The 90% tier has a safety gate to
- * prevent the race condition where both 80% and 90% fire in the same
- * loop iteration (context jumping from <80% to >90% between checks).
+ * Each tier fires once per session. The 80%/90% tiers have a safety gate to
+ * prevent race conditions where save and restart fire in the same loop.
  */
 
 import fs from 'node:fs';
@@ -31,23 +30,22 @@ const TIERS: Tier[] = [
   {
     threshold: 50,
     message: (used, remaining) =>
-      `[System] Context at ${used}% used (${remaining}% remaining). Start thinking about a good save point.`,
+      `[System] Context at ${used}% used (${remaining}% remaining). Start wrapping up your current task.`,
   },
   {
     threshold: 65,
-    message: (used, remaining) =>
-      `[System] Context at ${used}% used (${remaining}% remaining). Wrap up your current task soon.`,
-  },
-  {
-    threshold: 80,
-    // At 80%, inject the save-state command directly — don't just warn
+    // At 65%, auto-save — gives plenty of buffer before restart
     message: (used, remaining) =>
       `/save-state "Auto-save: context at ${used}% (${remaining}% remaining)"`,
   },
   {
+    threshold: 80,
+    // At 80%, restart — state should already be saved from 65% tier
+    message: () => `/restart`,
+  },
+  {
     threshold: 90,
-    // At 90%, force a restart — state should already be saved from 80% tier
-    // Using /restart instead of /clear (which has issues)
+    // Emergency fallback if restart didn't happen at 80%
     message: () => `/restart`,
   },
 ];
@@ -91,10 +89,10 @@ async function run(): Promise<void> {
   // Process tiers
   for (const tier of TIERS) {
     if (used >= tier.threshold && !firedTiers.has(tier.threshold)) {
-      // Special gate for 90% tier: only fire if 80% already fired in a PREVIOUS run
-      // This ensures /save-state has time to complete before /restart
-      if (tier.threshold === 90 && !previouslyFired.has(80)) {
-        log.info(`Context ${used}% — skipping 90% tier (80% hasn't fired in a previous run yet)`);
+      // Special gate for restart tiers (80%, 90%): only fire if 65% (save-state)
+      // already fired in a PREVIOUS run. This ensures state is saved before restart.
+      if ((tier.threshold === 80 || tier.threshold === 90) && !previouslyFired.has(65)) {
+        log.info(`Context ${used}% — skipping ${tier.threshold}% tier (65% save hasn't fired in a previous run yet)`);
         continue;
       }
 
