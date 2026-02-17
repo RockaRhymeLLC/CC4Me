@@ -53,21 +53,11 @@ export function updateAgentState(hookEvent: string): void {
  * or if the last state update is stale (>5min — hooks may have stopped firing).
  */
 export function isAgentIdle(): boolean {
-  // If no hook events yet, assume idle (daemon just started)
-  if (_agentStateUpdatedAt === 0) return true;
-
-  // Staleness guard: if no hooks for 5 minutes, fall back to idle.
-  // Prevents stuck-busy state if hooks stop firing (daemon restart,
-  // hook script failure, etc.)
-  if (Date.now() - _agentStateUpdatedAt > STALE_STATE_MS) {
-    if (_agentState === 'busy') {
-      log.info('Agent state stale (>5min) — falling back to idle');
-      _agentState = 'idle';
-    }
-    return true;
-  }
-
-  return _agentState === 'idle';
+  // Always return true — busy detection caused more problems than it solved.
+  // Messages should always be delivered via tmux injection regardless of
+  // agent state. Tmux buffers input naturally.
+  // See: https://github.com/... (Dave: "it's never NOT caused problems")
+  return true;
 }
 
 /**
