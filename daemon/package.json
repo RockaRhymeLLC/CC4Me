@@ -10,6 +10,7 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
+    "cc4me-network": "file:../../cc4me-network/packages/sdk",
     "@browserbasehq/sdk": "^2.6.0",
     "cron-parser": "^5.0.0",
     "js-yaml": "^4.1.0"

@@ -2,11 +2,15 @@
 """
 Gmail IMAP Client with App Password
 Usage:
-  gmail-imap.py inbox          - Show recent emails
-  gmail-imap.py unread         - Show unread emails
-  gmail-imap.py read <id>      - Read email by ID
-  gmail-imap.py search "query" - Search emails
+  gmail-imap.py inbox              - Show recent emails
+  gmail-imap.py unread             - Show unread emails
+  gmail-imap.py read <id>          - Read email by ID
+  gmail-imap.py search "query"     - Search emails
   gmail-imap.py send "to" "subject" "body"
+  gmail-imap.py delete <id>        - Delete email by ID (move to Trash)
+  gmail-imap.py mark-read <id>     - Mark email as read
+  gmail-imap.py bulk-delete "query" - Delete all emails matching search
+  gmail-imap.py bulk-read "query"   - Mark all matching emails as read
 """
 
 import subprocess
@@ -198,6 +202,89 @@ def cmd_send(to, subject, body):
 
     print(f"✓ Sent to {to}")
 
+def cmd_delete(msg_id):
+    """Delete email by moving to Trash."""
+    imap = get_imap_connection()
+    imap.select("INBOX")
+
+    # Move to Gmail Trash
+    status, _ = imap.store(msg_id.encode(), '+X-GM-LABELS', '\\Trash')
+    if status == 'OK':
+        imap.store(msg_id.encode(), '+FLAGS', '\\Deleted')
+        imap.expunge()
+        print(f"✓ Deleted email {msg_id}")
+    else:
+        print(f"ERROR: Could not delete {msg_id}")
+
+    imap.logout()
+
+def cmd_mark_read(msg_id):
+    """Mark email as read."""
+    imap = get_imap_connection()
+    imap.select("INBOX")
+
+    status, _ = imap.store(msg_id.encode(), '+FLAGS', '\\Seen')
+    if status == 'OK':
+        print(f"✓ Marked {msg_id} as read")
+    else:
+        print(f"ERROR: Could not mark {msg_id} as read")
+
+    imap.logout()
+
+def cmd_bulk_delete(query):
+    """Delete all emails matching search query."""
+    imap = get_imap_connection()
+    imap.select("INBOX")
+
+    try:
+        status, messages = imap.search(None, f'X-GM-RAW "{query}"')
+    except:
+        status, messages = imap.search(None, f'(OR SUBJECT "{query}" FROM "{query}")')
+
+    msg_ids = messages[0].split() if messages[0] else []
+
+    if not msg_ids:
+        print(f"No emails found matching: {query}")
+        imap.logout()
+        return
+
+    print(f"Deleting {len(msg_ids)} emails matching: {query}")
+
+    for msg_id in msg_ids:
+        imap.store(msg_id, '+X-GM-LABELS', '\\Trash')
+        imap.store(msg_id, '+FLAGS', '\\Deleted')
+
+    imap.expunge()
+    print(f"✓ Deleted {len(msg_ids)} emails")
+
+    imap.logout()
+
+def cmd_bulk_read(query):
+    """Mark all matching emails as read."""
+    imap = get_imap_connection()
+    imap.select("INBOX")
+
+    try:
+        status, messages = imap.search(None, f'X-GM-RAW "{query}"')
+    except:
+        status, messages = imap.search(None, f'(OR SUBJECT "{query}" FROM "{query}")')
+
+    msg_ids = messages[0].split() if messages[0] else []
+
+    if not msg_ids:
+        print(f"No emails found matching: {query}")
+        imap.logout()
+        return
+
+    print(f"Marking {len(msg_ids)} emails as read...")
+
+    for msg_id in msg_ids:
+        imap.store(msg_id, '+FLAGS', '\\Seen')
+
+    print(f"✓ Marked {len(msg_ids)} emails as read")
+
+    imap.logout()
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print(__doc__)
@@ -206,7 +293,8 @@ if __name__ == "__main__":
     cmd = sys.argv[1].lower()
 
     if cmd == "inbox":
-        cmd_inbox()
+        limit = int(sys.argv[2]) if len(sys.argv) >= 3 else 10
+        cmd_inbox(limit)
     elif cmd == "unread":
         cmd_unread()
     elif cmd == "read" and len(sys.argv) >= 3:
@@ -215,6 +303,14 @@ if __name__ == "__main__":
         cmd_search(sys.argv[2])
     elif cmd == "send" and len(sys.argv) >= 5:
         cmd_send(sys.argv[2], sys.argv[3], sys.argv[4])
+    elif cmd == "delete" and len(sys.argv) >= 3:
+        cmd_delete(sys.argv[2])
+    elif cmd == "mark-read" and len(sys.argv) >= 3:
+        cmd_mark_read(sys.argv[2])
+    elif cmd == "bulk-delete" and len(sys.argv) >= 3:
+        cmd_bulk_delete(sys.argv[2])
+    elif cmd == "bulk-read" and len(sys.argv) >= 3:
+        cmd_bulk_read(sys.argv[2])
     else:
         print(__doc__)
         sys.exit(1)

@@ -181,6 +181,10 @@ export interface NetworkConfig {
   enabled: boolean;
   relay_url: string;
   owner_email?: string;
+  endpoint?: string;
+  heartbeat_interval?: number;
+  auto_approve_contacts?: boolean;
+  data_dir?: string;
 }
 
 export interface CC4MeConfig {
