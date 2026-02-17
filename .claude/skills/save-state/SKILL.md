@@ -1,18 +1,25 @@
 ---
 name: save-state
-description: Manually save current session state before context clear or as a checkpoint. Use before /clear or when you want to preserve context.
+description: Save current session state before restart. Use before /restart or when you want to preserve context.
 argument-hint: [optional description of current state]
 ---
 
 # Save State
 
-Manually save current session state to `.claude/state/assistant-state.md`. Use before `/clear` or as a checkpoint when working on complex tasks.
+Save session state and update todo notes before restart or context loss. This skill has two equally important jobs:
+
+1. **Write assistant-state.md** — so the next session can resume
+2. **Update todo notes** — so project history captures decisions and progress
+
+Both matter. The state file is for session continuity. Todo notes are the persistent project record.
 
 ## When to Use
 
-- Before running `/clear` to preserve context
-- When switching to a different task
-- As a checkpoint during long-running work
+**Always use `/restart` instead of `/save-state` directly.** `/restart` calls `/save-state` as its first step, then restarts the session. There's no reason to save state without restarting (if context is worth saving, it's worth getting a fresh session), and no reason to restart without saving (lose context).
+
+This skill exists as the internal "save" step of `/restart`. Direct invocation is only for:
+- The `/restart` skill calling it as step 1
+- The context watchdog injecting it before a scheduled restart
 - Before potentially destructive operations
 - When you want to resume later exactly where you left off
 
