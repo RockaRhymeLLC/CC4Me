@@ -1,12 +1,14 @@
 /**
- * Context Watchdog — monitors context usage with escalating warnings.
+ * Context Watchdog — monitors context usage with escalating actions.
  *
- * Three tiers of alerts as context fills up:
+ * Four tiers as context fills up:
  * - 50% used → gentle heads-up
- * - 65% used → firmer nudge to wrap up
- * - 80% used → urgent, restart now
+ * - 65% used → auto /save-state (save early!)
+ * - 80% used → auto /restart (only if 65% already fired in a PREVIOUS run)
+ * - 90% used → emergency fallback if restart didn't happen
  *
- * Each tier fires once per session. BMO decides when to act.
+ * Each tier fires once per session. The 80%/90% tiers have a safety gate to
+ * prevent race conditions where save and restart fire in the same loop.
  */
 
 import fs from 'node:fs';
@@ -28,17 +30,25 @@ const TIERS: Tier[] = [
   {
     threshold: 50,
     message: (used, remaining) =>
-      `[System] Context at ${used}% used (${remaining}% remaining). Start thinking about a good save point.`,
+      `[System] Context at ${used}% used (${remaining}% remaining). Start wrapping up your current task.`,
   },
   {
     threshold: 65,
+    // At 65%, auto-save — gives plenty of buffer before restart
     message: (used, remaining) =>
-      `[System] Context at ${used}% used (${remaining}% remaining). Wrap up your current task, then /save-state and restart.`,
+      `/save-state "Auto-save: context at ${used}% (${remaining}% remaining)"`,
   },
   {
     threshold: 80,
-    message: (used, remaining) =>
-      `[System] Context at ${used}% used (${remaining}% remaining). Save state and restart NOW.`,
+    // At 80%, restart — state should already be saved from 65% tier
+    // NOTE: /restart requires the restart skill + restart-watcher launchd service.
+    // Instances without those will need manual restart or can substitute /clear.
+    message: () => `/restart`,
+  },
+  {
+    threshold: 90,
+    // Emergency fallback if restart didn't happen at 80%
+    message: () => `/restart`,
   },
 ];
 
@@ -74,9 +84,20 @@ async function run(): Promise<void> {
     currentSessionId = sessionId;
   }
 
-  // Find the highest tier we've crossed that hasn't fired yet
+  // Capture which tiers had already fired BEFORE this loop iteration
+  // This prevents the race condition where 80% and 90% both fire in the same run
+  const previouslyFired = new Set(firedTiers);
+
+  // Process tiers
   for (const tier of TIERS) {
     if (used >= tier.threshold && !firedTiers.has(tier.threshold)) {
+      // Special gate for restart tiers (80%, 90%): only fire if 65% (save-state)
+      // already fired in a PREVIOUS run. This ensures state is saved before restart.
+      if ((tier.threshold === 80 || tier.threshold === 90) && !previouslyFired.has(65)) {
+        log.info(`Context ${used}% — skipping ${tier.threshold}% tier (65% save hasn't fired in a previous run yet)`);
+        continue;
+      }
+
       log.info(`Context ${used}% used — firing tier ${tier.threshold}%`);
       injectText(tier.message(used, remaining));
       firedTiers.add(tier.threshold);
