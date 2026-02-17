@@ -54,12 +54,17 @@ The daemon scheduler runs these tasks automatically (configured in `cc4me.config
 
 | Task | Schedule | Purpose |
 |------|----------|---------|
-| `context-watchdog` | Every 3m | Save state + clear when context < 35% remaining |
+| `context-watchdog` | Every 3m | Heads-up at 50% context used, prompts /restart at 65% |
 | `todo-reminder` | Every 30m | Prompt to work on open todos |
 | `email-check` | Every 15m | Check for unread emails |
 | `nightly-todo` | 10pm daily | Self-assigned creative todo |
 | `health-check` | Mon 8am | System health check |
 | `memory-consolidation` | 5am daily | Rotate stale 24hr entries to timeline/ daily files, extract memories |
+| `morning-briefing` | 7am daily | Daily briefing with weather, calendar, todos, overnight messages |
+| `backup` | Sun 3am | Weekly backup to ~/Documents/backups/ (zip, integrity verified, keeps last 2) |
+| `transcript-cleanup` | Sun 4am | Delete transcript JSONL files older than 7 days (~100MB/week) |
+| `peer-heartbeat` | Every 5m | A2A state exchange with peer agents |
+| `memory-sync` | Every 30m | Exchange non-private memories with peer agents (additive, user-source canonical) |
 
 ### Environment Knowledge
 
@@ -175,16 +180,18 @@ The workflow integrates review at multiple points:
 
 Context is a finite resource. Don't wait for the watchdog — be situationally aware.
 
-**Check before big tasks**: Before starting multi-step work (implementation, refactoring, research), read `.claude/state/context-usage.json` to check `remaining_percentage`. If below 50%, save state and `/clear` before starting — it's better to start fresh than get halfway through and hit the wall.
+**Check before big tasks**: Before starting multi-step work (implementation, refactoring, research), read `.claude/state/context-usage.json` to check `remaining_percentage`. If below 50%, `/restart` before starting — it's better to start fresh than get halfway through and hit the wall.
 
-**Save early, save often**: Use `/save-state` at natural breakpoints — after completing a task, before switching topics, before anything that might use a lot of context. The watchdog at 35% is a safety net, not a strategy.
+**`/restart` is THE command**: Save state and restart are always paired — there's no reason to save without restarting (context is full), and no reason to restart without saving (lose context). `/restart` does both: saves state, notifies user, triggers restart-watcher.
 
-**The save-clear-restore cycle**:
-1. `/save-state` — writes current context to `assistant-state.md`, appends to 24hr log
-2. `/clear` — clears conversation context (triggers SessionStart hook)
-3. SessionStart hook — loads state back from `assistant-state.md`, auto-resumes
+**The restart cycle**:
+1. `/restart` — saves state to `assistant-state.md`, appends to 24hr log, creates restart flag
+2. Restart-watcher — detects flag, kills session, launches fresh one
+3. SessionStart hook — loads state back, sends "back online" notification, auto-resumes
 
-**When the watchdog fires** (context < 35%): It sets flag files that the Stop hook picks up to inject `/save-state` then `/clear` automatically. You don't need to do anything — but it's better to manage context yourself before it gets that low.
+**Use `/restart`, not `/clear`**: `/restart` gives a completely fresh session with full context budget. `/clear` only clears conversation history within the same session, which is less reliable. Always prefer `/restart`.
+
+**The watchdog**: At 50% used, you get a heads-up to wrap up. At 65% used, it tells you to run `/restart`. Don't ignore it — run `/restart` immediately when prompted.
 
 ## Autonomy Modes
 
@@ -396,7 +403,9 @@ At the start of each session:
 1. Check `/todo list` for pending work
 2. Review today's calendar
 3. Check for urgent messages (if integrations configured)
-4. Resume any saved state from `assistant-state.md`
+4. Resume any saved state from `assistant-state.md` — treat Next Steps as a priority queue, work them in order
+5. Check agent-comms log for missed peer messages (`tail logs/agent-comms.log | grep '"direction":"in"'`)
+6. If saved state shows you were talking to someone (channel: telegram), send a check-in message
 
 ## Output Style
 
