@@ -41,6 +41,8 @@ const TIERS: Tier[] = [
   {
     threshold: 80,
     // At 80%, restart — state should already be saved from 65% tier
+    // NOTE: /restart requires the restart skill + restart-watcher launchd service.
+    // Instances without those will need manual restart or can substitute /clear.
     message: () => `/restart`,
   },
   {
