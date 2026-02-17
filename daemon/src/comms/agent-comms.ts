@@ -16,6 +16,7 @@ import { validateAgentCommsAuth, getAgentCommsSecret } from '../core/keychain.js
 import { isAgentIdle, injectText } from '../core/session-bridge.js';
 import { createLogger } from '../core/logger.js';
 import { sendViaRelay } from './network/relay-client.js';
+import { getNetworkClient } from './network/sdk-bridge.js';
 
 const log = createLogger('agent-comms');
 
@@ -29,6 +30,7 @@ export interface CommsLogEntry {
   type: string;
   text?: string;
   messageId: string;
+  groupId?: string;
   httpStatus?: number;
   latencyMs?: number;
   error?: string;
@@ -40,14 +42,19 @@ const VALID_TYPES = ['text', 'status', 'coordination', 'pr-review'] as const;
 
 /**
  * Map agent IDs to display names for injection.
- * "r2d2" → "R2", "bmo" → "BMO", etc.
+ * Reads from config peers, falls back to titlecasing the agent ID.
  */
 function getDisplayName(agentId: string): string {
-  const names: Record<string, string> = {
-    r2d2: 'R2',
-    bmo: 'BMO',
-  };
-  return names[agentId.toLowerCase()] ?? agentId;
+  const config = loadConfig();
+  const peers = config['agent-comms']?.peers ?? [];
+  for (const peer of peers) {
+    if (peer.name.toLowerCase() === agentId.toLowerCase()) {
+      // Use the peer name as-is (it's already the configured display name)
+      return peer.name;
+    }
+  }
+  // Fallback: titlecase the agent ID
+  return agentId.charAt(0).toUpperCase() + agentId.slice(1);
 }
 
 // ── Message Formatting ────────────────────────────────────────
@@ -402,7 +409,50 @@ export async function sendAgentMessage(
     }
   }
 
-  // Strategy 2: Relay fallback (or relay-only for non-LAN peers)
+  // Strategy 2: P2P via SDK (E2E encrypted, presence-gated, retry queue)
+  const networkClient = getNetworkClient();
+  if (networkClient) {
+    try {
+      const sendResult = await networkClient.send(peerName, {
+        type: msg.type,
+        text: msg.text,
+        from: msg.from,
+        timestamp: msg.timestamp,
+        messageId: msg.messageId,
+        ...(msg.status && { status: msg.status }),
+        ...(msg.action && { action: msg.action }),
+        ...(msg.task && { task: msg.task }),
+        ...(msg.context && { context: msg.context }),
+      });
+
+      if (sendResult.status === 'delivered' || sendResult.status === 'queued') {
+        const direction = sendResult.status === 'delivered' ? 'relay-out' : 'relay-out';
+        logCommsEntry({
+          ts: new Date().toISOString(),
+          direction,
+          from: config.agent.name.toLowerCase(),
+          to: peerName,
+          type: msg.type,
+          text: msg.text,
+          messageId: msg.messageId,
+        });
+        log.info(`Sent to ${peerName} via P2P SDK (${sendResult.status})`, {
+          messageId: msg.messageId,
+          type: msg.type,
+        });
+        return { ok: true, queued: sendResult.status === 'queued' };
+      }
+
+      // SDK send failed — fall through to legacy relay
+      log.warn(`P2P SDK send failed to ${peerName}`, { error: sendResult.error });
+    } catch (err) {
+      log.warn(`P2P SDK send error`, {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  // Strategy 3: Legacy v1 relay fallback
   if (networkEnabled) {
     const relayResult = await sendViaRelay(peerName, msg);
     if (relayResult.ok) {
@@ -415,19 +465,16 @@ export async function sendAgentMessage(
         text: msg.text,
         messageId: msg.messageId,
       });
-      log.info(`Sent to ${peerName} via relay`, { messageId: msg.messageId, type: msg.type });
+      log.info(`Sent to ${peerName} via legacy relay`, { messageId: msg.messageId, type: msg.type });
       return { ok: true, queued: false };
     }
 
-    // Both LAN and relay failed
-    if (lanResult) {
-      return {
-        ok: false,
-        queued: false,
-        error: `LAN: ${lanResult.error}; Relay: ${relayResult.error}`,
-      };
-    }
-    return { ok: false, queued: false, error: `Relay: ${relayResult.error}` };
+    // All strategies failed
+    const errors: string[] = [];
+    if (lanResult) errors.push(`LAN: ${lanResult.error}`);
+    if (networkClient) errors.push('P2P: SDK send failed');
+    errors.push(`Relay: ${relayResult.error}`);
+    return { ok: false, queued: false, error: errors.join('; ') };
   }
 
   // No relay — return LAN result or unknown peer error
