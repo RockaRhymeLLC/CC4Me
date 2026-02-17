@@ -6,7 +6,7 @@
 
 import fs from 'node:fs';
 import { resolveProjectPath } from '../../core/config.js';
-import { injectText, isAgentIdle, sessionExists } from '../../core/session-bridge.js';
+import { injectText, sessionExists } from '../../core/session-bridge.js';
 import { createLogger } from '../../core/logger.js';
 import { registerTask } from '../scheduler.js';
 
@@ -34,12 +34,6 @@ async function run(): Promise<void> {
 
   if (openCount === 0) {
     log.debug('No open todos');
-    return;
-  }
-
-  // Only remind when idle — don't interrupt active work.
-  if (!isAgentIdle()) {
-    log.debug(`Skipping reminder: agent busy (${openCount} open todos)`);
     return;
   }
 

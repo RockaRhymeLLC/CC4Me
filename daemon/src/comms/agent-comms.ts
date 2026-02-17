@@ -13,7 +13,7 @@ import crypto from 'node:crypto';
 import { loadConfig, resolveProjectPath } from '../core/config.js';
 import type { AgentMessage, AgentMessageResponse, AgentCommsPeerConfig, CC4MeConfig } from '../core/config.js';
 import { validateAgentCommsAuth, getAgentCommsSecret } from '../core/keychain.js';
-import { isAgentIdle, injectText } from '../core/session-bridge.js';
+import { injectText } from '../core/session-bridge.js';
 import { createLogger } from '../core/logger.js';
 import { sendViaRelay } from './network/relay-client.js';
 import { getNetworkClient } from './network/sdk-bridge.js';
@@ -528,7 +528,7 @@ export function getAgentStatus(): AgentStatusResponse {
   const config = loadConfig();
   return {
     agent: config.agent.name,
-    status: isAgentIdle() ? 'idle' : 'busy',
+    status: 'idle', // Always idle — busy detection removed
     uptime: process.uptime(),
   };
 }

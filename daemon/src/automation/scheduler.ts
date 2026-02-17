@@ -11,7 +11,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, parseInterval, type TaskScheduleConfig } from '../core/config.js';
-import { isAgentIdle, sessionExists } from '../core/session-bridge.js';
+import { sessionExists } from '../core/session-bridge.js';
 import { createLogger } from '../core/logger.js';
 import { CronExpressionParser } from 'cron-parser';
 
@@ -106,13 +106,7 @@ async function executeTask(running: RunningTask): Promise<boolean> {
   const isFrequent = intervalMs > 0 && intervalMs < 30 * 60 * 1000;
   const taskLog = isFrequent ? log.debug.bind(log) : log.info.bind(log);
 
-  // Skip if Claude is busy (based on hook events, not pane scraping)
   const needsSession = running.task.requiresSession !== false;
-
-  if (needsSession && !isAgentIdle()) {
-    taskLog(`Skipping ${running.task.name}: agent is busy`);
-    return false;
-  }
 
   // Skip if no session (for tasks that need to inject)
   if (needsSession && !sessionExists()) {

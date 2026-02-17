@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 import fs from 'node:fs';
 import path from 'node:path';
 import { loadConfig, getProjectDir } from './config.js';
-import { sessionExists, isAgentIdle } from './session-bridge.js';
+import { sessionExists } from './session-bridge.js';
 import { runHealthCheck } from './health.js';
 import { getEmailProviders } from '../comms/adapters/email/index.js';
 import { listTasks } from '../automation/scheduler.js';
@@ -250,7 +250,7 @@ export async function getExtendedStatus(): Promise<ExtendedStatus> {
   // Determine session state
   let session: 'active' | 'idle' | 'stopped' = 'stopped';
   if (sessionExists()) {
-    session = isAgentIdle() ? 'idle' : 'active';
+    session = 'active'; // Always active if session exists — busy detection removed
   }
 
   // Gather all data

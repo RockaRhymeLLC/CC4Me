@@ -17,47 +17,14 @@ import { createLogger } from './logger.js';
 
 const log = createLogger('session-bridge');
 
-// ── Hook-based agent state tracking ─────────────────────────
-// Definitive agent state derived from hook events, not pane scraping.
-// Stop → idle, PostToolUse/SubagentStop/UserPromptSubmit → busy.
+// ── Hook-based agent state tracking (REMOVED) ────────────────
+// Busy detection was removed — it caused more problems than it solved.
+// Messages always inject via tmux regardless of state. Tmux buffers naturally.
+// Keeping updateAgentState as a no-op for backward compat with hooks.
 
-let _agentState: 'idle' | 'busy' = 'idle';
-let _agentStateUpdatedAt: number = 0;
-
-const STALE_STATE_MS = 5 * 60 * 1000; // 5 minutes
-
-/**
- * Update agent state from a hook event.
- * Called by the /hook/response handler in main.ts.
- */
-export function updateAgentState(hookEvent: string): void {
-  const prev = _agentState;
-  if (hookEvent === 'Stop' || hookEvent === 'SubagentStop') {
-    // Stop = agent finished responding, SubagentStop = sub-agent finished
-    // Both mean the agent is between turns — treat as idle
-    _agentState = 'idle';
-  } else {
-    // PostToolUse, UserPromptSubmit, etc. — agent is working
-    _agentState = 'busy';
-  }
-  _agentStateUpdatedAt = Date.now();
-  if (prev !== _agentState) {
-    log.info(`Agent state: ${prev} → ${_agentState} (hook: ${hookEvent})`);
-  }
-}
-
-/**
- * Check if the agent is idle based on hook events.
- * Returns true if the last hook event was Stop (agent finished responding).
- * Falls back to true if no hook events received yet (fresh daemon start)
- * or if the last state update is stale (>5min — hooks may have stopped firing).
- */
-export function isAgentIdle(): boolean {
-  // Always return true — busy detection caused more problems than it solved.
-  // Messages should always be delivered via tmux injection regardless of
-  // agent state. Tmux buffers input naturally.
-  // See: https://github.com/... (Dave: "it's never NOT caused problems")
-  return true;
+/** @deprecated No-op — busy detection removed */
+export function updateAgentState(_hookEvent: string): void {
+  // No-op — busy detection removed
 }
 
 /**

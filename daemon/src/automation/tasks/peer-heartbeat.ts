@@ -12,7 +12,6 @@ import fs from 'node:fs';
 import { execFile } from 'node:child_process';
 import { loadConfig, resolveProjectPath, type AgentCommsPeerConfig } from '../../core/config.js';
 import { createLogger } from '../../core/logger.js';
-import { isAgentIdle } from '../../core/session-bridge.js';
 import { updatePeerState } from '../../comms/agent-comms.js';
 import { registerTask } from '../scheduler.js';
 
@@ -226,8 +225,8 @@ async function run(): Promise<void> {
     return;
   }
 
-  const myStatus: 'idle' | 'busy' = isAgentIdle() ? 'idle' : 'busy';
-  log.debug(`Running heartbeat exchange for ${peers.length} peer(s) (my status: ${myStatus})`);
+  const myStatus: 'idle' | 'busy' = 'idle'; // Always report idle — busy detection removed
+  log.debug(`Running heartbeat exchange for ${peers.length} peer(s)`);
 
   for (const peer of peers) {
     const result = await exchangeState(peer, myStatus);
