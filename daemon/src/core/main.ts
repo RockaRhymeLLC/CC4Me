@@ -24,9 +24,20 @@ import { createTelegramRouter } from '../comms/adapters/telegram.js';
 import { initAgentComms, stopAgentComms, handleAgentMessage, getAgentStatus, updatePeerState, sendAgentMessage } from '../comms/agent-comms.js';
 import { handleMemorySync } from '../automation/tasks/memory-sync.js';
 
-// Network imports
+// Network imports — registration is safe (no cc4me-network dependency)
 import { registerWithRelay, checkRegistrationStatus } from '../comms/network/registration.js';
-import { initNetworkSDK, stopNetworkSDK, handleIncomingP2P } from '../comms/network/sdk-bridge.js';
+// SDK bridge is dynamically imported to avoid crash if cc4me-network isn't built
+let _sdkBridge: typeof import('../comms/network/sdk-bridge.js') | null = null;
+async function loadSdkBridge() {
+  if (!_sdkBridge) {
+    try {
+      _sdkBridge = await import('../comms/network/sdk-bridge.js');
+    } catch {
+      log.warn('Network: sdk-bridge could not be loaded — cc4me-network may not be built');
+    }
+  }
+  return _sdkBridge;
+}
 
 // Voice imports
 import { handleVoiceRequest, initVoiceServer, stopVoiceServer } from '../voice/voice-server.js';
@@ -480,7 +491,8 @@ const server = http.createServer(async (req, res) => {
       }
 
       // handleIncomingP2P is async — group messages require decryption + member validation
-      const ok = await handleIncomingP2P(envelope as import('cc4me-network').WireEnvelope);
+      const bridge = await loadSdkBridge();
+      const ok = bridge ? await bridge.handleIncomingP2P(envelope as import('../comms/network/sdk-bridge.js').WireEnvelope) : false;
       if (ok) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
@@ -837,7 +849,8 @@ function startModules() {
       }
 
       // Initialize SDK after registration (regardless of registration status)
-      const sdkOk = await initNetworkSDK();
+      const bridge = await loadSdkBridge();
+      const sdkOk = bridge ? await bridge.initNetworkSDK() : false;
       if (sdkOk) {
         log.info('Network: SDK started — P2P messaging enabled');
       } else {
@@ -884,7 +897,7 @@ function shutdown(signal: string) {
   stopVoiceServer();
   stopBrowserSidecar();
   stopAgentComms();
-  stopNetworkSDK();
+  _sdkBridge?.stopNetworkSDK();
   stopScheduler();
   server.close(() => {
     log.info('Daemon stopped');

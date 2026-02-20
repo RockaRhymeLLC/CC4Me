@@ -9,8 +9,6 @@
  * degrades gracefully to LAN-only mode — no crash.
  */
 
-import { CC4MeNetwork } from 'cc4me-network';
-import type { Message, ContactRequest, Broadcast, WireEnvelope, GroupMessage, GroupInvitationEvent } from 'cc4me-network';
 import { loadConfig } from '../../core/config.js';
 import { createLogger } from '../../core/logger.js';
 import { sessionExists, injectText } from '../../core/session-bridge.js';
@@ -18,6 +16,17 @@ import { loadKeyFromKeychain } from './crypto.js';
 import { logCommsEntry } from '../agent-comms.js';
 
 const log = createLogger('network:sdk');
+
+// cc4me-network types — resolved dynamically to avoid crash if SDK isn't built
+type CC4MeNetwork = import('cc4me-network').CC4MeNetwork;
+type Message = import('cc4me-network').Message;
+type ContactRequest = import('cc4me-network').ContactRequest;
+type Broadcast = import('cc4me-network').Broadcast;
+type GroupMessage = import('cc4me-network').GroupMessage;
+type GroupInvitationEvent = import('cc4me-network').GroupInvitationEvent;
+
+/** Re-export WireEnvelope type for callers that need it. */
+export type WireEnvelope = import('cc4me-network').WireEnvelope;
 
 let _network: CC4MeNetwork | null = null;
 
@@ -62,11 +71,30 @@ export async function initNetworkSDK(): Promise<boolean> {
     return false;
   }
 
+  // Dynamically import the SDK — if cc4me-network isn't built, we degrade gracefully
+  let CC4MeNetworkClass: { new (opts: any): CC4MeNetwork };
+  try {
+    const sdk = await import('cc4me-network');
+    CC4MeNetworkClass = sdk.CC4MeNetwork;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('ERR_MODULE_NOT_FOUND') || msg.includes('Cannot find')) {
+      log.error(
+        'Network SDK: cc4me-network package not found. ' +
+        'Build it with: cd ~/cc4me-network/packages/sdk && npm run build ' +
+        'then: cd <project>/daemon && npm install'
+      );
+    } else {
+      log.error('Network SDK: failed to load cc4me-network', { error: msg });
+    }
+    return false;
+  }
+
   try {
     const privateKeyBuffer = Buffer.from(privateKeyBase64, 'base64');
     const agentName = config.agent.name.toLowerCase();
 
-    _network = new CC4MeNetwork({
+    _network = new CC4MeNetworkClass({
       relayUrl: networkConfig.relay_url,
       username: agentName,
       privateKey: privateKeyBuffer,
@@ -83,7 +111,7 @@ export async function initNetworkSDK(): Promise<boolean> {
     wireBroadcastEvent();
 
     // Start the client (loads cache, sends heartbeat, starts retry queue)
-    await _network.start();
+    await _network!.start();
 
     log.info('Network SDK initialized', {
       relay: networkConfig.relay_url,
@@ -274,7 +302,7 @@ function wireContactRequestEvent(autoApprove: boolean): void {
     }
 
     // Prompt for manual approval
-    const greeting = req.greeting ? `: "${req.greeting}"` : '';
+    const greeting = (req as any).greeting ? `: "${(req as any).greeting}"` : '';
     const prompt = `[Network] Contact request from ${displayName}${greeting}. Accept with: network.acceptContact('${req.from}')`;
 
     if (sessionExists()) {
