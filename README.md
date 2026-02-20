@@ -53,6 +53,10 @@ cd my-assistant
 # Run initialization (checks prerequisites, makes scripts executable)
 ./scripts/init.sh
 
+# If using CC4Me Network (P2P agent messaging), build the SDK first
+# Skip this if you don't have cc4me-network cloned
+cd ../cc4me-network/packages/sdk && npm run build && cd -
+
 # Build the daemon
 cd daemon && npm install && npm run build && cd ..
 
