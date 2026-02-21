@@ -1,5 +1,9 @@
 /**
- * TTS (Text-to-Speech) — Qwen3-TTS via persistent Python worker.
+ * TTS (Text-to-Speech) — multi-engine persistent Python worker.
+ *
+ * Supports:
+ *   - kokoro: Kokoro-82M via ONNX (~0.6-1s, good quality)
+ *   - qwen3-tts-mlx: Qwen3-TTS via MLX (~2-5s, higher quality)
  *
  * Manages the tts-worker.py lifecycle (start, health-check, restart)
  * and provides synthesize() to convert text to WAV audio.
@@ -35,15 +39,18 @@ function getWorkerScript(): string {
 }
 
 /**
- * Get the model ID from config.
+ * Get the TTS engine name from config.
+ */
+function getEngine(): string {
+  const config = loadConfig();
+  return config.channels.voice?.tts?.engine ?? 'kokoro';
+}
+
+/**
+ * Get the model ID from config (for qwen3-tts-mlx engine).
  */
 function getModelId(): string {
   const config = loadConfig();
-  const engine = config.channels.voice?.tts?.engine ?? 'qwen3-tts-mlx';
-  // Map config model names to HuggingFace model IDs
-  if (engine === 'qwen3-tts-mlx') {
-    return 'mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-bf16';
-  }
   return config.channels.voice?.tts?.model ?? 'mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-bf16';
 }
 
@@ -58,16 +65,25 @@ export function startWorker(): Promise<void> {
     }
 
     const script = getWorkerScript();
-    const modelId = getModelId();
+    const engine = getEngine();
+    const modelsDir = path.join(getProjectDir(), 'models');
 
-    log.info('Starting TTS worker', { script, model: modelId, port: WORKER_PORT });
+    log.info('Starting TTS worker', { script, engine, port: WORKER_PORT });
 
     const pythonBin = path.join(getProjectDir(), 'daemon', 'src', 'voice', '.venv', 'bin', 'python3');
-    worker = spawn(pythonBin, [
+    const args = [
       script,
       '--port', String(WORKER_PORT),
-      '--model', modelId,
-    ], {
+      '--engine', engine,
+      '--models-dir', modelsDir,
+    ];
+
+    // Pass model ID for qwen3-tts-mlx engine
+    if (engine === 'qwen3-tts-mlx') {
+      args.push('--model', getModelId());
+    }
+
+    worker = spawn(pythonBin, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -208,9 +224,7 @@ export function synthesize(text: string): Promise<Buffer> {
     }
 
     const config = loadConfig();
-    const rawVoice = config.channels.voice?.tts?.voice ?? 'default';
-    // Map "default" to the default speaker; normalize to lowercase for the model
-    const voice = rawVoice === 'default' ? 'aiden' : rawVoice.toLowerCase();
+    const voice = config.channels.voice?.tts?.voice ?? '';
 
     const body = JSON.stringify({ text, voice });
 

@@ -1,44 +1,45 @@
 #!/usr/bin/env python3.12
 """
-TTS Worker — persistent HTTP microservice for Qwen3-TTS via MLX.
+TTS Worker — persistent HTTP microservice for text-to-speech.
+
+Supports multiple engines:
+  - kokoro: Kokoro-82M via ONNX (fast, ~0.6-1s for typical text)
+  - qwen3-tts-mlx: Qwen3-TTS via MLX (slower, higher quality for long text)
 
 Loads the model once on startup and serves synthesis requests with low latency.
 Runs on a configurable localhost port (default 3848).
 
 Endpoints:
-  POST /synthesize  — {text: str, voice?: str, language?: str} → WAV audio
-  GET  /health      — {status: "ok", model: str, uptime: float}
+  POST /synthesize  — {text: str, voice?: str} → WAV audio
+  GET  /health      — {status: "ok", engine: str, uptime: float}
 
 Usage:
-  python3 tts-worker.py [--port 3848] [--model mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-bf16]
+  python3 tts-worker.py --engine kokoro [--port 3848]
+  python3 tts-worker.py --engine qwen3-tts-mlx --model <hf-model-id> [--port 3848]
 """
 
 import argparse
 import io
 import json
+import os
 import struct
 import sys
 import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
-# MLX imports (deferred to avoid import errors at parse time)
 model_instance = None
-model_name = ""
+engine_name = ""
 start_time = 0.0
 
-DEFAULT_MODEL = "mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-bf16"
 DEFAULT_PORT = 3848
-DEFAULT_VOICE = "Aiden"
-DEFAULT_LANGUAGE = "English"
-SAMPLE_RATE = 24000  # Qwen3-TTS outputs at 24kHz
+SAMPLE_RATE = 24000  # Both engines output 24kHz
 
 
-def mx_array_to_wav(audio_array, sample_rate: int = SAMPLE_RATE) -> bytes:
-    """Convert an mx.array of float audio to WAV bytes."""
+def numpy_to_wav(audio_np, sample_rate: int = SAMPLE_RATE) -> bytes:
+    """Convert a numpy float32 array to WAV bytes."""
     import numpy as np
 
-    # Convert to numpy, ensure float32
-    audio_np = np.array(audio_array, dtype=np.float32)
+    audio_np = np.asarray(audio_np, dtype=np.float32)
 
     # Normalize to [-1, 1] if needed
     max_val = np.abs(audio_np).max()
@@ -76,6 +77,82 @@ def mx_array_to_wav(audio_array, sample_rate: int = SAMPLE_RATE) -> bytes:
     return buf.getvalue()
 
 
+# ── Engine: Kokoro ─────────────────────────────────────────────
+
+class KokoroEngine:
+    """Kokoro-82M via ONNX — fast, 54 voices, 24kHz output."""
+
+    DEFAULT_VOICE = "am_adam"
+
+    def __init__(self, models_dir: str):
+        from kokoro_onnx import Kokoro
+
+        model_path = os.path.join(models_dir, "kokoro-v1.0.onnx")
+        voices_path = os.path.join(models_dir, "voices-v1.0.bin")
+
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Kokoro model not found: {model_path}")
+        if not os.path.exists(voices_path):
+            raise FileNotFoundError(f"Kokoro voices not found: {voices_path}")
+
+        self.kokoro = Kokoro(model_path, voices_path)
+        self.voices = set(self.kokoro.get_voices())
+
+    def synthesize(self, text: str, voice: str = "", **kwargs) -> bytes:
+        voice = voice or self.DEFAULT_VOICE
+        if voice not in self.voices:
+            # Fuzzy match: try lowercase, try prefix match
+            lower = voice.lower()
+            match = next((v for v in self.voices if v == lower), None)
+            if not match:
+                match = next((v for v in self.voices if v.startswith(lower[:3])), None)
+            voice = match or self.DEFAULT_VOICE
+
+        samples, sr = self.kokoro.create(text, voice=voice, speed=kwargs.get("speed", 1.0))
+        return numpy_to_wav(samples, sr)
+
+    @property
+    def name(self) -> str:
+        return "kokoro-v1.0"
+
+
+# ── Engine: Qwen3-TTS ─────────────────────────────────────────
+
+class Qwen3TTSEngine:
+    """Qwen3-TTS via MLX — higher quality, slower."""
+
+    DEFAULT_VOICE = "Aiden"
+    DEFAULT_LANGUAGE = "English"
+
+    def __init__(self, model_id: str):
+        from mlx_audio.tts.utils import load_model
+        self.model = load_model(model_id)
+        self.model_id = model_id
+
+    def synthesize(self, text: str, voice: str = "", **kwargs) -> bytes:
+        voice = voice or self.DEFAULT_VOICE
+        language = kwargs.get("language", self.DEFAULT_LANGUAGE)
+        instruct = kwargs.get("instruct", "A clear, friendly voice.")
+
+        results = list(self.model.generate_custom_voice(
+            text=text,
+            speaker=voice,
+            language=language,
+            instruct=instruct,
+        ))
+
+        if not results or results[0].audio is None:
+            raise RuntimeError("Model returned no audio")
+
+        return numpy_to_wav(results[0].audio)
+
+    @property
+    def name(self) -> str:
+        return self.model_id
+
+
+# ── HTTP Server ────────────────────────────────────────────────
+
 class TTSServer(HTTPServer):
     """HTTPServer that skips getfqdn() in server_bind.
 
@@ -104,7 +181,8 @@ class TTSHandler(BaseHTTPRequestHandler):
         if self.path == "/health":
             body = json.dumps({
                 "status": "ok",
-                "model": model_name,
+                "engine": engine_name,
+                "model": model_instance.name if model_instance else "none",
                 "uptime": round(time.time() - start_time, 1),
             }).encode()
             self.send_response(200)
@@ -144,26 +222,17 @@ class TTSHandler(BaseHTTPRequestHandler):
             self._json_error(400, "'text' is required and must be non-empty")
             return
 
-        voice = data.get("voice", DEFAULT_VOICE)
-        language = data.get("language", DEFAULT_LANGUAGE)
-        instruct = data.get("instruct", "")
+        voice = data.get("voice", "")
+        kwargs = {}
+        for key in ("language", "instruct", "speed"):
+            if key in data:
+                kwargs[key] = data[key]
 
         try:
             t0 = time.time()
-            results = list(model_instance.generate_custom_voice(
-                text=text,
-                speaker=voice,
-                language=language,
-                instruct=instruct or f"A clear, friendly voice.",
-            ))
-            t1 = time.time()
+            wav_bytes = model_instance.synthesize(text, voice=voice, **kwargs)
+            elapsed = round((time.time() - t0) * 1000)
 
-            if not results or results[0].audio is None:
-                self._json_error(500, "Model returned no audio")
-                return
-
-            wav_bytes = mx_array_to_wav(results[0].audio)
-            elapsed = round((t1 - t0) * 1000)
             sys.stderr.write(
                 f"[tts-worker] synthesized {len(text)} chars in {elapsed}ms "
                 f"({len(wav_bytes)} bytes)\n"
@@ -190,24 +259,35 @@ class TTSHandler(BaseHTTPRequestHandler):
 
 
 def main():
-    global model_instance, model_name, start_time
+    global model_instance, engine_name, start_time
 
-    parser = argparse.ArgumentParser(description="TTS Worker — persistent Qwen3-TTS server")
+    parser = argparse.ArgumentParser(description="TTS Worker — multi-engine speech synthesis")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="Port to listen on")
-    parser.add_argument("--model", default=DEFAULT_MODEL, help="HuggingFace model ID")
+    parser.add_argument("--engine", default="kokoro", choices=["kokoro", "qwen3-tts-mlx"],
+                        help="TTS engine to use")
+    parser.add_argument("--model", default="", help="Model ID (for qwen3-tts-mlx engine)")
+    parser.add_argument("--models-dir", default="", help="Directory containing model files")
     args = parser.parse_args()
 
-    model_name = args.model
+    engine_name = args.engine
     start_time = time.time()
 
-    sys.stderr.write(f"[tts-worker] loading model: {model_name}\n")
+    sys.stderr.write(f"[tts-worker] starting engine: {engine_name}\n")
     sys.stderr.flush()
 
-    from mlx_audio.tts.utils import load_model
-    model_instance = load_model(model_name)
+    if engine_name == "kokoro":
+        models_dir = args.models_dir or os.path.join(os.path.dirname(__file__), "..", "..", "..", "models")
+        models_dir = os.path.abspath(models_dir)
+        model_instance = KokoroEngine(models_dir)
+    elif engine_name == "qwen3-tts-mlx":
+        model_id = args.model or "mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-bf16"
+        model_instance = Qwen3TTSEngine(model_id)
+    else:
+        sys.stderr.write(f"[tts-worker] unknown engine: {engine_name}\n")
+        sys.exit(1)
 
     load_time = round(time.time() - start_time, 1)
-    sys.stderr.write(f"[tts-worker] model loaded in {load_time}s\n")
+    sys.stderr.write(f"[tts-worker] {engine_name} loaded in {load_time}s\n")
     sys.stderr.write(f"[tts-worker] listening on 127.0.0.1:{args.port}\n")
     sys.stderr.flush()
 
